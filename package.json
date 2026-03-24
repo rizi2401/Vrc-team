@@ -1,0 +1,14 @@
+{
+  "name": "vrchat-mod-team-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Online-Portal fuer VRChat Moderations-Team Planung",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "node --check server.js && node --check app.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
