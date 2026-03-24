@@ -7,6 +7,7 @@ const {
   insertAuditEvents,
   getAnalyticsOverview
 } = require("./analytics_store");
+const packageInfo = require("./package.json");
 
 const VRCHAT_API_BASE = "https://api.vrchat.cloud/api/1";
 
@@ -100,14 +101,16 @@ function getVrchatConfig() {
   const username = String(process.env.VRCHAT_USERNAME || "").trim();
   const password = String(process.env.VRCHAT_PASSWORD || "").trim();
   const groupLookup = String(process.env.VRCHAT_GROUP_LOOKUP || "").trim();
+  const appContact = String(process.env.VRCHAT_APP_CONTACT || "").trim();
   const missing = [];
 
   if (!process.env.DATABASE_URL) missing.push("DATABASE_URL");
   if (!username) missing.push("VRCHAT_USERNAME");
   if (!password) missing.push("VRCHAT_PASSWORD");
   if (!groupLookup) missing.push("VRCHAT_GROUP_LOOKUP");
+  if (!appContact) missing.push("VRCHAT_APP_CONTACT");
 
-  return { username, password, groupLookup, missing };
+  return { username, password, groupLookup, appContact, missing };
 }
 
 class VrchatClient {
@@ -179,6 +182,8 @@ class VrchatClient {
       method: options.method || "GET",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
+        "User-Agent": buildVrchatUserAgent(),
         Cookie: this.serializeCookies(),
         ...(options.headers || {})
       },
@@ -214,6 +219,13 @@ class VrchatClient {
       .map(([key, value]) => `${key}=${value}`)
       .join("; ");
   }
+}
+
+function buildVrchatUserAgent() {
+  const appName = String(process.env.VRCHAT_APP_NAME || packageInfo.name || "vrc-team-portal").trim();
+  const appVersion = String(process.env.VRCHAT_APP_VERSION || packageInfo.version || "1.0.0").trim();
+  const appContact = String(process.env.VRCHAT_APP_CONTACT || "").trim();
+  return `${appName}/${appVersion} (${appContact})`;
 }
 
 function encodeCredentials(username, password) {
