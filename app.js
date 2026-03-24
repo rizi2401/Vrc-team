@@ -1215,6 +1215,7 @@ function renderVrchatAnalyticsPanel() {
             </div>
 
             ${missing.length ? `<div class="flash flash-warning"><span>Fehlende Environment-Variablen: ${escapeHtml(missing.join(", "))}</span></div>` : ""}
+            ${overview.sessionSavedAt ? `<div class="flash flash-info"><span>VRChat-Session gespeichert: ${escapeHtml(formatDateTime(overview.sessionSavedAt))}</span></div>` : ""}
             ${overview.lastSync?.errorMessage ? `<div class="flash flash-danger"><span>${escapeHtml(overview.lastSync.errorMessage)}</span></div>` : ""}
 
             <div class="analytics-grid">

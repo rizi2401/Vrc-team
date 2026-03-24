@@ -75,6 +75,12 @@ async function ensureAnalyticsSchema() {
 
     CREATE INDEX IF NOT EXISTS vrchat_audit_events_group_idx
       ON vrchat_audit_events(group_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS vrchat_session_store (
+      session_key TEXT PRIMARY KEY,
+      cookies JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
 
   schemaEnsured = true;
@@ -195,6 +201,43 @@ async function insertAuditEvents(groupId, events) {
   }
 }
 
+async function loadVrchatSession(sessionKey = "default") {
+  const db = getPool();
+  if (!db) return null;
+
+  const result = await db.query(
+    `
+      SELECT cookies, updated_at
+      FROM vrchat_session_store
+      WHERE session_key = $1
+    `,
+    [sessionKey]
+  );
+
+  if (!result.rows[0]) return null;
+
+  return {
+    cookies: result.rows[0].cookies || {},
+    updatedAt: result.rows[0].updated_at
+  };
+}
+
+async function saveVrchatSession(sessionKey = "default", cookies = {}) {
+  const db = getPool();
+  if (!db) return;
+
+  await db.query(
+    `
+      INSERT INTO vrchat_session_store (session_key, cookies, updated_at)
+      VALUES ($1, $2::jsonb, NOW())
+      ON CONFLICT (session_key) DO UPDATE
+      SET cookies = EXCLUDED.cookies,
+          updated_at = NOW()
+    `,
+    [sessionKey, JSON.stringify(cookies || {})]
+  );
+}
+
 async function getAnalyticsOverview(config = {}) {
   const db = getPool();
   if (!db) {
@@ -210,7 +253,7 @@ async function getAnalyticsOverview(config = {}) {
 
   await ensureAnalyticsSchema();
 
-  const [lastSyncResult, groupResult, instanceResult, auditResult, worldsResult] = await Promise.all([
+  const [lastSyncResult, groupResult, instanceResult, auditResult, worldsResult, sessionResult] = await Promise.all([
     db.query(`SELECT * FROM vrchat_sync_runs ORDER BY started_at DESC LIMIT 1`),
     db.query(`SELECT * FROM vrchat_group_state ORDER BY last_synced_at DESC LIMIT 1`),
     db.query(`
@@ -235,7 +278,15 @@ async function getAnalyticsOverview(config = {}) {
       GROUP BY 1
       ORDER BY peak_players DESC, samples DESC
       LIMIT 5
-    `)
+    `),
+    db.query(
+      `
+        SELECT updated_at
+        FROM vrchat_session_store
+        WHERE session_key = $1
+      `,
+      [config.sessionKey || "default"]
+    )
   ]);
 
   return {
@@ -282,7 +333,8 @@ async function getAnalyticsOverview(config = {}) {
       worldName: row.world_name,
       peakPlayers: Number(row.peak_players || 0),
       samples: Number(row.samples || 0)
-    }))
+    })),
+    sessionSavedAt: sessionResult.rows[0]?.updated_at || null
   };
 }
 
@@ -293,5 +345,7 @@ module.exports = {
   upsertGroupState,
   insertInstanceSnapshots,
   insertAuditEvents,
+  loadVrchatSession,
+  saveVrchatSession,
   getAnalyticsOverview
 };

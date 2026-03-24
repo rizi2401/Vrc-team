@@ -5,6 +5,8 @@ const {
   upsertGroupState,
   insertInstanceSnapshots,
   insertAuditEvents,
+  loadVrchatSession,
+  saveVrchatSession,
   getAnalyticsOverview
 } = require("./analytics_store");
 const packageInfo = require("./package.json");
@@ -25,8 +27,10 @@ async function syncVrchatAnalytics() {
   const runId = await startSyncRun();
 
   try {
-    const client = new VrchatClient(config.username, config.password);
-    await client.login();
+    const existingSession = await loadVrchatSession(config.sessionKey);
+    const client = new VrchatClient(config.username, config.password, existingSession?.cookies);
+    await client.ensureAuthenticated();
+    await saveVrchatSession(config.sessionKey, client.exportCookies());
 
     const group = await client.resolveGroup(config.groupLookup);
     const groupDetails = await client.getGroup(group.id);
@@ -68,6 +72,7 @@ async function syncVrchatAnalytics() {
     await upsertGroupState(normalizedGroup);
     await insertInstanceSnapshots(normalizedGroup.groupId, normalizedInstances);
     await insertAuditEvents(normalizedGroup.groupId, normalizedAuditEvents);
+    await saveVrchatSession(config.sessionKey, client.exportCookies());
 
     const summary = {
       groupId: normalizedGroup.groupId,
@@ -110,14 +115,40 @@ function getVrchatConfig() {
   if (!groupLookup) missing.push("VRCHAT_GROUP_LOOKUP");
   if (!appContact) missing.push("VRCHAT_APP_CONTACT");
 
-  return { username, password, groupLookup, appContact, missing };
+  return {
+    username,
+    password,
+    groupLookup,
+    appContact,
+    sessionKey: `vrchat:${username || "default"}`,
+    missing
+  };
 }
 
 class VrchatClient {
-  constructor(username, password) {
+  constructor(username, password, initialCookies = {}) {
     this.username = username;
     this.password = password;
-    this.cookies = new Map();
+    this.cookies = new Map(
+      Object.entries(initialCookies || {}).filter(([, value]) => value !== undefined && value !== null && value !== "")
+    );
+  }
+
+  async ensureAuthenticated() {
+    if (this.cookies.size) {
+      try {
+        await this.getCurrentUser();
+        return;
+      } catch (error) {
+        if (!isAuthenticationError(error)) {
+          throw error;
+        }
+        this.cookies.clear();
+      }
+    }
+
+    await this.login();
+    await this.getCurrentUser();
   }
 
   async login() {
@@ -126,6 +157,10 @@ class VrchatClient {
         Authorization: `Basic ${encodeCredentials(this.username, this.password)}`
       }
     });
+  }
+
+  async getCurrentUser() {
+    return this.request("/auth/user");
   }
 
   async resolveGroup(groupLookup) {
@@ -181,20 +216,23 @@ class VrchatClient {
     const response = await fetch(`${VRCHAT_API_BASE}${path}`, {
       method: options.method || "GET",
       headers: {
-        "Content-Type": "application/json",
         Accept: "application/json",
         "User-Agent": buildVrchatUserAgent(),
-        Cookie: this.serializeCookies(),
+        ...(this.cookies.size ? { Cookie: this.serializeCookies() } : {}),
         ...(options.headers || {})
       },
       body: options.body
     });
 
     this.captureCookies(response);
-    const payload = await response.json().catch(() => ({}));
+    const rawBody = await response.text();
+    const payload = rawBody ? safeJsonParse(rawBody) : {};
     if (!response.ok) {
       const message = payload?.error?.message || payload?.message || `VRChat request failed: ${response.status}`;
-      throw new Error(message);
+      const error = new Error(message);
+      error.statusCode = response.status;
+      error.responseBody = payload;
+      throw error;
     }
     return payload;
   }
@@ -219,6 +257,10 @@ class VrchatClient {
       .map(([key, value]) => `${key}=${value}`)
       .join("; ");
   }
+
+  exportCookies() {
+    return Object.fromEntries(this.cookies.entries());
+  }
 }
 
 function buildVrchatUserAgent() {
@@ -229,7 +271,7 @@ function buildVrchatUserAgent() {
 }
 
 function encodeCredentials(username, password) {
-  return Buffer.from(`${encodeURIComponent(username)}:${encodeURIComponent(password)}`).toString("base64");
+  return Buffer.from(`${username}:${password}`, "utf8").toString("base64");
 }
 
 function normalizeInstance(entry) {
@@ -261,6 +303,28 @@ function inferInstanceType(instanceId) {
   if (lower.includes("group(")) return "group";
   if (lower.includes("private")) return "private";
   return "group";
+}
+
+function safeJsonParse(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { message: String(value || "").trim() };
+  }
+}
+
+function isAuthenticationError(error) {
+  if (!error) return false;
+  const statusCode = Number(error.statusCode || 0);
+  if (statusCode === 401 || statusCode === 403) return true;
+
+  const message = String(error.message || "").toLowerCase();
+  return (
+    message.includes("missing credentials") ||
+    message.includes("unauthorized") ||
+    message.includes("login") ||
+    message.includes("auth")
+  );
 }
 
 module.exports = {
