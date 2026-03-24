@@ -20,6 +20,12 @@ const staticFiles = {
 
 const sessionStore = new Map();
 const streamClients = new Set();
+const discordState = {
+  lastAttemptAt: "",
+  lastSuccessAt: "",
+  lastError: "",
+  lastStatusCode: 0
+};
 
 ensureDataStore();
 
@@ -120,6 +126,24 @@ async function handleApi(req, res, url) {
     requireRole(auth.user, "admin");
     const overview = await fetchVrchatOverview();
     sendJson(res, 200, { overview });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/discord/status") {
+    requireRole(auth.user, "admin");
+    sendJson(res, 200, { status: getDiscordStatus() });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/discord/test") {
+    requireRole(auth.user, "admin");
+    const result = await notifyDiscord(buildDiscordTestMessage(auth.user));
+    if (!result.ok) {
+      sendJson(res, 400, { error: result.message, status: getDiscordStatus() });
+      return;
+    }
+
+    sendJson(res, 200, { ok: true, status: getDiscordStatus() });
     return;
   }
 
@@ -1747,12 +1771,25 @@ function sendJson(res, statusCode, payload, headers = {}) {
 
 async function notifyDiscord(message) {
   const webhookUrl = String(process.env.DISCORD_WEBHOOK_URL || "").trim();
-  if (!webhookUrl || !message) return;
+  if (!webhookUrl || !message) {
+    discordState.lastError = !webhookUrl ? "DISCORD_WEBHOOK_URL fehlt." : "Keine Discord-Nachricht uebergeben.";
+    discordState.lastStatusCode = 0;
+    discordState.lastAttemptAt = new Date().toISOString();
+    return { ok: false, message: discordState.lastError };
+  }
 
   try {
-    await postJson(webhookUrl, message);
+    discordState.lastAttemptAt = new Date().toISOString();
+    const result = await postJson(webhookUrl, message);
+    discordState.lastSuccessAt = new Date().toISOString();
+    discordState.lastError = "";
+    discordState.lastStatusCode = result.statusCode || 204;
+    return { ok: true };
   } catch (error) {
+    discordState.lastError = error.message;
+    discordState.lastStatusCode = Number(error.statusCode || 0);
     console.error("Discord webhook failed:", error.message);
+    return { ok: false, message: error.message };
   }
 }
 
@@ -1827,6 +1864,24 @@ function buildAnnouncementDiscordMessage(entry, user) {
   };
 }
 
+function buildDiscordTestMessage(user) {
+  return {
+    username: "VRC Team Planner",
+    embeds: [
+      {
+        title: "Discord-Verbindung getestet",
+        description: "Diese Testnachricht wurde direkt aus dem Admin-Portal gesendet.",
+        color: 1922777,
+        fields: [
+          { name: "Ausgeloest von", value: user.displayName, inline: true },
+          { name: "Zeit", value: new Date().toLocaleString("de-DE"), inline: true }
+        ],
+        timestamp: new Date().toISOString()
+      }
+    ]
+  };
+}
+
 function postJson(targetUrl, payload) {
   return new Promise((resolve, reject) => {
     const url = new URL(targetUrl);
@@ -1846,10 +1901,16 @@ function postJson(targetUrl, payload) {
         response.on("data", (chunk) => chunks.push(chunk));
         response.on("end", () => {
           if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
-            resolve();
+            resolve({
+              statusCode: response.statusCode,
+              body: Buffer.concat(chunks).toString("utf8")
+            });
             return;
           }
-          reject(new Error(`Discord returned ${response.statusCode || 0}`));
+          const responseBody = Buffer.concat(chunks).toString("utf8").trim();
+          const error = new Error(responseBody ? `Discord returned ${response.statusCode || 0}: ${responseBody}` : `Discord returned ${response.statusCode || 0}`);
+          error.statusCode = response.statusCode || 0;
+          reject(error);
         });
       }
     );
@@ -1864,6 +1925,16 @@ function clipText(value, maxLength) {
   const text = String(value || "").trim();
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 1)}…`;
+}
+
+function getDiscordStatus() {
+  return {
+    configured: Boolean(String(process.env.DISCORD_WEBHOOK_URL || "").trim()),
+    lastAttemptAt: discordState.lastAttemptAt,
+    lastSuccessAt: discordState.lastSuccessAt,
+    lastError: discordState.lastError,
+    lastStatusCode: discordState.lastStatusCode
+  };
 }
 
 function todayKey() {

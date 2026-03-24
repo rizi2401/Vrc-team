@@ -32,6 +32,8 @@ const state = {
   data: null,
   vrchatOverview: null,
   vrchatLoading: false,
+  discordStatus: null,
+  discordLoading: false,
   ui: {
     editingShiftId: "",
     flash: null,
@@ -51,6 +53,7 @@ async function boot() {
   syncNotificationPermission();
   await refreshBootstrap();
   if (canManageUsers()) {
+    await refreshDiscordStatus(false);
     await refreshVrchatOverview(false);
   }
   render();
@@ -105,6 +108,44 @@ async function refreshVrchatOverview(showErrors = true) {
   }
 }
 
+async function refreshDiscordStatus(showErrors = true) {
+  if (!canManageUsers()) return;
+  state.discordLoading = true;
+
+  try {
+    const payload = await api("/api/admin/discord/status");
+    state.discordStatus = payload.status;
+  } catch (error) {
+    if (showErrors) setFlash(error.message, "danger");
+  } finally {
+    state.discordLoading = false;
+    render();
+  }
+}
+
+async function runDiscordTest() {
+  state.discordLoading = true;
+  render();
+
+  try {
+    const payload = await api("/api/admin/discord/test", {
+      method: "POST",
+      body: "{}"
+    });
+    state.discordStatus = payload.status;
+    setFlash("Discord-Testnachricht wurde gesendet.", "success");
+  } catch (error) {
+    try {
+      const statusPayload = await api("/api/admin/discord/status");
+      state.discordStatus = statusPayload.status;
+    } catch {}
+    setFlash(error.message, "danger");
+  } finally {
+    state.discordLoading = false;
+    render();
+  }
+}
+
 async function runVrchatSync() {
   state.vrchatLoading = true;
   render();
@@ -131,6 +172,8 @@ function applyPayload(payload) {
   if (!canManageUsers()) {
     state.vrchatOverview = null;
     state.vrchatLoading = false;
+    state.discordStatus = null;
+    state.discordLoading = false;
   }
 }
 
@@ -445,7 +488,7 @@ function renderManagerDashboard(activeTab) {
     case "team":
       return renderTeamPanel();
     case "settings":
-      return [renderSettingsPanel(), renderVrchatAnalyticsPanel()].join("");
+      return [renderSettingsPanel(), renderDiscordPanel(), renderVrchatAnalyticsPanel()].join("");
     case "time":
       return renderAttendancePanel(true);
     case "chat":
@@ -1221,6 +1264,40 @@ function renderSettingsPanel() {
   `;
 }
 
+function renderDiscordPanel() {
+  const status = state.discordStatus;
+
+  return `
+    <section class="panel span-4">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Discord</p>
+          <h2>Webhook und Test</h2>
+          <p class="section-copy">Hier siehst du, ob der Webhook gesetzt ist und ob Discord wirklich erreichbar ist.</p>
+        </div>
+        <div class="card-actions">
+          <button type="button" class="ghost small" data-action="refresh-discord-status" ${state.discordLoading ? "disabled" : ""}>Status neu laden</button>
+          <button type="button" class="small" data-action="run-discord-test" ${state.discordLoading ? "disabled" : ""}>${state.discordLoading ? "Pruefe..." : "Testnachricht senden"}</button>
+        </div>
+      </div>
+
+      ${
+        !status
+          ? renderEmptyState("Noch kein Discord-Status", "Sobald du den Status laedst, erscheint hier die aktuelle Webhook-Pruefung.")
+          : `
+            <div class="stats-strip compact-stats">
+              ${renderStatCard("Webhook", status.configured ? "Gesetzt" : "Fehlt", status.configured ? "DISCORD_WEBHOOK_URL ist vorhanden" : "Bitte in Render unter Umwelt eintragen", status.configured ? "teal" : "rose")}
+              ${renderStatCard("Letzter Versuch", status.lastAttemptAt ? formatDateTime(status.lastAttemptAt) : "-", status.lastStatusCode ? `HTTP ${status.lastStatusCode}` : "Noch kein Versand", "amber")}
+              ${renderStatCard("Letzter Erfolg", status.lastSuccessAt ? formatDateTime(status.lastSuccessAt) : "-", status.lastSuccessAt ? "Discord hat die Nachricht angenommen" : "Noch kein erfolgreicher Versand", status.lastSuccessAt ? "success" : "sky")}
+            </div>
+            ${status.lastError ? `<div class="flash flash-danger"><span>${escapeHtml(status.lastError)}</span></div>` : ""}
+            <p class="pill-note">Wenn die Testnachricht nicht ankommt, pruefe zuerst den Discord-Webhook und dann den letzten Fehler hier im Portal.</p>
+          `
+      }
+    </section>
+  `;
+}
+
 function renderVrchatAnalyticsPanel() {
   const overview = state.vrchatOverview;
   const missing = overview?.missing || [];
@@ -1786,6 +1863,14 @@ async function handleClick(event) {
       await refreshVrchatOverview(true);
       break;
 
+    case "refresh-discord-status":
+      await refreshDiscordStatus(true);
+      break;
+
+    case "run-discord-test":
+      await runDiscordTest();
+      break;
+
     case "run-vrchat-sync":
       await runVrchatSync();
       break;
@@ -1804,6 +1889,8 @@ async function handleClick(event) {
       state.data = null;
       state.vrchatOverview = null;
       state.vrchatLoading = false;
+      state.discordStatus = null;
+      state.discordLoading = false;
       state.ui.editingShiftId = "";
       state.ui.activeTab = "";
       render();
