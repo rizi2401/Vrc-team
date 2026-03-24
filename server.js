@@ -3,6 +3,7 @@ const https = require("node:https");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { fetchVrchatOverview, syncVrchatAnalytics } = require("./vrchat_sync");
 
 const HOST = "0.0.0.0";
 const PORT = process.env.PORT || 3000;
@@ -112,6 +113,25 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && url.pathname === "/api/bootstrap") {
     sendPortalData(res, 200, auth.user, auth.store);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/vrchat/overview") {
+    requireRole(auth.user, "admin");
+    const overview = await fetchVrchatOverview();
+    sendJson(res, 200, { overview });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/vrchat/sync") {
+    requireRole(auth.user, "admin");
+    const result = await syncVrchatAnalytics();
+    if (result.ok) {
+      broadcastEvent("portal", { type: "vrchat-sync" });
+      sendJson(res, 200, result);
+      return;
+    }
+    sendJson(res, 400, result);
     return;
   }
 

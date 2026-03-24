@@ -15,6 +15,8 @@ const REQUEST_STATUSES = [
 const state = {
   session: null,
   data: null,
+  vrchatOverview: null,
+  vrchatLoading: false,
   ui: {
     editingShiftId: "",
     flash: null,
@@ -32,6 +34,9 @@ boot();
 async function boot() {
   syncNotificationPermission();
   await refreshBootstrap();
+  if (canManageUsers()) {
+    await refreshVrchatOverview(false);
+  }
   render();
 }
 
@@ -69,10 +74,48 @@ async function refreshBootstrap() {
   }
 }
 
+async function refreshVrchatOverview(showErrors = true) {
+  if (!canManageUsers()) return;
+  state.vrchatLoading = true;
+
+  try {
+    const payload = await api("/api/admin/vrchat/overview");
+    state.vrchatOverview = payload.overview;
+  } catch (error) {
+    if (showErrors) setFlash(error.message, "danger");
+  } finally {
+    state.vrchatLoading = false;
+    render();
+  }
+}
+
+async function runVrchatSync() {
+  state.vrchatLoading = true;
+  render();
+
+  try {
+    const payload = await api("/api/admin/vrchat/sync", {
+      method: "POST",
+      body: "{}"
+    });
+    state.vrchatOverview = payload.overview;
+    setFlash("VRChat-Daten wurden synchronisiert.", "success");
+  } catch (error) {
+    setFlash(error.message, "danger");
+  } finally {
+    state.vrchatLoading = false;
+    render();
+  }
+}
+
 function applyPayload(payload) {
   state.session = payload?.session || null;
   state.data = payload?.data || null;
   state.ui.activeTab = normalizeActiveTab(state.ui.activeTab);
+  if (!canManageUsers()) {
+    state.vrchatOverview = null;
+    state.vrchatLoading = false;
+  }
 }
 
 function render() {
@@ -87,6 +130,9 @@ async function performAction(callback, successMessage = "", successTone = "succe
     const payload = await callback();
     if (payload?.session || payload?.data) applyPayload(payload);
     if (successMessage) setFlash(successMessage, successTone);
+    if (state.session?.role === "admin" && !state.vrchatOverview) {
+      void refreshVrchatOverview(false);
+    }
   } catch (error) {
     if (error.status === 401) {
       state.session = null;
@@ -383,7 +429,7 @@ function renderManagerDashboard(activeTab) {
     case "team":
       return renderTeamPanel();
     case "settings":
-      return renderSettingsPanel();
+      return [renderSettingsPanel(), renderVrchatAnalyticsPanel()].join("");
     case "time":
       return renderAttendancePanel(true);
     case "chat":
@@ -1139,6 +1185,101 @@ function renderSettingsPanel() {
   `;
 }
 
+function renderVrchatAnalyticsPanel() {
+  const overview = state.vrchatOverview;
+  const missing = overview?.missing || [];
+
+  return `
+    <section class="panel span-8">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">VRChat Analytics</p>
+          <h2>Community-Daten aus VRChat einlesen</h2>
+          <p class="section-copy">Diese Gratis-Version synchronisiert die Gruppendaten manuell auf Knopfdruck und speichert sie in Postgres.</p>
+        </div>
+        <div class="card-actions">
+          <button type="button" class="ghost small" data-action="refresh-vrchat-overview" ${state.vrchatLoading ? "disabled" : ""}>Status neu laden</button>
+          <button type="button" class="small" data-action="run-vrchat-sync" ${state.vrchatLoading ? "disabled" : ""}>${state.vrchatLoading ? "Sync laeuft..." : "Sync jetzt starten"}</button>
+        </div>
+      </div>
+
+      ${
+        !overview
+          ? renderEmptyState("Noch keine VRChat-Daten", "Sobald du den Sync startest oder den Status laedst, erscheinen die Daten hier.")
+          : `
+            <div class="stats-strip compact-stats">
+              ${renderStatCard("DB", overview.databaseConnected ? "Verbunden" : "Fehlt", overview.databaseConnected ? "Postgres ist erreichbar" : "DATABASE_URL fehlt", overview.databaseConnected ? "teal" : "rose")}
+              ${renderStatCard("Gruppe", overview.group?.name || "-", overview.group ? `Lookup: ${overview.groupLookup || "-"}` : "Noch nicht aufgeloest", overview.group ? "sky" : "amber")}
+              ${renderStatCard("Mitglieder", overview.group?.memberCount ?? "-", overview.group ? "Aus dem letzten Sync" : "Noch keine Daten", "amber")}
+              ${renderStatCard("Letzter Sync", overview.lastSync?.status || "-", overview.lastSync?.finishedAt ? formatDateTime(overview.lastSync.finishedAt) : "Noch nicht gelaufen", overview.lastSync?.status === "success" ? "success" : overview.lastSync?.status === "failed" ? "rose" : "sky")}
+            </div>
+
+            ${missing.length ? `<div class="flash flash-warning"><span>Fehlende Environment-Variablen: ${escapeHtml(missing.join(", "))}</span></div>` : ""}
+            ${overview.lastSync?.errorMessage ? `<div class="flash flash-danger"><span>${escapeHtml(overview.lastSync.errorMessage)}</span></div>` : ""}
+
+            <div class="analytics-grid">
+              <div class="stack-list">
+                <h3>Aktuelle Instanz-Snapshots</h3>
+                ${
+                  overview.latestInstances?.length
+                    ? overview.latestInstances.map((entry) => `
+                      <article class="request-card">
+                        <div class="status-row">
+                          <span class="pill sky">${escapeHtml(entry.instanceType || "group")}</span>
+                          <span class="timeline-meta">${escapeHtml(formatDateTime(entry.observedAt))}</span>
+                        </div>
+                        <div>
+                          <h3>${escapeHtml(entry.worldName || entry.worldId || "Unbekannte Welt")}</h3>
+                          <p class="timeline-meta">${escapeHtml(entry.instanceId)}</p>
+                        </div>
+                        <p class="helper-text">${escapeHtml(String(entry.playerCount || 0))} Personen im letzten Snapshot</p>
+                      </article>
+                    `).join("")
+                    : renderEmptyState("Noch keine Instanzdaten", "Nach dem ersten erfolgreichen Sync erscheinen hier die letzten bekannten Gruppeninstanzen.")
+                }
+              </div>
+
+              <div class="stack-list">
+                <h3>Top-Welten der letzten 7 Tage</h3>
+                ${
+                  overview.topWorlds?.length
+                    ? overview.topWorlds.map((entry) => `
+                      <article class="request-card">
+                        <div class="status-row">
+                          <span class="pill teal">Peak ${escapeHtml(String(entry.peakPlayers))}</span>
+                          <span class="timeline-meta">${escapeHtml(String(entry.samples))} Snapshots</span>
+                        </div>
+                        <h3>${escapeHtml(entry.worldName)}</h3>
+                      </article>
+                    `).join("")
+                    : renderEmptyState("Noch keine Weltdaten", "Sobald Instanz-Snapshots vorhanden sind, werden die staerksten Welten hier gezeigt.")
+                }
+
+                <h3>Neueste Audit-Logs</h3>
+                ${
+                  overview.latestAuditEvents?.length
+                    ? overview.latestAuditEvents.map((entry) => `
+                      <article class="request-card">
+                        <div class="status-row">
+                          <span class="pill neutral">${escapeHtml(entry.eventType || "event")}</span>
+                          <span class="timeline-meta">${escapeHtml(formatDateTime(entry.createdAt))}</span>
+                        </div>
+                        <div>
+                          <h3>${escapeHtml(entry.actorName || "Unbekannt")}</h3>
+                          <p class="helper-text">${escapeHtml(entry.description || entry.targetName || "Ohne Beschreibung")}</p>
+                        </div>
+                      </article>
+                    `).join("")
+                    : renderEmptyState("Noch keine Audit-Logs", "Nach dem ersten erfolgreichen Sync erscheinen hier Gruppenereignisse.")
+                }
+              </div>
+            </div>
+          `
+      }
+    </section>
+  `;
+}
+
 function renderCatalogEditor(key, label) {
   const values = state.data.settings[key] || [];
 
@@ -1587,6 +1728,14 @@ async function handleClick(event) {
       render();
       break;
 
+    case "refresh-vrchat-overview":
+      await refreshVrchatOverview(true);
+      break;
+
+    case "run-vrchat-sync":
+      await runVrchatSync();
+      break;
+
     case "logout":
       await performAction(
         () =>
@@ -1599,6 +1748,8 @@ async function handleClick(event) {
       );
       state.session = null;
       state.data = null;
+      state.vrchatOverview = null;
+      state.vrchatLoading = false;
       state.ui.editingShiftId = "";
       state.ui.activeTab = "";
       render();

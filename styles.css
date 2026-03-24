@@ -595,6 +595,17 @@ button.small {
   gap: 16px;
 }
 
+.analytics-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.compact-stats {
+  margin-bottom: 16px;
+}
+
 .announcement-card.pinned {
   background: linear-gradient(145deg, rgba(255, 248, 237, 0.94), rgba(255, 255, 255, 0.92));
 }
@@ -634,6 +645,10 @@ code {
   }
 
   .attendance-admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-grid {
     grid-template-columns: 1fr;
   }
 
