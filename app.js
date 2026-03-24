@@ -12,6 +12,21 @@ const REQUEST_STATUSES = [
   { value: "beruecksichtigt", label: "Beruecksichtigt" }
 ];
 
+const SHIFT_WINDOW_PRESETS = [
+  { value: "12:00|16:00", label: "Kernschicht 12:00 - 16:00" },
+  { value: "16:00|20:00", label: "Kernschicht 16:00 - 20:00" },
+  { value: "20:00|00:00", label: "Kernschicht 20:00 - 00:00" },
+  { value: "00:00|04:00", label: "Kernschicht 00:00 - 04:00" },
+  { value: "04:00|08:00", label: "Kernschicht 04:00 - 08:00" },
+  { value: "08:00|12:00", label: "Kernschicht 08:00 - 12:00" },
+  { value: "10:00|14:00", label: "Zwischenschicht 10:00 - 14:00" },
+  { value: "14:00|18:00", label: "Zwischenschicht 14:00 - 18:00" },
+  { value: "18:00|22:00", label: "Zwischenschicht 18:00 - 22:00" },
+  { value: "22:00|02:00", label: "Zwischenschicht 22:00 - 02:00" },
+  { value: "02:00|06:00", label: "Zwischenschicht 02:00 - 06:00" },
+  { value: "06:00|10:00", label: "Zwischenschicht 06:00 - 10:00" }
+];
+
 const state = {
   session: null,
   data: null,
@@ -28,6 +43,7 @@ const state = {
 
 root.addEventListener("submit", handleSubmit);
 root.addEventListener("click", handleClick);
+root.addEventListener("change", handleChange);
 
 boot();
 
@@ -404,7 +420,7 @@ function renderStatsStrip() {
 
   return `
     <section class="stats-strip">
-      ${renderStatCard("Naechste Schicht", nextShift ? formatDate(nextShift.date) : "-", nextShift ? nextShift.shiftType : "Noch nichts geplant", "teal")}
+      ${renderStatCard("Naechste Schicht", nextShift ? `${formatDate(nextShift.date)} · ${formatShiftWindow(nextShift)}` : "-", nextShift ? `${nextShift.shiftType} · ${nextShift.world}` : "Noch nichts geplant", "teal")}
       ${renderStatCard("Meine Einsaetze", myShifts.length, "Aktuell in deinem Plan", "amber")}
       ${renderStatCard("Offene Notizen", openRequests, "Rueckmeldungen mit offenem Status", "rose")}
       ${renderStatCard("Erfasste Zeit", formatDuration(totalHours), activeEntry ? "Gerade aktiv eingestempelt" : "Gesamt aus abgeschlossenen Schichten", "sky")}
@@ -568,6 +584,7 @@ function renderNotificationCard(entry) {
 function renderPlannerPanel() {
   const editingShift = (state.data.shifts || []).find((entry) => entry.id === state.ui.editingShiftId) || null;
   const users = getAssignableUsers();
+  const presetValue = getMatchingShiftPresetValue(editingShift?.startTime || "12:00", editingShift?.endTime || "16:00");
   const shiftsMarkup = getSortedShifts(state.data.shifts || [])
     .map((shift) => renderShiftCard(shift, { adminView: true }))
     .join("");
@@ -597,18 +614,30 @@ function renderPlannerPanel() {
               </select>
             </div>
             <div class="field">
-              <label for="shiftType">Schichttyp</label>
-              <select id="shiftType" name="shiftType" required>
-                ${buildStringOptions(state.data.settings.shiftTypes, editingShift?.shiftType || "", "Schichttyp waehlen")}
+              <label for="shiftPreset">Schichtfenster</label>
+              <select id="shiftPreset" data-change="shift-preset">
+                ${renderShiftPresetOptions(presetValue)}
               </select>
             </div>
             <div class="field">
+              <label for="shiftStartTime">Beginn</label>
+              <input id="shiftStartTime" name="startTime" type="time" value="${escapeHtml(editingShift?.startTime || "12:00")}" required>
+            </div>
+            <div class="field">
+              <label for="shiftEndTime">Ende</label>
+              <input id="shiftEndTime" name="endTime" type="time" value="${escapeHtml(editingShift?.endTime || "16:00")}" required>
+            </div>
+            <div class="field">
+              <label for="shiftType">Schichttyp</label>
+              <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(editingShift?.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Abloese" required>
+            </div>
+            <div class="field">
               <label for="shiftWorld">Welt</label>
-              <input id="shiftWorld" name="world" list="worldOptions" value="${escapeHtml(editingShift?.world || "")}" placeholder="z. B. Community Hub" required>
+              <input id="shiftWorld" name="world" list="worldOptions" value="${escapeHtml(editingShift?.world || state.data.settings.worlds?.[0] || "")}" placeholder="z. B. Community Hub" required>
             </div>
             <div class="field">
               <label for="shiftTask">Aufgabe</label>
-              <input id="shiftTask" name="task" list="taskOptions" value="${escapeHtml(editingShift?.task || "")}" placeholder="z. B. Patrouille" required>
+              <input id="shiftTask" name="task" list="taskOptions" value="${escapeHtml(editingShift?.task || state.data.settings.tasks?.[0] || "")}" placeholder="z. B. Patrouille" required>
             </div>
             <div class="field">
               <label for="shiftNotes">Interne Notiz</label>
@@ -616,6 +645,7 @@ function renderPlannerPanel() {
             </div>
           </div>
 
+          <datalist id="shiftTypeOptions">${renderDatalistOptions(state.data.settings.shiftTypes)}</datalist>
           <datalist id="worldOptions">${renderDatalistOptions(state.data.settings.worlds)}</datalist>
           <datalist id="taskOptions">${renderDatalistOptions(state.data.settings.tasks)}</datalist>
 
@@ -623,6 +653,7 @@ function renderPlannerPanel() {
             <button type="submit">${editingShift ? "Aenderung speichern" : "Schicht speichern"}</button>
             ${editingShift ? '<button type="button" class="ghost small" data-action="cancel-shift-edit">Bearbeitung abbrechen</button>' : ""}
           </div>
+          <p class="pill-note">Neue Schichttypen, Welten oder Aufgaben kannst du frei eingeben. Vor dem Speichern fragt dich das Portal, ob diese Werte auch in die Kataloge aufgenommen werden sollen.</p>
         </form>
 
         <div class="planner-hint">
@@ -630,6 +661,10 @@ function renderPlannerPanel() {
           <p>
             Lege hier fest, wer wann welche Welt moderiert und welche Aufgabe uebernimmt.
             Moderatoren sehen spaeter nur ihre eigenen Einsaetze, koennen Wuensche senden und ihre Zeiten erfassen.
+          </p>
+          <p>
+            Die Kernschichten laufen ab 12 Uhr im 4-Stunden-Takt. Fuer Abloesen und Verstaerkung stehen Zwischenschichten bereit,
+            und Beginn sowie Ende lassen sich jederzeit frei anpassen.
           </p>
 
           <div class="inline-stats">
@@ -662,13 +697,14 @@ function renderShiftCard(shift, options = {}) {
         <span class="pill ${statusTone}">${escapeHtml(statusLabel)}</span>
       </div>
       <div>
-        <h3>${escapeHtml(options.adminView ? shift.memberName : `${shift.shiftType} in ${shift.world}`)}</h3>
-        <p>${escapeHtml(options.adminView ? `${shift.shiftType} · ${shift.world}` : `Aufgabe: ${shift.task}`)}</p>
+        <h3>${escapeHtml(options.adminView ? shift.memberName : `${formatShiftWindow(shift)} in ${shift.world}`)}</h3>
+        <p>${escapeHtml(options.adminView ? `${formatShiftWindow(shift)} · ${shift.shiftType} · ${shift.world}` : `Aufgabe: ${shift.task}`)}</p>
       </div>
       <div class="shift-meta">
-        <span class="subtle">${escapeHtml(options.adminView ? `Aufgabe: ${shift.task}` : `Schicht: ${shift.shiftType}`)}</span>
+        <span class="subtle">${escapeHtml(options.adminView ? `Aufgabe: ${shift.task}` : `Schicht: ${shift.shiftType} · ${formatShiftWindow(shift)}`)}</span>
         ${options.adminView ? `<span class="subtle">${escapeHtml(roleLabelForUserId(shift.memberId))}</span>` : ""}
       </div>
+      <p class="helper-text">Zeitfenster: ${escapeHtml(formatShiftWindow(shift))}</p>
       ${shift.notes ? `<p class="helper-text">${escapeHtml(shift.notes)}</p>` : ""}
       ${
         options.adminView
@@ -765,7 +801,7 @@ function renderSwapRequestCard(entry, managerView) {
       <div>
         <h3>${escapeHtml(entry.requesterName)}</h3>
         <p class="timeline-meta">
-          ${entry.shift ? escapeHtml(`${entry.shift.shiftType} · ${entry.shift.world} · ${entry.shift.task}`) : "Schicht nicht mehr verfuegbar"}
+          ${entry.shift ? escapeHtml(`${formatShiftWindow(entry.shift)} · ${entry.shift.shiftType} · ${entry.shift.world} · ${entry.shift.task}`) : "Schicht nicht mehr verfuegbar"}
         </p>
       </div>
       <p>${escapeHtml(entry.message)}</p>
@@ -1131,7 +1167,7 @@ function renderShiftAuditCard(entry) {
       </div>
       <div>
         <h3>${escapeHtml(entry.memberName)}</h3>
-        <p class="timeline-meta">${escapeHtml(`${entry.shiftType} · ${entry.world} · ${entry.task}`)}</p>
+        <p class="timeline-meta">${escapeHtml(`${formatShiftWindow(entry)} · ${entry.shiftType} · ${entry.world} · ${entry.task}`)}</p>
       </div>
       <p class="helper-text">${escapeHtml(entry.detail)}</p>
     </article>
@@ -1146,7 +1182,7 @@ function renderActiveEntry(entry, personal) {
         <span class="timeline-meta">seit ${escapeHtml(formatTime(entry.checkInAt))}</span>
       </div>
       <h3>${escapeHtml(personal ? "Du bist eingestempelt" : entry.memberName)}</h3>
-      <p>${escapeHtml(entry.shift ? `${entry.shift.shiftType} · ${entry.shift.world} · ${entry.shift.task}` : "Schicht wurde geloescht")}</p>
+      <p>${escapeHtml(entry.shift ? `${formatShiftWindow(entry.shift)} · ${entry.shift.shiftType} · ${entry.shift.world} · ${entry.shift.task}` : "Schicht wurde geloescht")}</p>
     </div>
   `;
 }
@@ -1161,7 +1197,7 @@ function renderTimeEntry(entry, personal) {
         <span class="timeline-meta">${escapeHtml(duration)}</span>
       </div>
       <h3>${escapeHtml(personal ? (entry.shift ? formatDate(entry.shift.date) : "Meine Schicht") : entry.memberName)}</h3>
-      <p>${escapeHtml(entry.shift ? `${entry.shift.shiftType} · ${entry.shift.world}` : "Keine Schichtreferenz mehr")}</p>
+      <p>${escapeHtml(entry.shift ? `${formatShiftWindow(entry.shift)} · ${entry.shift.shiftType} · ${entry.shift.world}` : "Keine Schichtreferenz mehr")}</p>
       <p class="timeline-meta">${escapeHtml(`${formatTime(entry.checkInAt)} bis ${entry.checkOutAt ? formatTime(entry.checkOutAt) : "offen"}`)}</p>
     </article>
   `;
@@ -1367,7 +1403,7 @@ function renderChatPanel(managerView, compact = false) {
 
 function renderChatMessage(message) {
   const shiftText = message.relatedShift
-    ? `${formatDate(message.relatedShift.date)} · ${message.relatedShift.shiftType} · ${message.relatedShift.world}`
+    ? `${formatDate(message.relatedShift.date)} · ${formatShiftWindow(message.relatedShift)} · ${message.relatedShift.shiftType} · ${message.relatedShift.world}`
     : "";
 
   return `
@@ -1545,12 +1581,29 @@ async function handleSubmit(event) {
       const formData = new FormData(form);
       const payload = {
         date: formData.get("date"),
+        startTime: normalizeTimeValue(formData.get("startTime")),
+        endTime: normalizeTimeValue(formData.get("endTime")),
         memberId: formData.get("memberId"),
-        shiftType: formData.get("shiftType"),
-        world: formData.get("world"),
-        task: formData.get("task"),
+        shiftType: String(formData.get("shiftType") || "").trim(),
+        world: String(formData.get("world") || "").trim(),
+        task: String(formData.get("task") || "").trim(),
         notes: formData.get("notes")
       };
+      const catalogAdds = collectCatalogAddsForShift(payload, state.data.settings);
+      if (catalogAdds.shiftTypes.length || catalogAdds.worlds.length || catalogAdds.tasks.length) {
+        const lines = [
+          "Diese Werte sind neu und noch nicht im Katalog:",
+          ...catalogAdds.shiftTypes.map((entry) => `- Schichttyp: ${entry}`),
+          ...catalogAdds.worlds.map((entry) => `- Welt: ${entry}`),
+          ...catalogAdds.tasks.map((entry) => `- Aufgabe: ${entry}`),
+          "",
+          "Sollen diese Werte zusaetzlich in die Listen aufgenommen werden?"
+        ];
+
+        if (window.confirm(lines.join("\n"))) {
+          payload.catalogAdds = catalogAdds;
+        }
+      }
 
       const shiftId = state.ui.editingShiftId;
       await performAction(
@@ -1852,7 +1905,7 @@ async function handleClick(event) {
             method: "POST",
             body: JSON.stringify({
               shiftId: shift.id,
-              message: `Ich suche einen Tausch fuer ${shift.shiftType} am ${formatDate(shift.date)} in ${shift.world}. Bitte hier melden.`
+              message: `Ich suche einen Tausch fuer ${shift.shiftType} am ${formatDate(shift.date)} von ${formatShiftWindow(shift)} in ${shift.world}. Bitte hier melden.`
             })
           }),
         "Tauschwunsch wurde erstellt."
@@ -1881,6 +1934,20 @@ async function handleClick(event) {
         "Benutzer wurde geloescht.",
         "warning"
       );
+      break;
+
+    default:
+      break;
+  }
+}
+
+function handleChange(event) {
+  const changeElement = event.target.closest("[data-change]");
+  if (!changeElement) return;
+
+  switch (changeElement.dataset.change) {
+    case "shift-preset":
+      applyShiftPreset(changeElement);
       break;
 
     default:
@@ -2018,6 +2085,7 @@ function getSortedShifts(shifts) {
     .slice()
     .sort((left, right) => {
       if (left.date !== right.date) return left.date.localeCompare(right.date);
+      if ((left.startTime || "") !== (right.startTime || "")) return compareTimeValues(left.startTime || "", right.startTime || "");
       if (left.shiftType !== right.shiftType) return left.shiftType.localeCompare(right.shiftType, "de");
       return left.world.localeCompare(right.world, "de");
     });
@@ -2041,7 +2109,7 @@ function getLatestEntryForShift(shiftId) {
 function buildShiftAuditRows() {
   return getSortedShifts(state.data.shifts || [])
     .slice()
-    .sort((left, right) => right.date.localeCompare(left.date) || left.shiftType.localeCompare(right.shiftType, "de"))
+    .sort((left, right) => right.date.localeCompare(left.date) || compareTimeValues(left.startTime || "", right.startTime || "") || left.shiftType.localeCompare(right.shiftType, "de"))
     .slice(0, 12)
     .map((shift) => {
       const openEntry = getOpenEntryForShift(shift.id);
@@ -2106,6 +2174,19 @@ function buildUserOptions(users, selectedId) {
   ].join("");
 }
 
+function renderShiftPresetOptions(selectedValue) {
+  return [
+    '<option value="custom">Individuell</option>',
+    ...SHIFT_WINDOW_PRESETS.map(
+      (entry) => `
+        <option value="${escapeHtml(entry.value)}" ${entry.value === selectedValue ? "selected" : ""}>
+          ${escapeHtml(entry.label)}
+        </option>
+      `
+    )
+  ].join("");
+}
+
 function buildStringOptions(values, selectedValue, placeholder) {
   return [
     `<option value="">${escapeHtml(placeholder)}</option>`,
@@ -2146,7 +2227,7 @@ function renderDatalistOptions(values) {
 }
 
 function renderShiftSelectOption(shift) {
-  const label = `${formatDate(shift.date)} · ${shift.shiftType} · ${shift.world}${shift.memberName ? ` · ${shift.memberName}` : ""}`;
+  const label = `${formatDate(shift.date)} · ${formatShiftWindow(shift)} · ${shift.shiftType} · ${shift.world}${shift.memberName ? ` · ${shift.memberName}` : ""}`;
   return `<option value="${escapeHtml(shift.id)}">${escapeHtml(label)}</option>`;
 }
 
@@ -2161,6 +2242,49 @@ function getInitials(name) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || "")
     .join("");
+}
+
+function applyShiftPreset(select) {
+  const preset = SHIFT_WINDOW_PRESETS.find((entry) => entry.value === select.value);
+  if (!preset) return;
+
+  const form = select.closest("form");
+  if (!form) return;
+
+  const [startTime, endTime] = preset.value.split("|");
+  const startInput = form.querySelector('input[name="startTime"]');
+  const endInput = form.querySelector('input[name="endTime"]');
+
+  if (startInput) startInput.value = startTime;
+  if (endInput) endInput.value = endTime;
+}
+
+function getMatchingShiftPresetValue(startTime, endTime) {
+  const normalizedStart = normalizeTimeValue(startTime);
+  const normalizedEnd = normalizeTimeValue(endTime);
+  const match = SHIFT_WINDOW_PRESETS.find((entry) => {
+    const [presetStart, presetEnd] = entry.value.split("|");
+    return presetStart === normalizedStart && presetEnd === normalizedEnd;
+  });
+
+  return match ? match.value : "custom";
+}
+
+function collectCatalogAddsForShift(payload, settings) {
+  return {
+    shiftTypes: getUnknownCatalogValues([payload.shiftType], settings.shiftTypes),
+    worlds: getUnknownCatalogValues([payload.world], settings.worlds),
+    tasks: getUnknownCatalogValues([payload.task], settings.tasks)
+  };
+}
+
+function getUnknownCatalogValues(values, catalog) {
+  const known = new Set((catalog || []).map((entry) => normalizeText(entry)));
+  return values
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .filter((entry, index, list) => list.findIndex((other) => other.toLowerCase() === entry.toLowerCase()) === index)
+    .filter((entry) => !known.has(normalizeText(entry)));
 }
 
 function normalizeText(value) {
@@ -2196,6 +2320,15 @@ function formatTime(isoString) {
   }).format(new Date(isoString));
 }
 
+function formatShiftWindow(shift) {
+  const start = normalizeTimeValue(shift?.startTime);
+  const end = normalizeTimeValue(shift?.endTime);
+  if (!start && !end) return "Ohne Uhrzeit";
+  if (!start) return `bis ${end}`;
+  if (!end) return `ab ${start}`;
+  return `${start} - ${end}`;
+}
+
 function formatDuration(milliseconds) {
   if (!milliseconds || milliseconds < 0) return "0h 00m";
 
@@ -2216,6 +2349,25 @@ function daysBetween(fromDate, toDate) {
   const from = new Date(`${fromDate}T12:00:00`);
   const to = new Date(`${toDate}T12:00:00`);
   return Math.floor((to - from) / 86400000);
+}
+
+function normalizeTimeValue(value) {
+  const normalized = String(value || "").trim();
+  if (!/^\d{2}:\d{2}$/.test(normalized)) return "";
+  const [hours, minutes] = normalized.split(":").map(Number);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return "";
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function compareTimeValues(left, right) {
+  return timeToMinutes(left) - timeToMinutes(right);
+}
+
+function timeToMinutes(value) {
+  const normalized = normalizeTimeValue(value);
+  if (!normalized) return Number.MAX_SAFE_INTEGER;
+  const [hours, minutes] = normalized.split(":").map(Number);
+  return hours * 60 + minutes;
 }
 
 function escapeHtml(value) {

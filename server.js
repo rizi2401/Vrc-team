@@ -160,6 +160,7 @@ async function handleApi(req, res, url) {
       id: crypto.randomUUID(),
       ...shift
     });
+    applyCatalogAdds(nextStore.settings, shift.catalogAdds);
 
     const savedStore = writeStore(nextStore);
     void notifyDiscord(buildShiftDiscordMessage("created", savedStore.shifts[0], savedStore));
@@ -187,11 +188,14 @@ async function handleApi(req, res, url) {
       const memberChanged = shift.memberId !== normalized.memberId;
 
       shift.date = normalized.date;
+      shift.startTime = normalized.startTime;
+      shift.endTime = normalized.endTime;
       shift.memberId = normalized.memberId;
       shift.shiftType = normalized.shiftType;
       shift.world = normalized.world;
       shift.task = normalized.task;
       shift.notes = normalized.notes;
+      applyCatalogAdds(nextStore.settings, normalized.catalogAdds);
 
       if (memberChanged) {
         nextStore.timeEntries = nextStore.timeEntries.filter((entry) => entry.shiftId !== shiftId);
@@ -633,16 +637,16 @@ function buildDefaultStore() {
   return {
     users,
     settings: {
-      shiftTypes: ["Frueh", "Prime Time", "Spaet", "Event"],
+      shiftTypes: ["Kernschicht", "Zwischenschicht", "Abloese", "Uebergang", "Event"],
       worlds: ["Community Hub", "Sunset Lounge", "Event Arena", "Support Room"],
       tasks: ["Begruessung", "Patrouille", "Support", "Event-Leitung", "Koordination"]
     },
     shifts: [
-      buildShift(addDays(today, 0), "Prime Time", "Community Hub", "Begruessung", userByName.get("Aiko"), "Neue User zuerst einsammeln."),
-      buildShift(addDays(today, 0), "Prime Time", "Sunset Lounge", "Patrouille", userByName.get("Mika"), "Fokus auf Stoerungen in Public Bereichen."),
-      buildShift(addDays(today, 1), "Event", "Event Arena", "Event-Leitung", userByName.get("Ren"), "Team 15 Minuten frueher briefen."),
-      buildShift(addDays(today, 2), "Frueh", "Support Room", "Support", userByName.get("Sora"), "Meldungen sammeln und weiterreichen."),
-      buildShift(addDays(today, 3), "Spaet", "Community Hub", "Koordination", userByName.get("Aiko"), "Kurzes Debriefing im Anschluss.")
+      buildShift(addDays(today, 0), "12:00", "16:00", "Kernschicht", "Community Hub", "Begruessung", userByName.get("Aiko"), "Neue User zuerst einsammeln."),
+      buildShift(addDays(today, 0), "14:00", "18:00", "Zwischenschicht", "Sunset Lounge", "Patrouille", userByName.get("Mika"), "Fokus auf Stoerungen in Public Bereichen."),
+      buildShift(addDays(today, 1), "20:00", "00:00", "Event", "Event Arena", "Event-Leitung", userByName.get("Ren"), "Team 15 Minuten frueher briefen."),
+      buildShift(addDays(today, 2), "16:00", "20:00", "Kernschicht", "Support Room", "Support", userByName.get("Sora"), "Meldungen sammeln und weiterreichen."),
+      buildShift(addDays(today, 3), "18:00", "22:00", "Uebergang", "Community Hub", "Koordination", userByName.get("Aiko"), "Kurzes Debriefing im Anschluss.")
     ],
     requests: [
       {
@@ -702,10 +706,12 @@ function buildSeedUser(username, displayName, role, password, vrchatName = "", d
   };
 }
 
-function buildShift(date, shiftType, world, task, memberId, notes = "") {
+function buildShift(date, startTime, endTime, shiftType, world, task, memberId, notes = "") {
   return {
     id: crypto.randomUUID(),
     date,
+    startTime,
+    endTime,
     shiftType,
     world,
     task,
@@ -831,6 +837,8 @@ function normalizeShifts(shifts, users) {
     .map((entry) => ({
       id: String(entry.id || crypto.randomUUID()),
       date: String(entry.date || "").trim(),
+      startTime: normalizeTimeValue(entry.startTime) || suggestLegacyShiftStart(entry.shiftType),
+      endTime: normalizeTimeValue(entry.endTime) || addHoursToTime(normalizeTimeValue(entry.startTime) || suggestLegacyShiftStart(entry.shiftType), 4),
       shiftType: String(entry.shiftType || "").trim(),
       world: String(entry.world || "").trim(),
       task: String(entry.task || "").trim(),
@@ -840,6 +848,8 @@ function normalizeShifts(shifts, users) {
     .filter(
       (entry) =>
         isDateKey(entry.date) &&
+        isTimeValue(entry.startTime) &&
+        isTimeValue(entry.endTime) &&
         entry.shiftType &&
         entry.world &&
         entry.task &&
@@ -872,6 +882,8 @@ function migrateLegacyPlanning(store, users, settings) {
         shifts.push({
           id: crypto.randomUUID(),
           date: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+          startTime: suggestLegacyShiftStart(shiftType),
+          endTime: addHoursToTime(suggestLegacyShiftStart(shiftType), 4),
           shiftType,
           world,
           task: slot?.name || slot?.task || settings.tasks[0],
@@ -1045,7 +1057,8 @@ function projectDataForRole(user, store) {
 function decorateShift(shift, store) {
   return {
     ...shift,
-    memberName: findUserName(store.users, shift.memberId)
+    memberName: findUserName(store.users, shift.memberId),
+    windowLabel: formatShiftWindow(shift.startTime, shift.endTime)
   };
 }
 
@@ -1163,19 +1176,19 @@ function buildViewerNotifications(user, store) {
     let title = "";
     let tone = "info";
     if (diff === 0) {
-      title = `Heute: ${shift.shiftType} in ${shift.world}`;
+      title = `Heute: ${formatShiftWindow(shift.startTime, shift.endTime)} · ${shift.world}`;
       tone = "teal";
     } else if (diff === 1) {
-      title = `Morgen: ${shift.shiftType} in ${shift.world}`;
+      title = `Morgen: ${formatShiftWindow(shift.startTime, shift.endTime)} · ${shift.world}`;
       tone = "amber";
     } else {
-      title = `Demnaechst: ${shift.shiftType} in ${shift.world}`;
+      title = `Demnaechst: ${formatShiftWindow(shift.startTime, shift.endTime)} · ${shift.world}`;
     }
 
     notifications.push({
       id: `shift-${shift.id}`,
       title,
-      body: `${formatDisplayDate(shift.date)} · Aufgabe: ${shift.task}`,
+      body: `${formatDisplayDate(shift.date)} · ${shift.shiftType} · Aufgabe: ${shift.task}`,
       tone,
       createdAt: `${shift.date}T09:00:00.000Z`,
       category: "shift"
@@ -1256,6 +1269,7 @@ function buildManagerNotifications(store) {
 
 function compareShifts(left, right) {
   if (left.date !== right.date) return left.date.localeCompare(right.date);
+  if ((left.startTime || "") !== (right.startTime || "")) return compareTimeValues(left.startTime || "", right.startTime || "");
   if (left.shiftType !== right.shiftType) return left.shiftType.localeCompare(right.shiftType, "de");
   return left.world.localeCompare(right.world, "de");
 }
@@ -1298,14 +1312,17 @@ function validateAdminUserPayload(body, store) {
 
 function validateShiftPayload(body, store) {
   const date = String(body.date || "").trim();
+  const startTime = normalizeTimeValue(body.startTime);
+  const endTime = normalizeTimeValue(body.endTime) || addHoursToTime(startTime, 4);
   const memberId = String(body.memberId || "").trim();
   const shiftType = String(body.shiftType || "").trim();
   const world = String(body.world || "").trim();
   const task = String(body.task || "").trim();
   const notes = String(body.notes || "").trim();
+  const catalogAdds = normalizeCatalogAdds(body.catalogAdds || {}, store.settings);
 
-  if (!isDateKey(date) || !memberId || !shiftType || !world || !task) {
-    const error = new Error("Datum, Moderator, Schichttyp, Welt und Aufgabe sind erforderlich.");
+  if (!isDateKey(date) || !isTimeValue(startTime) || !isTimeValue(endTime) || !memberId || !shiftType || !world || !task) {
+    const error = new Error("Datum, Uhrzeit, Moderator, Schichttyp, Welt und Aufgabe sind erforderlich.");
     error.statusCode = 400;
     throw error;
   }
@@ -1316,7 +1333,7 @@ function validateShiftPayload(body, store) {
     throw error;
   }
 
-  return { date, memberId, shiftType, world, task, notes };
+  return { date, startTime, endTime, memberId, shiftType, world, task, notes, catalogAdds };
 }
 
 function validateRequestPayload(body) {
@@ -1522,6 +1539,29 @@ function isSettingsValueInUse(key, value, store) {
   return store.shifts.some((entry) => entry[property] === value);
 }
 
+function normalizeCatalogAdds(source, settings) {
+  const currentSettings = settings || { shiftTypes: [], worlds: [], tasks: [] };
+
+  return {
+    shiftTypes: filterUnknownCatalogValues(source.shiftTypes, currentSettings.shiftTypes),
+    worlds: filterUnknownCatalogValues(source.worlds, currentSettings.worlds),
+    tasks: filterUnknownCatalogValues(source.tasks, currentSettings.tasks)
+  };
+}
+
+function filterUnknownCatalogValues(values, existingValues) {
+  const known = new Set(uniqueStrings(existingValues).map((entry) => entry.toLowerCase()));
+  return uniqueStrings(Array.isArray(values) ? values : [])
+    .filter((entry) => !known.has(entry.toLowerCase()));
+}
+
+function applyCatalogAdds(settings, catalogAdds = {}) {
+  for (const key of ["shiftTypes", "worlds", "tasks"]) {
+    const values = uniqueStrings([...(settings[key] || []), ...((catalogAdds[key] || []))]);
+    settings[key] = values;
+  }
+}
+
 function normalizeUsername(value) {
   return String(value || "")
     .trim()
@@ -1549,6 +1589,46 @@ function createUniqueUsername(value, existingUsernames) {
 
 function uniqueStrings(values) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function normalizeTimeValue(value) {
+  const normalized = String(value || "").trim();
+  if (!/^\d{2}:\d{2}$/.test(normalized)) return "";
+  const [hours, minutes] = normalized.split(":").map(Number);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return "";
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function isTimeValue(value) {
+  return Boolean(normalizeTimeValue(value));
+}
+
+function suggestLegacyShiftStart(shiftType) {
+  const normalized = String(shiftType || "").trim().toLowerCase();
+  if (normalized === "frueh") return "12:00";
+  if (normalized === "prime time") return "16:00";
+  if (normalized === "event") return "20:00";
+  if (normalized === "spaet") return "00:00";
+  return "12:00";
+}
+
+function addHoursToTime(timeValue, hoursToAdd) {
+  const normalized = normalizeTimeValue(timeValue);
+  if (!normalized) return "";
+  const [hours, minutes] = normalized.split(":").map(Number);
+  const totalMinutes = (hours * 60 + minutes + hoursToAdd * 60 + 1440) % 1440;
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
+}
+
+function compareTimeValues(left, right) {
+  return timeValueToMinutes(left) - timeValueToMinutes(right);
+}
+
+function timeValueToMinutes(value) {
+  const normalized = normalizeTimeValue(value);
+  if (!normalized) return Number.MAX_SAFE_INTEGER;
+  const [hours, minutes] = normalized.split(":").map(Number);
+  return hours * 60 + minutes;
 }
 
 function isDateKey(value) {
@@ -1692,6 +1772,7 @@ function buildShiftDiscordMessage(action, shift, store, previousShift = null) {
   const fields = [
     { name: "Moderator", value: memberName, inline: true },
     { name: "Datum", value: formatDisplayDate(shift.date), inline: true },
+    { name: "Zeit", value: formatShiftWindow(shift.startTime, shift.endTime), inline: true },
     { name: "Schicht", value: shift.shiftType, inline: true },
     { name: "Welt", value: shift.world, inline: true },
     { name: "Aufgabe", value: shift.task, inline: true }
@@ -1704,7 +1785,7 @@ function buildShiftDiscordMessage(action, shift, store, previousShift = null) {
   if (previousShift && action === "updated") {
     fields.push({
       name: "Vorher",
-      value: `${formatDisplayDate(previousShift.date)} · ${previousShift.shiftType} · ${previousShift.world} · ${previousShift.task}`,
+      value: `${formatDisplayDate(previousShift.date)} · ${formatShiftWindow(previousShift.startTime, previousShift.endTime)} · ${previousShift.shiftType} · ${previousShift.world} · ${previousShift.task}`,
       inline: false
     });
   }
@@ -1809,4 +1890,13 @@ function formatDisplayDate(dateKey) {
     month: "2-digit",
     year: "numeric"
   }).format(new Date(year, month - 1, day, 12, 0, 0));
+}
+
+function formatShiftWindow(startTime, endTime) {
+  const start = normalizeTimeValue(startTime);
+  const end = normalizeTimeValue(endTime);
+  if (!start && !end) return "Ohne Uhrzeit";
+  if (!start) return `bis ${end}`;
+  if (!end) return `ab ${start}`;
+  return `${start} - ${end}`;
 }
