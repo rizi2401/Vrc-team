@@ -85,6 +85,8 @@ async function handleApi(req, res, url) {
       username: normalized.username,
       displayName: normalized.displayName,
       role: "viewer",
+      vrchatName: normalized.vrchatName,
+      discordName: normalized.discordName,
       passwordHash: hashPassword(normalized.password)
     };
 
@@ -141,6 +143,7 @@ async function handleApi(req, res, url) {
 
     const savedStore = writeStore(nextStore);
     void notifyDiscord(buildShiftDiscordMessage("created", savedStore.shifts[0], savedStore));
+    broadcastEvent("portal", { type: "shift-created" });
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -176,6 +179,7 @@ async function handleApi(req, res, url) {
 
       const savedStore = writeStore(nextStore);
       void notifyDiscord(buildShiftDiscordMessage("updated", shift, savedStore, previousShift));
+      broadcastEvent("portal", { type: "shift-updated" });
       sendPortalData(res, 200, auth.user, savedStore);
       return;
     }
@@ -184,12 +188,14 @@ async function handleApi(req, res, url) {
       const deletedShift = { ...shift };
       nextStore.shifts = nextStore.shifts.filter((entry) => entry.id !== shiftId);
       nextStore.timeEntries = nextStore.timeEntries.filter((entry) => entry.shiftId !== shiftId);
+      nextStore.swapRequests = nextStore.swapRequests.filter((entry) => entry.shiftId !== shiftId);
       nextStore.chatMessages = nextStore.chatMessages.map((entry) =>
         entry.relatedShiftId === shiftId ? { ...entry, relatedShiftId: "" } : entry
       );
 
       const savedStore = writeStore(nextStore);
       void notifyDiscord(buildShiftDiscordMessage("deleted", deletedShift, auth.store));
+      broadcastEvent("portal", { type: "shift-deleted" });
       sendPortalData(res, 200, auth.user, savedStore);
       return;
     }
@@ -212,6 +218,7 @@ async function handleApi(req, res, url) {
     });
 
     const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "request-created" });
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -233,6 +240,7 @@ async function handleApi(req, res, url) {
     request.adminNote = String(body.adminNote || "").trim();
 
     const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "request-updated" });
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -254,6 +262,7 @@ async function handleApi(req, res, url) {
 
     const savedStore = writeStore(nextStore);
     void notifyDiscord(buildAnnouncementDiscordMessage(savedStore.announcements[0], auth.user));
+    broadcastEvent("portal", { type: "announcement-created" });
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -266,6 +275,7 @@ async function handleApi(req, res, url) {
 
     nextStore.announcements = nextStore.announcements.filter((entry) => entry.id !== announcementId);
     const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "announcement-deleted" });
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -285,7 +295,96 @@ async function handleApi(req, res, url) {
 
     const savedStore = writeStore(nextStore);
     broadcastEvent("chat", { ok: true });
+    broadcastEvent("portal", { type: "chat" });
     sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/swap-requests") {
+    const body = await readJson(req);
+    const normalized = validateSwapRequestPayload(body, auth.user, auth.store);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.swapRequests.unshift({
+      id: crypto.randomUUID(),
+      shiftId: normalized.shiftId,
+      requesterId: auth.user.id,
+      message: normalized.message,
+      status: "offen",
+      candidateIds: [],
+      approvedCandidateId: "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "swap-request" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  const swapOfferMatch = url.pathname.match(/^\/api\/swap-requests\/([^/]+)\/offer$/);
+  if (swapOfferMatch && req.method === "POST") {
+    const swapRequestId = decodeURIComponent(swapOfferMatch[1]);
+    const nextStore = structuredClone(auth.store);
+    const swapRequest = nextStore.swapRequests.find((entry) => entry.id === swapRequestId);
+
+    if (!swapRequest) {
+      sendJson(res, 404, { error: "Tauschwunsch nicht gefunden." });
+      return;
+    }
+
+    validateSwapOffer(swapRequest, auth.user, nextStore);
+    swapRequest.candidateIds = uniqueStrings([...(swapRequest.candidateIds || []), auth.user.id]);
+    swapRequest.status = "angeboten";
+    swapRequest.updatedAt = new Date().toISOString();
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "swap-offer" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  const swapDecisionMatch = url.pathname.match(/^\/api\/swap-requests\/([^/]+)$/);
+  if (swapDecisionMatch && req.method === "PATCH") {
+    requireRole(auth.user, "planner");
+    const swapRequestId = decodeURIComponent(swapDecisionMatch[1]);
+    const nextStore = structuredClone(auth.store);
+    const swapRequest = nextStore.swapRequests.find((entry) => entry.id === swapRequestId);
+
+    if (!swapRequest) {
+      sendJson(res, 404, { error: "Tauschwunsch nicht gefunden." });
+      return;
+    }
+
+    const body = await readJson(req);
+    const decision = validateSwapDecision(body);
+    const shift = nextStore.shifts.find((entry) => entry.id === swapRequest.shiftId);
+
+    if (!shift) {
+      sendJson(res, 404, { error: "Die zugehoerige Schicht existiert nicht mehr." });
+      return;
+    }
+
+    if (decision.status === "genehmigt") {
+      if (!swapRequest.candidateIds.includes(decision.candidateId)) {
+        sendJson(res, 400, { error: "Diese Person hat keine Uebernahme angeboten." });
+        return;
+      }
+
+      shift.memberId = decision.candidateId;
+      nextStore.timeEntries = nextStore.timeEntries.filter((entry) => entry.shiftId !== shift.id);
+      swapRequest.status = "genehmigt";
+      swapRequest.approvedCandidateId = decision.candidateId;
+    } else {
+      swapRequest.status = "abgelehnt";
+      swapRequest.approvedCandidateId = "";
+    }
+
+    swapRequest.updatedAt = new Date().toISOString();
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "swap-decision" });
+    sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
 
@@ -319,6 +418,7 @@ async function handleApi(req, res, url) {
     });
 
     const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "check-in" });
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -338,6 +438,7 @@ async function handleApi(req, res, url) {
 
     entry.checkOutAt = new Date().toISOString();
     const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "check-out" });
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -364,6 +465,7 @@ async function handleApi(req, res, url) {
 
     nextStore.settings[key].push(value);
     const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "settings-updated" });
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -383,6 +485,7 @@ async function handleApi(req, res, url) {
     const nextStore = structuredClone(auth.store);
     nextStore.settings[key] = nextStore.settings[key].filter((entry) => entry !== value);
     const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "settings-updated" });
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -398,10 +501,13 @@ async function handleApi(req, res, url) {
       username: normalized.username,
       displayName: normalized.displayName,
       role: normalized.role,
+      vrchatName: normalized.vrchatName,
+      discordName: normalized.discordName,
       passwordHash: hashPassword(normalized.password)
     });
 
     const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "user-created" });
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -426,6 +532,24 @@ async function handleApi(req, res, url) {
         target.role = nextRole;
       }
 
+      if (body.vrchatName !== undefined) {
+        const vrchatName = String(body.vrchatName || "").trim();
+        if (!vrchatName) {
+          sendJson(res, 400, { error: "VRChat-Name darf nicht leer sein." });
+          return;
+        }
+        target.vrchatName = vrchatName;
+      }
+
+      if (body.discordName !== undefined) {
+        const discordName = String(body.discordName || "").trim();
+        if (!discordName) {
+          sendJson(res, 400, { error: "Discord-Name darf nicht leer sein." });
+          return;
+        }
+        target.discordName = discordName;
+      }
+
       if (body.password) {
         const password = String(body.password || "").trim();
         validatePassword(password);
@@ -433,6 +557,7 @@ async function handleApi(req, res, url) {
       }
 
       const savedStore = writeStore(nextStore);
+      broadcastEvent("portal", { type: "user-updated" });
       sendPortalData(res, 200, auth.user, savedStore);
       return;
     }
@@ -446,6 +571,7 @@ async function handleApi(req, res, url) {
       ensureUserIsNotLinked(target.id, nextStore);
       nextStore.users = nextStore.users.filter((entry) => entry.id !== target.id);
       const savedStore = writeStore(nextStore);
+      broadcastEvent("portal", { type: "user-deleted" });
       sendPortalData(res, 200, auth.user, savedStore);
       return;
     }
@@ -474,11 +600,11 @@ function ensureDataStore() {
 
 function buildDefaultStore() {
   const users = [
-    buildSeedUser("admin", "System Admin", "admin", "admin123!"),
-    buildSeedUser("aiko", "Aiko", "viewer", "mod123!"),
-    buildSeedUser("mika", "Mika", "viewer", "mod123!"),
-    buildSeedUser("ren", "Ren", "viewer", "mod123!"),
-    buildSeedUser("sora", "Sora", "viewer", "mod123!")
+    buildSeedUser("admin", "System Admin", "admin", "admin123!", "System Admin", "system-admin"),
+    buildSeedUser("aiko", "Aiko", "viewer", "mod123!", "Aiko", "aiko_vrc"),
+    buildSeedUser("mika", "Mika", "viewer", "mod123!", "Mika", "mika_vrc"),
+    buildSeedUser("ren", "Ren", "viewer", "mod123!", "Ren", "ren_vrc"),
+    buildSeedUser("sora", "Sora", "viewer", "mod123!", "Sora", "sora_vrc")
   ];
 
   const userByName = new Map(users.map((entry) => [entry.displayName, entry.id]));
@@ -539,16 +665,19 @@ function buildDefaultStore() {
       }
     ],
     chatMessages: [],
+    swapRequests: [],
     timeEntries: []
   };
 }
 
-function buildSeedUser(username, displayName, role, password) {
+function buildSeedUser(username, displayName, role, password, vrchatName = "", discordName = "") {
   return {
     id: crypto.randomUUID(),
     username,
     displayName,
     role,
+    vrchatName,
+    discordName,
     passwordHash: hashPassword(password)
   };
 }
@@ -584,8 +713,34 @@ function normalizeStore(store) {
     requests: Array.isArray(store.requests) ? normalizeRequests(store.requests, users) : [],
     announcements: Array.isArray(store.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
     chatMessages: Array.isArray(store.chatMessages) ? normalizeChatMessages(store.chatMessages, users, shifts) : [],
+    swapRequests: Array.isArray(store.swapRequests) ? normalizeSwapRequests(store.swapRequests, users, shifts) : [],
     timeEntries: Array.isArray(store.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : []
   };
+}
+
+function normalizeSwapRequests(entries, users, shifts) {
+  const validUserIds = new Set(users.map((entry) => entry.id));
+  const validShiftIds = new Set(shifts.map((entry) => entry.id));
+  const validStatuses = new Set(["offen", "angeboten", "genehmigt", "abgelehnt"]);
+
+  return entries
+    .map((entry) => ({
+      id: String(entry.id || crypto.randomUUID()),
+      shiftId: String(entry.shiftId || "").trim(),
+      requesterId: String(entry.requesterId || "").trim(),
+      message: String(entry.message || "").trim(),
+      status: validStatuses.has(String(entry.status || "").trim()) ? String(entry.status).trim() : "offen",
+      candidateIds: uniqueStrings(Array.isArray(entry.candidateIds) ? entry.candidateIds : []),
+      approvedCandidateId: String(entry.approvedCandidateId || "").trim(),
+      createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
+      updatedAt: isIsoDate(entry.updatedAt) ? entry.updatedAt : new Date().toISOString()
+    }))
+    .filter((entry) => validShiftIds.has(entry.shiftId) && validUserIds.has(entry.requesterId))
+    .map((entry) => ({
+      ...entry,
+      candidateIds: entry.candidateIds.filter((candidateId) => validUserIds.has(candidateId) && candidateId !== entry.requesterId),
+      approvedCandidateId: validUserIds.has(entry.approvedCandidateId) ? entry.approvedCandidateId : ""
+    }));
 }
 
 function normalizeUsers(users, legacyModeratorNames) {
@@ -595,6 +750,8 @@ function normalizeUsers(users, legacyModeratorNames) {
   for (const entry of users) {
     const username = normalizeUsername(entry.username);
     const displayName = String(entry.displayName || "").trim();
+    const vrchatName = String(entry.vrchatName || displayName).trim();
+    const discordName = String(entry.discordName || username).trim();
     const passwordHash = String(entry.passwordHash || "").trim();
     const role = ["viewer", "planner", "admin"].includes(entry.role) ? entry.role : "viewer";
 
@@ -606,6 +763,8 @@ function normalizeUsers(users, legacyModeratorNames) {
       username,
       displayName,
       role,
+      vrchatName,
+      discordName,
       passwordHash
     });
   }
@@ -623,6 +782,8 @@ function normalizeUsers(users, legacyModeratorNames) {
       username,
       displayName: name,
       role: "viewer",
+      vrchatName: name,
+      discordName: username,
       passwordHash: hashPassword("mod123!")
     });
   }
@@ -821,7 +982,8 @@ function projectDataForRole(user, store) {
     settings: store.settings,
     announcements,
     chatMessages,
-    notifications
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store)
   };
 
   if (user.role === "viewer") {
@@ -899,12 +1061,47 @@ function decorateTimeEntry(entry, store) {
   };
 }
 
+function decorateSwapRequest(entry, store) {
+  const shift = store.shifts.find((item) => item.id === entry.shiftId);
+  return {
+    ...entry,
+    requesterName: findUserName(store.users, entry.requesterId),
+    approvedCandidateName: entry.approvedCandidateId ? findUserName(store.users, entry.approvedCandidateId) : "",
+    shift: shift ? decorateShift(shift, store) : null,
+    candidates: (entry.candidateIds || []).map((candidateId) => ({
+      id: candidateId,
+      name: findUserName(store.users, candidateId)
+    }))
+  };
+}
+
+function getSwapRequestsForUser(user, store) {
+  const all = (store.swapRequests || [])
+    .slice()
+    .sort((left, right) => new Date(right.updatedAt) - new Date(left.updatedAt))
+    .map((entry) => decorateSwapRequest(entry, store));
+
+  if (user.role === "viewer") {
+    return all.filter(
+      (entry) =>
+        entry.requesterId === user.id ||
+        entry.shift?.memberId === user.id ||
+        entry.candidates.some((candidate) => candidate.id === user.id) ||
+        entry.approvedCandidateId === user.id
+    );
+  }
+
+  return all;
+}
+
 function sanitizeUser(user) {
   return {
     id: user.id,
     username: user.username,
     displayName: user.displayName,
-    role: user.role
+    role: user.role,
+    vrchatName: user.vrchatName || "",
+    discordName: user.discordName || ""
   };
 }
 
@@ -1022,6 +1219,18 @@ function buildManagerNotifications(store) {
     });
   }
 
+  const openSwapRequests = (store.swapRequests || []).filter((entry) => ["offen", "angeboten"].includes(entry.status));
+  if (openSwapRequests.length) {
+    notifications.push({
+      id: `swap-${openSwapRequests.length}`,
+      title: `${openSwapRequests.length} offene Tauschwuesche`,
+      body: "Pruefe, ob eine Uebernahme genehmigt werden soll.",
+      tone: "amber",
+      createdAt: openSwapRequests[0].updatedAt,
+      category: "swap"
+    });
+  }
+
   return notifications.slice(0, 6);
 }
 
@@ -1041,9 +1250,11 @@ function validateRegistrationPayload(body, store) {
   const displayName = String(body.displayName || "").trim();
   const username = normalizeUsername(body.username);
   const password = String(body.password || "").trim();
+  const vrchatName = String(body.vrchatName || "").trim();
+  const discordName = String(body.discordName || "").trim();
 
-  if (!displayName || !username || !password) {
-    const error = new Error("Bitte Anzeigename, Benutzername und Passwort angeben.");
+  if (!displayName || !username || !password || !vrchatName || !discordName) {
+    const error = new Error("Bitte Anzeigename, Benutzername, Passwort, VRChat-Name und Discord-Name angeben.");
     error.statusCode = 400;
     throw error;
   }
@@ -1056,7 +1267,7 @@ function validateRegistrationPayload(body, store) {
     throw error;
   }
 
-  return { displayName, username, password };
+  return { displayName, username, password, vrchatName, discordName };
 }
 
 function validateAdminUserPayload(body, store) {
@@ -1154,6 +1365,81 @@ function validateChatPayload(body, user, store) {
   return { content, relatedShiftId };
 }
 
+function validateSwapRequestPayload(body, user, store) {
+  const shiftId = String(body.shiftId || "").trim();
+  const message = String(body.message || "").trim();
+  const shift = store.shifts.find((entry) => entry.id === shiftId);
+
+  if (!shift) {
+    const error = new Error("Die ausgewaehlte Schicht existiert nicht.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (user.role === "viewer" && shift.memberId !== user.id) {
+    const error = new Error("Du kannst nur fuer deine eigene Schicht einen Tauschwunsch senden.");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if ((store.swapRequests || []).some((entry) => entry.shiftId === shiftId && ["offen", "angeboten"].includes(entry.status))) {
+    const error = new Error("Fuer diese Schicht gibt es bereits einen offenen Tauschwunsch.");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  return {
+    shiftId,
+    message: message || "Ich suche eine Uebernahme fuer diese Schicht."
+  };
+}
+
+function validateSwapOffer(swapRequest, user, store) {
+  const shift = store.shifts.find((entry) => entry.id === swapRequest.shiftId);
+  if (!shift) {
+    const error = new Error("Die zugehoerige Schicht existiert nicht mehr.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (swapRequest.status === "genehmigt" || swapRequest.status === "abgelehnt") {
+    const error = new Error("Dieser Tauschwunsch ist bereits abgeschlossen.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (shift.memberId === user.id || swapRequest.requesterId === user.id) {
+    const error = new Error("Du kannst deine eigene Schicht nicht selbst uebernehmen.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (swapRequest.candidateIds.includes(user.id)) {
+    const error = new Error("Du hast die Uebernahme bereits angeboten.");
+    error.statusCode = 409;
+    throw error;
+  }
+}
+
+function validateSwapDecision(body) {
+  const status = String(body.status || "").trim();
+  const candidateId = String(body.candidateId || "").trim();
+
+  if (!["genehmigt", "abgelehnt"].includes(status)) {
+    const error = new Error("Ungueltige Entscheidung fuer den Tauschwunsch.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (status === "genehmigt" && !candidateId) {
+    const error = new Error("Bitte waehle einen Moderator fuer die Uebernahme.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return { status, candidateId };
+}
+
 function validateRole(role) {
   if (!["viewer", "planner", "admin"].includes(role)) {
     const error = new Error("Ungueltige Rolle.");
@@ -1196,6 +1482,7 @@ function ensureUserIsNotLinked(userId, store) {
     store.shifts.some((entry) => entry.memberId === userId) ||
     store.requests.some((entry) => entry.userId === userId) ||
     store.chatMessages.some((entry) => entry.authorId === userId) ||
+    store.swapRequests.some((entry) => entry.requesterId === userId || entry.candidateIds.includes(userId) || entry.approvedCandidateId === userId) ||
     store.timeEntries.some((entry) => entry.userId === userId);
 
   if (linked) {

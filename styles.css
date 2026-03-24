@@ -585,6 +585,16 @@ button.small {
   background: rgba(255, 253, 249, 0.9);
 }
 
+.compact-form {
+  gap: 10px;
+}
+
+.attendance-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .announcement-card.pinned {
   background: linear-gradient(145deg, rgba(255, 248, 237, 0.94), rgba(255, 255, 255, 0.92));
 }
@@ -620,6 +630,10 @@ code {
   .auth-layout,
   .planner-layout,
   .stats-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .attendance-admin-grid {
     grid-template-columns: 1fr;
   }
 

@@ -182,6 +182,14 @@ function renderAuth() {
                 <input id="registerUsername" name="username" type="text" required>
               </div>
               <div class="field">
+                <label for="registerVrchatName">VRChat-Name</label>
+                <input id="registerVrchatName" name="vrchatName" type="text" required>
+              </div>
+              <div class="field">
+                <label for="registerDiscordName">Discord-Name</label>
+                <input id="registerDiscordName" name="discordName" type="text" placeholder="z. B. name oder name#1234" required>
+              </div>
+              <div class="field">
                 <label for="registerPassword">Passwort</label>
                 <input id="registerPassword" name="password" type="password" required>
               </div>
@@ -371,7 +379,7 @@ function renderStatCard(label, value, detail, tone) {
 function renderManagerDashboard(activeTab) {
   switch (activeTab) {
     case "planning":
-      return [renderPlannerPanel(), renderRequestAdminPanel()].join("");
+      return [renderPlannerPanel(), renderSwapPanel(true), renderRequestAdminPanel()].join("");
     case "team":
       return renderTeamPanel();
     case "settings":
@@ -394,7 +402,7 @@ function renderManagerDashboard(activeTab) {
 function renderModeratorDashboard(activeTab) {
   switch (activeTab) {
     case "schedule":
-      return renderMySchedulePanel();
+      return [renderMySchedulePanel(), renderSwapPanel(false)].join("");
     case "requests":
       return renderRequestMemberPanel();
     case "time":
@@ -406,7 +414,8 @@ function renderModeratorDashboard(activeTab) {
       return [
         renderNotificationsPanel(),
         renderDashboardGuidePanel(false),
-        renderMySchedulePanel()
+        renderMySchedulePanel(),
+        renderSwapPanel(false)
       ].join("");
   }
 }
@@ -633,6 +642,7 @@ function renderShiftActionRow(shift, openEntry) {
   const isToday = shift.date === getLocalDateKey();
   const activeElsewhere = getOpenEntryForViewer();
   const blockByOtherShift = activeElsewhere && activeElsewhere.shiftId !== shift.id;
+  const openSwapRequest = getOpenSwapRequestForShift(shift.id);
 
   return `
     <div class="card-actions">
@@ -656,6 +666,7 @@ function renderShiftActionRow(shift, openEntry) {
       </button>
       <button type="button" class="ghost small" data-action="quick-swap" data-shift-id="${escapeHtml(shift.id)}">Tausch anfragen</button>
     </div>
+    ${openSwapRequest ? `<p class="helper-text">Tauschwunsch offen: ${escapeHtml(getSwapStatusLabel(openSwapRequest.status))}</p>` : ""}
     <p class="pill-note">
       ${blockByOtherShift
         ? "Du bist bereits in einer anderen Schicht eingestempelt."
@@ -663,6 +674,93 @@ function renderShiftActionRow(shift, openEntry) {
           ? "Stempelbuttons sind fuer heutige Einsaetze aktiv."
           : "Stempeln ist am Einsatztag verfuegbar."}
     </p>
+  `;
+}
+
+function renderSwapPanel(managerView) {
+  const swapRequests = state.data.swapRequests || [];
+
+  return `
+    <section class="panel ${managerView ? "span-4" : "span-12"}">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Schichttausch</p>
+          <h2>${managerView ? "Tauschwuesche genehmigen" : "Tauschwuesche und Uebernahmen"}</h2>
+          <p class="section-copy">
+            ${managerView
+              ? "Waehle einen angebotenen Moderator aus und uebernimm die Schicht direkt im Plan."
+              : "Stelle fuer eigene Schichten einen Tauschwunsch oder biete die Uebernahme fuer andere an."}
+          </p>
+        </div>
+      </div>
+
+      <div class="stack-list">
+        ${
+          swapRequests.length
+            ? swapRequests.map((entry) => renderSwapRequestCard(entry, managerView)).join("")
+            : renderEmptyState("Keine Tauschwuesche", "Sobald jemand einen Schichttausch anfragt, erscheint er hier.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderSwapRequestCard(entry, managerView) {
+  const statusTone = entry.status === "genehmigt" ? "success" : entry.status === "abgelehnt" ? "rose" : "amber";
+  const iAmCandidate = entry.candidates.some((candidate) => candidate.id === state.session.id);
+  const canOffer = !managerView && entry.status !== "genehmigt" && entry.status !== "abgelehnt" && !iAmCandidate && entry.shift?.memberId !== state.session.id;
+
+  return `
+    <article class="request-card">
+      <div class="status-row">
+        <span class="pill ${statusTone}">${escapeHtml(getSwapStatusLabel(entry.status))}</span>
+        ${entry.shift ? `<span class="pill neutral">${escapeHtml(formatDate(entry.shift.date))}</span>` : ""}
+      </div>
+      <div>
+        <h3>${escapeHtml(entry.requesterName)}</h3>
+        <p class="timeline-meta">
+          ${entry.shift ? escapeHtml(`${entry.shift.shiftType} · ${entry.shift.world} · ${entry.shift.task}`) : "Schicht nicht mehr verfuegbar"}
+        </p>
+      </div>
+      <p>${escapeHtml(entry.message)}</p>
+      <p class="helper-text">
+        Angebote: ${
+          entry.candidates.length
+            ? escapeHtml(entry.candidates.map((candidate) => candidate.name).join(", "))
+            : "Noch keine"
+        }
+      </p>
+      ${
+        entry.approvedCandidateName
+          ? `<p class="helper-text">Genehmigt fuer: ${escapeHtml(entry.approvedCandidateName)}</p>`
+          : ""
+      }
+      ${
+        managerView && entry.status !== "genehmigt" && entry.status !== "abgelehnt"
+          ? `
+            <form class="stack-form compact-form" data-form="swap-decision" data-swap-request-id="${escapeHtml(entry.id)}">
+              <div class="field">
+                <label for="swap-candidate-${escapeHtml(entry.id)}">Uebernahme durch</label>
+                <select id="swap-candidate-${escapeHtml(entry.id)}" name="candidateId">
+                  <option value="">Moderator waehlen</option>
+                  ${entry.candidates
+                    .map((candidate) => `<option value="${escapeHtml(candidate.id)}">${escapeHtml(candidate.name)}</option>`)
+                    .join("")}
+                </select>
+              </div>
+              <div class="card-actions">
+                <button type="submit" name="status" value="genehmigt" ${entry.candidates.length ? "" : "disabled"}>Genehmigen</button>
+                <button type="submit" class="ghost small" name="status" value="abgelehnt">Ablehnen</button>
+              </div>
+            </form>
+          `
+          : canOffer
+            ? `<button type="button" class="ghost small" data-action="offer-swap" data-swap-request-id="${escapeHtml(entry.id)}">Ich uebernehme</button>`
+            : iAmCandidate
+              ? '<p class="helper-text">Du hast die Uebernahme bereits angeboten.</p>'
+              : ""
+      }
+    </article>
   `;
 }
 
@@ -696,9 +794,17 @@ function renderTeamPanel() {
           </div>
           <div>
             <h3>${escapeHtml(user.displayName)}</h3>
-            <p class="timeline-meta">@${escapeHtml(user.username)}</p>
+            <p class="timeline-meta">@${escapeHtml(user.username)} · VRC: ${escapeHtml(user.vrchatName || "-")} · DC: ${escapeHtml(user.discordName || "-")}</p>
           </div>
           <form data-form="user-update" data-user-id="${escapeHtml(user.id)}">
+            <div class="field">
+              <label for="vrchat-${escapeHtml(user.id)}">VRChat-Name</label>
+              <input id="vrchat-${escapeHtml(user.id)}" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}">
+            </div>
+            <div class="field">
+              <label for="discord-${escapeHtml(user.id)}">Discord-Name</label>
+              <input id="discord-${escapeHtml(user.id)}" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}">
+            </div>
             <div class="field">
               <label for="role-${escapeHtml(user.id)}">Rolle</label>
               <select id="role-${escapeHtml(user.id)}" name="role">
@@ -750,6 +856,14 @@ function renderTeamPanel() {
                 <div class="field">
                   <label for="newUsername">Benutzername</label>
                   <input id="newUsername" name="username" type="text" required>
+                </div>
+                <div class="field">
+                  <label for="newVrchatName">VRChat-Name</label>
+                  <input id="newVrchatName" name="vrchatName" type="text" required>
+                </div>
+                <div class="field">
+                  <label for="newDiscordName">Discord-Name</label>
+                  <input id="newDiscordName" name="discordName" type="text" required>
                 </div>
                 <div class="field">
                   <label for="newPassword">Startpasswort</label>
@@ -899,24 +1013,40 @@ function renderAttendancePanel(managerView) {
   if (managerView) {
     const liveEntries = entries.filter((entry) => !entry.checkOutAt);
     const history = entries.slice(0, 8);
+    const audits = buildShiftAuditRows();
 
     return `
-      <section class="panel span-4">
+      <section class="panel span-12">
         <div class="section-head">
           <div>
             <p class="eyebrow">Stempelzeiten</p>
-            <h2>Wer ist gerade im Einsatz?</h2>
+            <h2>Wer arbeitet gerade und wer hat seine Schicht gemacht?</h2>
           </div>
         </div>
 
-        ${
-          liveEntries.length
-            ? liveEntries.map((entry) => renderActiveEntry(entry, false)).join("")
-            : renderEmptyState("Niemand aktiv", "Sobald jemand einstempelt, wird er hier gelistet.")
-        }
+        <div class="attendance-admin-grid">
+          <div class="stack-list">
+            <h3>Gerade aktiv</h3>
+            ${
+              liveEntries.length
+                ? liveEntries.map((entry) => renderActiveEntry(entry, false)).join("")
+                : renderEmptyState("Niemand aktiv", "Sobald jemand einstempelt, wird er hier gelistet.")
+            }
+          </div>
 
-        <div class="stack-list">
-          ${history.length ? history.map((entry) => renderTimeEntry(entry, false)).join("") : ""}
+          <div class="stack-list">
+            <h3>Letzte Stempelungen</h3>
+            ${history.length ? history.map((entry) => renderTimeEntry(entry, false)).join("") : renderEmptyState("Noch keine Eintraege", "Sobald Einsaetze gestempelt wurden, erscheinen sie hier.")}
+          </div>
+
+          <div class="stack-list">
+            <h3>Schichtkontrolle</h3>
+            ${
+              audits.length
+                ? audits.map((entry) => renderShiftAuditCard(entry)).join("")
+                : renderEmptyState("Keine Schichten", "Sobald Schichten geplant wurden, erscheinen sie hier.")
+            }
+          </div>
         </div>
       </section>
     `;
@@ -943,6 +1073,22 @@ function renderAttendancePanel(managerView) {
         ${entries.length ? entries.map((entry) => renderTimeEntry(entry, true)).join("") : ""}
       </div>
     </section>
+  `;
+}
+
+function renderShiftAuditCard(entry) {
+  return `
+    <article class="request-card">
+      <div class="status-row">
+        <span class="pill ${escapeHtml(entry.tone)}">${escapeHtml(entry.label)}</span>
+        <span class="timeline-meta">${escapeHtml(formatDate(entry.date))}</span>
+      </div>
+      <div>
+        <h3>${escapeHtml(entry.memberName)}</h3>
+        <p class="timeline-meta">${escapeHtml(`${entry.shiftType} · ${entry.world} · ${entry.task}`)}</p>
+      </div>
+      <p class="helper-text">${escapeHtml(entry.detail)}</p>
+    </article>
   `;
 }
 
@@ -1243,6 +1389,8 @@ async function handleSubmit(event) {
             body: JSON.stringify({
               displayName: formData.get("displayName"),
               username: formData.get("username"),
+              vrchatName: formData.get("vrchatName"),
+              discordName: formData.get("discordName"),
               password
             })
           }),
@@ -1357,6 +1505,24 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "swap-decision": {
+      const formData = new FormData(form);
+      const swapRequestId = form.dataset.swapRequestId;
+      const status = String(event.submitter?.value || "");
+      await performAction(
+        () =>
+          api(`/api/swap-requests/${encodeURIComponent(swapRequestId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              status,
+              candidateId: formData.get("candidateId")
+            })
+          }),
+        status === "genehmigt" ? "Tauschwunsch wurde genehmigt und die Schicht neu zugewiesen." : "Tauschwunsch wurde abgelehnt."
+      );
+      break;
+    }
+
     case "admin-user-create": {
       const formData = new FormData(form);
       await performAction(
@@ -1366,6 +1532,8 @@ async function handleSubmit(event) {
             body: JSON.stringify({
               displayName: formData.get("displayName"),
               username: formData.get("username"),
+              vrchatName: formData.get("vrchatName"),
+              discordName: formData.get("discordName"),
               password: formData.get("password"),
               role: formData.get("role")
             })
@@ -1384,7 +1552,9 @@ async function handleSubmit(event) {
             method: "PATCH",
             body: JSON.stringify({
               role: formData.get("role"),
-              password: formData.get("password")
+              password: formData.get("password"),
+              vrchatName: formData.get("vrchatName"),
+              discordName: formData.get("discordName")
             })
           }),
         "Account wurde aktualisiert."
@@ -1526,17 +1696,28 @@ async function handleClick(event) {
 
       await performAction(
         () =>
-          api("/api/chat", {
+          api("/api/swap-requests", {
             method: "POST",
             body: JSON.stringify({
-              relatedShiftId: shift.id,
-              content: `Ich suche einen Tausch fuer ${shift.shiftType} am ${formatDate(shift.date)} in ${shift.world}. Bitte hier melden.`
+              shiftId: shift.id,
+              message: `Ich suche einen Tausch fuer ${shift.shiftType} am ${formatDate(shift.date)} in ${shift.world}. Bitte hier melden.`
             })
           }),
-        "Tausch-Anfrage wurde in den Chat gestellt."
+        "Tauschwunsch wurde erstellt."
       );
       break;
     }
+
+    case "offer-swap":
+      await performAction(
+        () =>
+          api(`/api/swap-requests/${encodeURIComponent(actionElement.dataset.swapRequestId)}/offer`, {
+            method: "POST",
+            body: "{}"
+          }),
+        "Du hast die Uebernahme angeboten."
+      );
+      break;
 
     case "delete-user":
       if (!window.confirm("Diesen Benutzer wirklich loeschen?")) return;
@@ -1584,6 +1765,11 @@ function syncChatStream() {
   });
 
   stream.addEventListener("chat", async () => {
+    await refreshBootstrap();
+    render();
+  });
+
+  stream.addEventListener("portal", async () => {
     await refreshBootstrap();
     render();
   });
@@ -1649,6 +1835,19 @@ function emitBrowserNotifications() {
   });
 }
 
+function getOpenSwapRequestForShift(shiftId) {
+  return (state.data.swapRequests || []).find((entry) => entry.shiftId === shiftId && ["offen", "angeboten"].includes(entry.status)) || null;
+}
+
+function getSwapStatusLabel(status) {
+  return {
+    offen: "Offen",
+    angeboten: "Angebote vorhanden",
+    genehmigt: "Genehmigt",
+    abgelehnt: "Abgelehnt"
+  }[status] || status;
+}
+
 function canManageUsers() {
   return state.session?.role === "admin";
 }
@@ -1685,6 +1884,61 @@ function getLatestEntryForShift(shiftId) {
     .filter((entry) => entry.shiftId === shiftId)
     .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt));
   return entries[0] || null;
+}
+
+function buildShiftAuditRows() {
+  return getSortedShifts(state.data.shifts || [])
+    .slice()
+    .sort((left, right) => right.date.localeCompare(left.date) || left.shiftType.localeCompare(right.shiftType, "de"))
+    .slice(0, 12)
+    .map((shift) => {
+      const openEntry = getOpenEntryForShift(shift.id);
+      const latestEntry = getLatestEntryForShift(shift.id);
+      const today = getLocalDateKey();
+
+      if (openEntry) {
+        return {
+          ...shift,
+          label: "Aktiv",
+          tone: "teal",
+          detail: `Seit ${formatTime(openEntry.checkInAt)} eingestempelt.`
+        };
+      }
+
+      if (latestEntry?.checkOutAt) {
+        return {
+          ...shift,
+          label: "Erledigt",
+          tone: "success",
+          detail: `Gestempelt von ${formatTime(latestEntry.checkInAt)} bis ${formatTime(latestEntry.checkOutAt)}.`
+        };
+      }
+
+      if (shift.date < today) {
+        return {
+          ...shift,
+          label: "Ohne Stempel",
+          tone: "rose",
+          detail: "Die Schicht liegt in der Vergangenheit, aber es gibt keinen abgeschlossenen Stempel."
+        };
+      }
+
+      if (shift.date === today) {
+        return {
+          ...shift,
+          label: "Heute offen",
+          tone: "amber",
+          detail: "Heute geplant, bisher ohne Stempel."
+        };
+      }
+
+      return {
+        ...shift,
+        label: "Geplant",
+        tone: "sky",
+        detail: "Zukuenftige Schicht ohne bisherigen Stempel."
+      };
+    });
 }
 
 function buildUserOptions(users, selectedId) {
