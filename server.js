@@ -1117,6 +1117,7 @@ function getSwapRequestsForUser(user, store) {
   if (user.role === "viewer") {
     return all.filter(
       (entry) =>
+        ["offen", "angeboten"].includes(entry.status) ||
         entry.requesterId === user.id ||
         entry.shift?.memberId === user.id ||
         entry.candidates.some((candidate) => candidate.id === user.id) ||
