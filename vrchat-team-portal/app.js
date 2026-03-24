@@ -17,9 +17,7 @@ const state = {
   data: null,
   ui: {
     editingShiftId: "",
-    flash: null,
-    activeTab: "",
-    liveChatConnected: false
+    flash: null
   }
 };
 
@@ -70,12 +68,10 @@ async function refreshBootstrap() {
 function applyPayload(payload) {
   state.session = payload?.session || null;
   state.data = payload?.data || null;
-  state.ui.activeTab = normalizeActiveTab(state.ui.activeTab);
 }
 
 function render() {
   root.innerHTML = state.session ? renderDashboard() : renderAuth();
-  syncChatStream();
 }
 
 async function performAction(callback, successMessage = "", successTone = "success") {
@@ -232,7 +228,6 @@ function renderAuth() {
 function renderDashboard() {
   const manager = canManagePortal();
   const user = state.session;
-  const activeTab = normalizeActiveTab(state.ui.activeTab);
 
   return `
     <div class="app-shell">
@@ -271,51 +266,12 @@ function renderDashboard() {
         </section>
 
         ${renderStatsStrip()}
-        ${renderDashboardTabs(manager, activeTab)}
 
-        <div class="dashboard-grid focused-grid">
-          ${manager ? renderManagerDashboard(activeTab) : renderModeratorDashboard(activeTab)}
+        <div class="dashboard-grid">
+          ${manager ? renderManagerDashboard() : renderModeratorDashboard()}
         </div>
       </div>
     </div>
-  `;
-}
-
-function renderDashboardTabs(manager, activeTab) {
-  const tabs = manager
-    ? [
-        { id: "overview", label: "Uebersicht" },
-        { id: "planning", label: "Planung" },
-        { id: "team", label: "Team" },
-        { id: "info", label: "Infos" },
-        { id: "time", label: "Zeiten" },
-        { id: "chat", label: "Chat" }
-      ]
-    : [
-        { id: "overview", label: "Uebersicht" },
-        { id: "schedule", label: "Meine Schichten" },
-        { id: "requests", label: "Wuensche" },
-        { id: "time", label: "Zeiten" },
-        { id: "chat", label: "Chat" }
-      ];
-
-  return `
-    <nav class="panel tab-bar" aria-label="Hauptbereiche">
-      ${tabs
-        .map(
-          (tab) => `
-            <button
-              type="button"
-              class="tab-chip ${tab.id === activeTab ? "active" : ""}"
-              data-action="set-tab"
-              data-tab="${tab.id}"
-            >
-              ${escapeHtml(tab.label)}
-            </button>
-          `
-        )
-        .join("")}
-    </nav>
   `;
 }
 
@@ -364,38 +320,26 @@ function renderStatCard(label, value, detail, tone) {
   `;
 }
 
-function renderManagerDashboard(activeTab) {
-  switch (activeTab) {
-    case "planning":
-      return [renderPlannerPanel(), renderRequestAdminPanel()].join("");
-    case "team":
-      return [renderTeamPanel(), renderSettingsPanel()].join("");
-    case "info":
-      return renderAnnouncementsPanel(true);
-    case "time":
-      return renderAttendancePanel(true);
-    case "chat":
-      return renderChatPanel(true);
-    case "overview":
-    default:
-      return [renderPlannerPanel(), renderRequestAdminPanel(), renderChatPanel(true, true)].join("");
-  }
+function renderManagerDashboard() {
+  return [
+    renderPlannerPanel(),
+    renderTeamPanel(),
+    renderRequestAdminPanel(),
+    renderAnnouncementsPanel(true),
+    renderAttendancePanel(true),
+    renderSettingsPanel(),
+    renderChatPanel(true)
+  ].join("");
 }
 
-function renderModeratorDashboard(activeTab) {
-  switch (activeTab) {
-    case "schedule":
-      return renderMySchedulePanel();
-    case "requests":
-      return [renderRequestMemberPanel(), renderAnnouncementsPanel(false)].join("");
-    case "time":
-      return renderAttendancePanel(false);
-    case "chat":
-      return renderChatPanel(false);
-    case "overview":
-    default:
-      return [renderMySchedulePanel(), renderAnnouncementsPanel(false), renderChatPanel(false, true)].join("");
-  }
+function renderModeratorDashboard() {
+  return [
+    renderMySchedulePanel(),
+    renderRequestMemberPanel(),
+    renderAnnouncementsPanel(false),
+    renderAttendancePanel(false),
+    renderChatPanel(false)
+  ].join("");
 }
 
 function renderPlannerPanel() {
@@ -919,21 +863,20 @@ function renderCatalogEditor(key, label) {
   `;
 }
 
-function renderChatPanel(managerView, compact = false) {
+function renderChatPanel(managerView) {
   const availableShifts = managerView
     ? getSortedShifts(state.data.shifts || [])
     : getSortedShifts(state.data.shifts || []);
   const messages = state.data.chatMessages || [];
 
   return `
-    <section class="panel ${compact ? "span-12" : managerView ? "span-8" : "span-12"}">
+    <section class="panel ${managerView ? "span-8" : "span-12"}">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Team-Chat</p>
-          <h2>Echtzeit-Chat fuer schnelle Absprachen</h2>
-          <p class="section-copy">Neue Nachrichten erscheinen automatisch, ohne dass jemand neu laden muss.</p>
+          <p class="eyebrow">Tausch-Chat</p>
+          <h2>Schichten tauschen oder Unterstuetzung anfragen</h2>
+          <p class="section-copy">Keine direkte 1:1-Nachricht, sondern ein gemeinsamer Team-Thread fuer schnelle Absprachen.</p>
         </div>
-        <span class="pill ${state.ui.liveChatConnected ? "success" : "amber"}">${state.ui.liveChatConnected ? "Live verbunden" : "Verbindung wird aufgebaut"}</span>
       </div>
 
       <form class="stack-form" data-form="chat">
@@ -958,7 +901,7 @@ function renderChatPanel(managerView, compact = false) {
         ${
           messages.length
             ? messages.map((message) => renderChatMessage(message)).join("")
-            : renderEmptyState("Noch kein Team-Chat", "Die erste Nachricht erscheint sofort fuer alle online.")
+            : renderEmptyState("Noch kein Tausch-Thread", "Die erste Team-Nachricht erscheint hier.")
         }
       </div>
     </section>
@@ -1295,11 +1238,6 @@ async function handleClick(event) {
       render();
       break;
 
-    case "set-tab":
-      state.ui.activeTab = normalizeActiveTab(actionElement.dataset.tab || "");
-      render();
-      break;
-
     case "logout":
       await performAction(
         () =>
@@ -1313,7 +1251,6 @@ async function handleClick(event) {
       state.session = null;
       state.data = null;
       state.ui.editingShiftId = "";
-      state.ui.activeTab = "";
       render();
       break;
 
@@ -1440,57 +1377,6 @@ async function handleClick(event) {
 
 function canManagePortal() {
   return state.session?.role === "planner" || state.session?.role === "admin";
-}
-
-function normalizeActiveTab(tab) {
-  const allowed = canManagePortal()
-    ? ["overview", "planning", "team", "info", "time", "chat"]
-    : ["overview", "schedule", "requests", "time", "chat"];
-
-  return allowed.includes(tab) ? tab : "overview";
-}
-
-function syncChatStream() {
-  if (!state.session) {
-    closeChatStream();
-    return;
-  }
-
-  if (state.chatStream) return;
-
-  const stream = new EventSource("/api/stream");
-  state.chatStream = stream;
-
-  stream.addEventListener("open", () => {
-    state.ui.liveChatConnected = true;
-    render();
-  });
-
-  stream.addEventListener("chat", async () => {
-    await refreshBootstrap();
-    render();
-  });
-
-  stream.addEventListener("error", () => {
-    state.ui.liveChatConnected = false;
-    closeChatStream(false);
-    window.setTimeout(() => {
-      if (!state.session) return;
-      syncChatStream();
-    }, 2500);
-    render();
-  });
-}
-
-function closeChatStream(resetState = true) {
-  if (state.chatStream) {
-    state.chatStream.close();
-    state.chatStream = null;
-  }
-
-  if (resetState) {
-    state.ui.liveChatConnected = false;
-  }
 }
 
 function canManageUsers() {

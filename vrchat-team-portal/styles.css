@@ -158,30 +158,6 @@ h3 {
   gap: 18px;
 }
 
-.tab-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 14px;
-}
-
-.tab-chip {
-  min-width: 0;
-  padding: 10px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 253, 249, 0.72);
-  color: var(--muted);
-  box-shadow: none;
-}
-
-.tab-chip.active {
-  background: linear-gradient(135deg, #0f766e, #125d57);
-  color: white;
-  border-color: transparent;
-  box-shadow: 0 12px 24px rgba(15, 118, 110, 0.18);
-}
-
 .auth-layout {
   grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
   align-items: start;
@@ -293,10 +269,6 @@ h3 {
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 18px;
   align-items: start;
-}
-
-.dashboard-grid.focused-grid {
-  grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
 .span-4 {
@@ -537,11 +509,6 @@ button.small {
   max-height: 540px;
   overflow: auto;
   padding-right: 4px;
-}
-
-.chat-card {
-  display: grid;
-  gap: 10px;
 }
 
 .chat-card,

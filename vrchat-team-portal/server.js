@@ -17,7 +17,6 @@ const staticFiles = {
 };
 
 const sessionStore = new Map();
-const streamClients = new Set();
 
 ensureDataStore();
 
@@ -46,17 +45,6 @@ server.listen(PORT, HOST, () => {
 });
 
 async function handleApi(req, res, url) {
-  if (req.method === "GET" && url.pathname === "/api/stream") {
-    const auth = requireAuth(req);
-    if (!auth) {
-      sendJson(res, 401, { error: "Nicht angemeldet." });
-      return;
-    }
-
-    openEventStream(req, res);
-    return;
-  }
-
   if (req.method === "POST" && url.pathname === "/api/login") {
     const body = await readJson(req);
     const store = readStore();
@@ -277,7 +265,6 @@ async function handleApi(req, res, url) {
     });
 
     const savedStore = writeStore(nextStore);
-    broadcastEvent("chat", { ok: true });
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -1179,42 +1166,6 @@ function createSessionCookie(value, expire = false) {
   if (process.env.COOKIE_SECURE === "1") parts.push("Secure");
   parts.push(expire ? "Max-Age=0" : "Max-Age=604800");
   return parts.join("; ");
-}
-
-function openEventStream(req, res) {
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream; charset=utf-8",
-    "Cache-Control": "no-cache, no-transform",
-    Connection: "keep-alive"
-  });
-  res.write(": connected\n\n");
-
-  const client = { res };
-  streamClients.add(client);
-  const heartbeat = setInterval(() => {
-    try {
-      res.write(": keep-alive\n\n");
-    } catch {
-      clearInterval(heartbeat);
-      streamClients.delete(client);
-    }
-  }, 25000);
-
-  req.on("close", () => {
-    clearInterval(heartbeat);
-    streamClients.delete(client);
-  });
-}
-
-function broadcastEvent(eventName, payload) {
-  const message = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
-  for (const client of streamClients) {
-    try {
-      client.res.write(message);
-    } catch {
-      streamClients.delete(client);
-    }
-  }
 }
 
 async function readJson(req) {
