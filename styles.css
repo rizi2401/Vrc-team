@@ -482,6 +482,22 @@ h3 {
   border-color: rgba(15, 118, 110, 0.32);
 }
 
+.notification-card.teal {
+  border-color: rgba(15, 118, 110, 0.28);
+}
+
+.notification-card.amber {
+  border-color: rgba(180, 83, 9, 0.28);
+}
+
+.notification-card.rose {
+  border-color: rgba(180, 35, 24, 0.28);
+}
+
+.notification-card.sky {
+  border-color: rgba(29, 78, 216, 0.28);
+}
+
 .mini-card.complete {
   border-color: rgba(22, 101, 52, 0.22);
 }
@@ -492,6 +508,19 @@ h3 {
 
 .card-list {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.guide-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.guide-card {
+  background: linear-gradient(160deg, rgba(15, 118, 110, 0.08), rgba(255, 255, 255, 0.9));
+}
+
+.guide-card p {
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 button:not(.ghost):not(.danger) {

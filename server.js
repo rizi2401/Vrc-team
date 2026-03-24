@@ -1,4 +1,5 @@
 const http = require("node:http");
+const https = require("node:https");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -139,6 +140,7 @@ async function handleApi(req, res, url) {
     });
 
     const savedStore = writeStore(nextStore);
+    void notifyDiscord(buildShiftDiscordMessage("created", savedStore.shifts[0], savedStore));
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -158,6 +160,7 @@ async function handleApi(req, res, url) {
     if (req.method === "PATCH") {
       const body = await readJson(req);
       const normalized = validateShiftPayload(body, auth.store);
+      const previousShift = { ...shift };
       const memberChanged = shift.memberId !== normalized.memberId;
 
       shift.date = normalized.date;
@@ -172,11 +175,13 @@ async function handleApi(req, res, url) {
       }
 
       const savedStore = writeStore(nextStore);
+      void notifyDiscord(buildShiftDiscordMessage("updated", shift, savedStore, previousShift));
       sendPortalData(res, 200, auth.user, savedStore);
       return;
     }
 
     if (req.method === "DELETE") {
+      const deletedShift = { ...shift };
       nextStore.shifts = nextStore.shifts.filter((entry) => entry.id !== shiftId);
       nextStore.timeEntries = nextStore.timeEntries.filter((entry) => entry.shiftId !== shiftId);
       nextStore.chatMessages = nextStore.chatMessages.map((entry) =>
@@ -184,6 +189,7 @@ async function handleApi(req, res, url) {
       );
 
       const savedStore = writeStore(nextStore);
+      void notifyDiscord(buildShiftDiscordMessage("deleted", deletedShift, auth.store));
       sendPortalData(res, 200, auth.user, savedStore);
       return;
     }
@@ -247,6 +253,7 @@ async function handleApi(req, res, url) {
     });
 
     const savedStore = writeStore(nextStore);
+    void notifyDiscord(buildAnnouncementDiscordMessage(savedStore.announcements[0], auth.user));
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -796,6 +803,7 @@ function requireRole(user, role) {
 }
 
 function projectDataForRole(user, store) {
+  const notifications = buildNotifications(user, store);
   const announcements = store.announcements
     .slice()
     .sort((left, right) => {
@@ -812,7 +820,8 @@ function projectDataForRole(user, store) {
   const base = {
     settings: store.settings,
     announcements,
-    chatMessages
+    chatMessages,
+    notifications
   };
 
   if (user.role === "viewer") {
@@ -913,6 +922,107 @@ function sendPortalData(res, statusCode, user, store, headers = {}) {
 
 function findUserName(users, userId) {
   return users.find((entry) => entry.id === userId)?.displayName || "Unbekannt";
+}
+
+function buildNotifications(user, store) {
+  if (user.role === "viewer") {
+    return buildViewerNotifications(user, store);
+  }
+
+  return buildManagerNotifications(store);
+}
+
+function buildViewerNotifications(user, store) {
+  const today = todayKey();
+  const shifts = store.shifts
+    .filter((entry) => entry.memberId === user.id)
+    .sort(compareShifts);
+  const notifications = [];
+
+  for (const shift of shifts) {
+    const diff = daysBetween(today, shift.date);
+    if (diff < 0 || diff > 7) continue;
+
+    let title = "";
+    let tone = "info";
+    if (diff === 0) {
+      title = `Heute: ${shift.shiftType} in ${shift.world}`;
+      tone = "teal";
+    } else if (diff === 1) {
+      title = `Morgen: ${shift.shiftType} in ${shift.world}`;
+      tone = "amber";
+    } else {
+      title = `Demnaechst: ${shift.shiftType} in ${shift.world}`;
+    }
+
+    notifications.push({
+      id: `shift-${shift.id}`,
+      title,
+      body: `${formatDisplayDate(shift.date)} · Aufgabe: ${shift.task}`,
+      tone,
+      createdAt: `${shift.date}T09:00:00.000Z`,
+      category: "shift"
+    });
+  }
+
+  const pinnedAnnouncements = store.announcements
+    .filter((entry) => entry.pinned)
+    .slice(0, 2)
+    .map((entry) => ({
+      id: `announcement-${entry.id}`,
+      title: `Info: ${entry.title}`,
+      body: entry.body,
+      tone: "sky",
+      createdAt: entry.createdAt,
+      category: "announcement"
+    }));
+
+  return [...notifications, ...pinnedAnnouncements]
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+    .slice(0, 6);
+}
+
+function buildManagerNotifications(store) {
+  const today = todayKey();
+  const openRequests = store.requests.filter((entry) => entry.status === "offen");
+  const todayShifts = store.shifts.filter((entry) => entry.date === today);
+  const liveEntries = store.timeEntries.filter((entry) => !entry.checkOutAt);
+  const notifications = [];
+
+  if (openRequests.length) {
+    notifications.push({
+      id: `requests-${openRequests.length}`,
+      title: `${openRequests.length} offene Team-Rueckmeldungen`,
+      body: "Neue Wuensche oder Hinweise warten auf Bearbeitung.",
+      tone: "rose",
+      createdAt: openRequests[0].createdAt,
+      category: "request"
+    });
+  }
+
+  if (todayShifts.length) {
+    notifications.push({
+      id: `today-shifts-${today}`,
+      title: `${todayShifts.length} Schichten fuer heute`,
+      body: "Pruefe Besetzung, Welten und letzte Briefings.",
+      tone: "teal",
+      createdAt: `${today}T08:00:00.000Z`,
+      category: "shift"
+    });
+  }
+
+  if (liveEntries.length) {
+    notifications.push({
+      id: `live-${liveEntries.length}`,
+      title: `${liveEntries.length} Moderatoren sind eingestempelt`,
+      body: "Aktive Schichten laufen gerade live.",
+      tone: "sky",
+      createdAt: new Date().toISOString(),
+      category: "attendance"
+    });
+  }
+
+  return notifications.slice(0, 6);
 }
 
 function compareShifts(left, right) {
@@ -1247,6 +1357,126 @@ function sendJson(res, statusCode, payload, headers = {}) {
   res.end(JSON.stringify(payload));
 }
 
+async function notifyDiscord(message) {
+  const webhookUrl = String(process.env.DISCORD_WEBHOOK_URL || "").trim();
+  if (!webhookUrl || !message) return;
+
+  try {
+    await postJson(webhookUrl, message);
+  } catch (error) {
+    console.error("Discord webhook failed:", error.message);
+  }
+}
+
+function buildShiftDiscordMessage(action, shift, store, previousShift = null) {
+  const memberName = findUserName(store.users, shift.memberId);
+  const titleMap = {
+    created: "Neue Moderations-Schicht",
+    updated: "Schicht wurde geaendert",
+    deleted: "Schicht wurde entfernt"
+  };
+
+  const descriptionMap = {
+    created: `${memberName} wurde fuer eine Schicht eingeplant.`,
+    updated: `${memberName} hat eine aktualisierte Schicht.`,
+    deleted: `Eine Schicht von ${memberName} wurde entfernt.`
+  };
+
+  const fields = [
+    { name: "Moderator", value: memberName, inline: true },
+    { name: "Datum", value: formatDisplayDate(shift.date), inline: true },
+    { name: "Schicht", value: shift.shiftType, inline: true },
+    { name: "Welt", value: shift.world, inline: true },
+    { name: "Aufgabe", value: shift.task, inline: true }
+  ];
+
+  if (shift.notes) {
+    fields.push({ name: "Notiz", value: clipText(shift.notes, 300), inline: false });
+  }
+
+  if (previousShift && action === "updated") {
+    fields.push({
+      name: "Vorher",
+      value: `${formatDisplayDate(previousShift.date)} · ${previousShift.shiftType} · ${previousShift.world} · ${previousShift.task}`,
+      inline: false
+    });
+  }
+
+  return {
+    username: "VRC Team Planner",
+    embeds: [
+      {
+        title: titleMap[action] || "Schicht-Update",
+        description: descriptionMap[action] || "Es gibt ein neues Schicht-Update.",
+        color: action === "deleted" ? 12000027 : action === "updated" ? 11757312 : 10181046,
+        fields,
+        timestamp: new Date().toISOString()
+      }
+    ]
+  };
+}
+
+function buildAnnouncementDiscordMessage(entry, user) {
+  return {
+    username: "VRC Team Planner",
+    content: entry.pinned ? "@everyone Neue wichtige Team-Info" : "",
+    embeds: [
+      {
+        title: `Team-Info: ${entry.title}`,
+        description: clipText(entry.body, 1000),
+        color: 1922777,
+        fields: [
+          { name: "Von", value: user.displayName, inline: true },
+          { name: "Prioritaet", value: entry.pinned ? "Wichtig" : "Normal", inline: true }
+        ],
+        timestamp: entry.createdAt
+      }
+    ],
+    allowed_mentions: {
+      parse: entry.pinned ? ["everyone"] : []
+    }
+  };
+}
+
+function postJson(targetUrl, payload) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(targetUrl);
+    const body = JSON.stringify(payload);
+    const request = https.request(
+      {
+        method: "POST",
+        hostname: url.hostname,
+        path: `${url.pathname}${url.search}`,
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body)
+        }
+      },
+      (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => {
+          if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+            resolve();
+            return;
+          }
+          reject(new Error(`Discord returned ${response.statusCode || 0}`));
+        });
+      }
+    );
+
+    request.on("error", reject);
+    request.write(body);
+    request.end();
+  });
+}
+
+function clipText(value, maxLength) {
+  const text = String(value || "").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}…`;
+}
+
 function todayKey() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -1256,4 +1486,20 @@ function addDays(dateKey, amount) {
   const [year, month, day] = dateKey.split("-").map(Number);
   const date = new Date(year, month - 1, day + amount, 12, 0, 0);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function daysBetween(fromDate, toDate) {
+  const from = new Date(`${fromDate}T12:00:00`);
+  const to = new Date(`${toDate}T12:00:00`);
+  return Math.floor((to - from) / 86400000);
+}
+
+function formatDisplayDate(dateKey) {
+  if (!isDateKey(dateKey)) return dateKey;
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(new Date(year, month - 1, day, 12, 0, 0));
 }

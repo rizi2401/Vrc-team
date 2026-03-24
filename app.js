@@ -19,7 +19,8 @@ const state = {
     editingShiftId: "",
     flash: null,
     activeTab: "",
-    liveChatConnected: false
+    liveChatConnected: false,
+    notificationPermission: "default"
   }
 };
 
@@ -29,6 +30,7 @@ root.addEventListener("click", handleClick);
 boot();
 
 async function boot() {
+  syncNotificationPermission();
   await refreshBootstrap();
   render();
 }
@@ -76,6 +78,8 @@ function applyPayload(payload) {
 function render() {
   root.innerHTML = state.session ? renderDashboard() : renderAuth();
   syncChatStream();
+  syncNotificationPermission();
+  emitBrowserNotifications();
 }
 
 async function performAction(callback, successMessage = "", successTone = "success") {
@@ -284,19 +288,19 @@ function renderDashboard() {
 function renderDashboardTabs(manager, activeTab) {
   const tabs = manager
     ? [
-        { id: "overview", label: "Uebersicht" },
+        { id: "overview", label: "Dashboard" },
         { id: "planning", label: "Planung" },
         { id: "team", label: "Team" },
-        { id: "info", label: "Infos" },
+        { id: "chat", label: "Chat" },
         { id: "time", label: "Zeiten" },
-        { id: "chat", label: "Chat" }
+        { id: "settings", label: "Einstellungen" }
       ]
     : [
-        { id: "overview", label: "Uebersicht" },
+        { id: "overview", label: "Dashboard" },
         { id: "schedule", label: "Meine Schichten" },
         { id: "requests", label: "Wuensche" },
-        { id: "time", label: "Zeiten" },
-        { id: "chat", label: "Chat" }
+        { id: "chat", label: "Chat" },
+        { id: "time", label: "Zeiten" }
       ];
 
   return `
@@ -369,16 +373,21 @@ function renderManagerDashboard(activeTab) {
     case "planning":
       return [renderPlannerPanel(), renderRequestAdminPanel()].join("");
     case "team":
-      return [renderTeamPanel(), renderSettingsPanel()].join("");
-    case "info":
-      return renderAnnouncementsPanel(true);
+      return renderTeamPanel();
+    case "settings":
+      return renderSettingsPanel();
     case "time":
       return renderAttendancePanel(true);
     case "chat":
-      return renderChatPanel(true);
+      return [renderAnnouncementsPanel(true), renderChatPanel(true)].join("");
     case "overview":
     default:
-      return [renderPlannerPanel(), renderRequestAdminPanel(), renderChatPanel(true, true)].join("");
+      return [
+        renderNotificationsPanel(),
+        renderDashboardGuidePanel(true),
+        renderPlannerPanel(),
+        renderRequestAdminPanel()
+      ].join("");
   }
 }
 
@@ -387,15 +396,118 @@ function renderModeratorDashboard(activeTab) {
     case "schedule":
       return renderMySchedulePanel();
     case "requests":
-      return [renderRequestMemberPanel(), renderAnnouncementsPanel(false)].join("");
+      return renderRequestMemberPanel();
     case "time":
       return renderAttendancePanel(false);
     case "chat":
-      return renderChatPanel(false);
+      return [renderAnnouncementsPanel(false), renderChatPanel(false)].join("");
     case "overview":
     default:
-      return [renderMySchedulePanel(), renderAnnouncementsPanel(false), renderChatPanel(false, true)].join("");
+      return [
+        renderNotificationsPanel(),
+        renderDashboardGuidePanel(false),
+        renderMySchedulePanel()
+      ].join("");
   }
+}
+
+function renderDashboardGuidePanel(managerView) {
+  const items = managerView
+    ? [
+        { title: "Planung", text: "Hier legst du Schichten, Welten und Aufgaben fuer das Team an." },
+        { title: "Team", text: "Hier verwaltest du Rollen, Benutzer und den Ueberblick pro Moderator." },
+        { title: "Chat", text: "Hier landen Team-Infos und der Live-Chat fuer schnelle Absprachen." },
+        { title: "Zeiten", text: "Hier siehst du, wer aktiv eingestempelt ist und welche Einsaetze liefen." }
+      ]
+    : [
+        { title: "Meine Schichten", text: "Hier findest du nur deine eigenen Einsaetze mit Welt und Aufgabe." },
+        { title: "Wuensche", text: "Hier schickst du Verfuegbarkeit, Notizen und Hinweise an die Leitung." },
+        { title: "Chat", text: "Hier kommen Team-Infos und der Live-Chat fuer schnelle Rueckfragen zusammen." },
+        { title: "Zeiten", text: "Hier stempelst du ein und aus und siehst deine Einsatzzeiten." }
+      ];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Schnellzugriff</p>
+          <h2>${managerView ? "So ist das Portal aufgebaut" : "So findest du dich schnell zurecht"}</h2>
+          <p class="section-copy">Jeder Bereich hat genau einen klaren Zweck, damit die Seite uebersichtlich bleibt.</p>
+        </div>
+      </div>
+      <div class="card-list guide-grid">
+        ${items
+          .map(
+            (item) => `
+              <article class="mini-card guide-card">
+                <h3>${escapeHtml(item.title)}</h3>
+                <p>${escapeHtml(item.text)}</p>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderNotificationsPanel() {
+  const notifications = state.data.notifications || [];
+  const browserSupport = typeof window !== "undefined" && "Notification" in window;
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Benachrichtigungen</p>
+          <h2>Automatische Hinweise fuer Schichten und Team-Infos</h2>
+          <p class="section-copy">Heute, morgen und bald anstehende Einsaetze werden hier automatisch zusammengefasst.</p>
+        </div>
+        ${
+          browserSupport
+            ? `
+              <button
+                type="button"
+                class="ghost small"
+                data-action="enable-browser-notifications"
+                ${state.ui.notificationPermission === "granted" ? "disabled" : ""}
+              >
+                ${
+                  state.ui.notificationPermission === "granted"
+                    ? "Browser-Popups aktiv"
+                    : "Browser-Popups aktivieren"
+                }
+              </button>
+            `
+            : '<span class="pill neutral">Browser-Popups nicht verfuegbar</span>'
+        }
+      </div>
+
+      <div class="card-list notification-list">
+        ${
+          notifications.length
+            ? notifications.map((entry) => renderNotificationCard(entry)).join("")
+            : renderEmptyState("Keine neuen Hinweise", "Sobald neue Schichten oder Team-Infos anstehen, erscheinen sie hier.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderNotificationCard(entry) {
+  const tone = entry.tone || "neutral";
+  return `
+    <article class="mini-card notification-card ${tone}">
+      <div class="status-row">
+        <span class="pill ${tone === "info" ? "neutral" : tone}">${escapeHtml(entry.category || "Hinweis")}</span>
+        <span class="timeline-meta">${escapeHtml(formatDateTime(entry.createdAt))}</span>
+      </div>
+      <div>
+        <h3>${escapeHtml(entry.title)}</h3>
+        <p>${escapeHtml(entry.body)}</p>
+      </div>
+    </article>
+  `;
 }
 
 function renderPlannerPanel() {
@@ -1300,6 +1412,11 @@ async function handleClick(event) {
       render();
       break;
 
+    case "enable-browser-notifications":
+      await requestBrowserNotificationPermission();
+      render();
+      break;
+
     case "logout":
       await performAction(
         () =>
@@ -1444,7 +1561,7 @@ function canManagePortal() {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "planning", "team", "info", "time", "chat"]
+    ? ["overview", "planning", "team", "chat", "time", "settings"]
     : ["overview", "schedule", "requests", "time", "chat"];
 
   return allowed.includes(tab) ? tab : "overview";
@@ -1491,6 +1608,45 @@ function closeChatStream(resetState = true) {
   if (resetState) {
     state.ui.liveChatConnected = false;
   }
+}
+
+function syncNotificationPermission() {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    state.ui.notificationPermission = "unsupported";
+    return;
+  }
+
+  state.ui.notificationPermission = Notification.permission;
+}
+
+async function requestBrowserNotificationPermission() {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    setFlash("Dieser Browser unterstuetzt keine Benachrichtigungen.", "warning");
+    return;
+  }
+
+  const permission = await Notification.requestPermission();
+  state.ui.notificationPermission = permission;
+  if (permission === "granted") {
+    setFlash("Browser-Benachrichtigungen wurden aktiviert.", "success");
+  }
+}
+
+function emitBrowserNotifications() {
+  if (!state.session || state.ui.notificationPermission !== "granted") return;
+
+  const notifications = state.data?.notifications || [];
+  const latest = notifications[0];
+  if (!latest) return;
+
+  const key = `seen-notification-${state.session.id}`;
+  const seenId = window.localStorage.getItem(key);
+  if (seenId === latest.id) return;
+
+  window.localStorage.setItem(key, latest.id);
+  new Notification(latest.title, {
+    body: latest.body
+  });
 }
 
 function canManageUsers() {

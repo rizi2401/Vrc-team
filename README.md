@@ -37,6 +37,31 @@ http://localhost:3000
 - `styles.css`: UI und responsives Layout
 - `data/store.json`: gespeicherte Benutzer- und Portaldaten
 
+## Discord Benachrichtigungen
+
+Die App kann automatisch in einen Discord-Channel schreiben, wenn:
+
+- eine Schicht neu erstellt wird
+- eine Schicht geaendert wird
+- eine Schicht geloescht wird
+- eine neue Team-Info veroeffentlicht wird
+
+Einrichtung auf Render:
+
+1. In Discord im gewuenschten Channel einen Webhook erstellen
+2. In Render beim Service unter `Environment` folgende Variable setzen:
+
+```text
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+```
+
+Danach sendet die App die Meldungen automatisch.
+
+Hinweise:
+
+- Gepinnte Team-Infos senden `@everyone`
+- Normale Team-Infos senden ohne Massen-Erwaehnung
+
 ## Fuer echten Online-Betrieb empfohlen
 
 - HTTPS vor dem Server, z. B. per Nginx oder Cloudflare
