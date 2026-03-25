@@ -20,6 +20,9 @@ const staticFiles = {
 
 const sessionStore = new Map();
 const streamClients = new Set();
+let discordSendChain = Promise.resolve();
+let discordLastDispatchAt = 0;
+const DISCORD_MIN_INTERVAL_MS = 3000;
 const discordState = {
   lastAttemptAt: "",
   lastSuccessAt: "",
@@ -1778,19 +1781,26 @@ async function notifyDiscord(message) {
     return { ok: false, message: discordState.lastError };
   }
 
-  try {
-    discordState.lastAttemptAt = new Date().toISOString();
-    const result = await postJson(webhookUrl, message);
-    discordState.lastSuccessAt = new Date().toISOString();
-    discordState.lastError = "";
-    discordState.lastStatusCode = result.statusCode || 204;
-    return { ok: true };
-  } catch (error) {
-    discordState.lastError = error.message;
-    discordState.lastStatusCode = Number(error.statusCode || 0);
-    console.error("Discord webhook failed:", error.message);
-    return { ok: false, message: error.message };
-  }
+  discordSendChain = discordSendChain.catch(() => null).then(async () => {
+    try {
+      discordState.lastAttemptAt = new Date().toISOString();
+      await waitForDiscordSlot();
+      const result = await postJson(webhookUrl, message);
+      discordLastDispatchAt = Date.now();
+      discordState.lastSuccessAt = new Date().toISOString();
+      discordState.lastError = "";
+      discordState.lastStatusCode = result.statusCode || 204;
+      return { ok: true };
+    } catch (error) {
+      discordLastDispatchAt = Date.now();
+      discordState.lastError = humanizeDiscordError(error);
+      discordState.lastStatusCode = Number(error.statusCode || 0);
+      console.error("Discord webhook failed:", error.message);
+      return { ok: false, message: discordState.lastError };
+    }
+  });
+
+  return discordSendChain;
 }
 
 function buildShiftDiscordMessage(action, shift, store, previousShift = null) {
@@ -1919,6 +1929,26 @@ function postJson(targetUrl, payload) {
     request.write(body);
     request.end();
   });
+}
+
+async function waitForDiscordSlot() {
+  const elapsed = Date.now() - discordLastDispatchAt;
+  const waitMs = Math.max(0, DISCORD_MIN_INTERVAL_MS - elapsed);
+  if (!waitMs) return;
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+}
+
+function humanizeDiscordError(error) {
+  const rawMessage = String(error?.message || "").trim();
+  if (rawMessage.includes("1015")) {
+    return "Discord blockiert die Server-IP gerade wegen zu vieler Anfragen (Cloudflare 1015). Bitte 10 bis 15 Minuten warten und danach nur eine Testnachricht senden.";
+  }
+
+  if (rawMessage.includes("429")) {
+    return "Discord meldet gerade zu viele Anfragen. Bitte kurz warten und dann erneut testen.";
+  }
+
+  return rawMessage || "Discord konnte nicht erreicht werden.";
 }
 
 function clipText(value, maxLength) {
