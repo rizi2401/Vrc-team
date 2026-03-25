@@ -275,8 +275,8 @@ function renderAuth() {
 
             <div class="auth-fieldset">
               <div class="field">
-                <label for="loginUsername">Benutzername</label>
-                <input id="loginUsername" name="username" type="text" autocomplete="username" required>
+                <label for="loginIdentifier">VRChat-Name oder Discord-Name</label>
+                <input id="loginIdentifier" name="identifier" type="text" autocomplete="username" required>
               </div>
               <div class="field">
                 <label for="loginPassword">Passwort</label>
@@ -295,20 +295,20 @@ function renderAuth() {
 
             <div class="auth-fieldset">
               <div class="field">
-                <label for="registerDisplayName">Anzeigename</label>
-                <input id="registerDisplayName" name="displayName" type="text" required>
-              </div>
-              <div class="field">
-                <label for="registerUsername">Benutzername</label>
-                <input id="registerUsername" name="username" type="text" required>
-              </div>
-              <div class="field">
                 <label for="registerVrchatName">VRChat-Name</label>
                 <input id="registerVrchatName" name="vrchatName" type="text" required>
               </div>
               <div class="field">
                 <label for="registerDiscordName">Discord-Name</label>
                 <input id="registerDiscordName" name="discordName" type="text" placeholder="z. B. name oder name#1234" required>
+              </div>
+              <div class="field">
+                <label for="registerAvatarUrl">Profilbild-URL</label>
+                <input id="registerAvatarUrl" name="avatarUrl" type="url" placeholder="https://...">
+              </div>
+              <div class="field">
+                <label for="registerBio">Kurzprofil</label>
+                <textarea id="registerBio" name="bio" placeholder="Wofuer du in SONARA bekannt sein willst"></textarea>
               </div>
               <div class="field">
                 <label for="registerPassword">Passwort</label>
@@ -395,10 +395,10 @@ function renderDashboard() {
         ${renderFlash()}
         <section class="panel toolbar">
           <div class="toolbar-user">
-            <div class="avatar">${escapeHtml(getInitials(user.displayName))}</div>
+            ${renderUserAvatar(user, "toolbar-avatar")}
             <div>
               <p class="eyebrow">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</p>
-              <h2>${escapeHtml(user.displayName)}</h2>
+              <h2>${escapeHtml(getPrimaryDisplayName(user))}</h2>
               <p class="section-copy">
                 ${manager
                   ? "Du steuerst Schichten, Team-Infos und Rueckmeldungen."
@@ -430,16 +430,21 @@ function renderDashboardTabs(manager, activeTab) {
         { id: "overview", label: "Dashboard" },
         { id: "planning", label: "Planung" },
         { id: "team", label: "Team" },
+        { id: "news", label: "News" },
+        { id: "feedback", label: "Feedback" },
         { id: "chat", label: "Chat" },
         { id: "time", label: "Zeiten" },
+        { id: "profile", label: "Profil" },
         { id: "settings", label: "Einstellungen" }
       ]
     : [
         { id: "overview", label: "Dashboard" },
         { id: "schedule", label: "Meine Schichten" },
-        { id: "requests", label: "Wuensche" },
+        { id: "feedback", label: "Feedback" },
+        { id: "news", label: "News" },
         { id: "chat", label: "Chat" },
-        { id: "time", label: "Zeiten" }
+        { id: "time", label: "Zeiten" },
+        { id: "profile", label: "Profil" }
       ];
 
   return `
@@ -512,18 +517,25 @@ function renderManagerDashboard(activeTab) {
     case "planning":
       return [renderPlannerPanel(), renderSwapPanel(true), renderRequestAdminPanel()].join("");
     case "team":
-      return renderTeamPanel();
+      return renderTeamPanelV2();
+    case "news":
+      return renderNewsPanel(true);
+    case "feedback":
+      return renderFeedbackAdminPanel();
     case "settings":
       return [renderSettingsPanel(), renderDiscordPanel(), renderVrchatAnalyticsPanel()].join("");
     case "time":
       return renderAttendancePanel(true);
     case "chat":
       return [renderAnnouncementsPanel(true), renderChatPanel(true)].join("");
+    case "profile":
+      return renderProfilePanel(true);
     case "overview":
     default:
       return [
         renderNotificationsPanel(),
         renderDashboardGuidePanel(true),
+        renderNewsSpotlightPanel(),
         renderPlannerPanel(),
         renderRequestAdminPanel()
       ].join("");
@@ -534,17 +546,22 @@ function renderModeratorDashboard(activeTab) {
   switch (activeTab) {
     case "schedule":
       return [renderMySchedulePanel(), renderSwapPanel(false)].join("");
-    case "requests":
-      return renderRequestMemberPanel();
+    case "feedback":
+      return renderFeedbackMemberPanel();
+    case "news":
+      return renderNewsPanel(false);
     case "time":
       return renderAttendancePanel(false);
     case "chat":
       return [renderAnnouncementsPanel(false), renderChatPanel(false)].join("");
+    case "profile":
+      return renderProfilePanel(false);
     case "overview":
     default:
       return [
         renderNotificationsPanel(),
         renderDashboardGuidePanel(false),
+        renderNewsSpotlightPanel(),
         renderMySchedulePanel(),
         renderSwapPanel(false)
       ].join("");
@@ -556,12 +573,15 @@ function renderDashboardGuidePanel(managerView) {
     ? [
         { title: "Planung", text: "Hier legst du Schichten, Welten und Aufgaben fuer das Team an." },
         { title: "Team", text: "Hier verwaltest du Rollen, Benutzer und den Ueberblick pro Moderator." },
+        { title: "News", text: "Hier veroeffentlichst du sichtbare Community- und Team-News." },
+        { title: "Feedback", text: "Hier sammelst du Wuensche, Meinungen und Team-Rueckmeldungen." },
         { title: "Chat", text: "Hier landen Team-Infos und der Live-Chat fuer schnelle Absprachen." },
         { title: "Zeiten", text: "Hier siehst du, wer aktiv eingestempelt ist und welche Einsaetze liefen." }
       ]
     : [
         { title: "Meine Schichten", text: "Hier findest du nur deine eigenen Einsaetze mit Welt und Aufgabe." },
-        { title: "Wuensche", text: "Hier schickst du Verfuegbarkeit, Notizen und Hinweise an die Leitung." },
+        { title: "Feedback", text: "Hier schickst du Feedback, Wuensche und Hinweise an die Leitung." },
+        { title: "News", text: "Hier siehst du die aktuellsten News und Hinweise aus SONARA." },
         { title: "Chat", text: "Hier kommen Team-Infos und der Live-Chat fuer schnelle Rueckfragen zusammen." },
         { title: "Zeiten", text: "Hier stempelst du ein und aus und siehst deine Einsatzzeiten." }
       ];
@@ -586,6 +606,29 @@ function renderDashboardGuidePanel(managerView) {
             `
           )
           .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderNewsSpotlightPanel() {
+  const featured = (state.data.announcements || []).slice(0, 2);
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">SONARA News</p>
+          <h2>Was gerade in der Community wichtig ist</h2>
+          <p class="section-copy">News, Highlights und wichtige Hinweise werden hier direkt im Dashboard sichtbar.</p>
+        </div>
+      </div>
+      <div class="card-list guide-grid">
+        ${
+          featured.length
+            ? featured.map((entry) => renderAnnouncementCard(entry, false)).join("")
+            : renderEmptyState("Noch keine News", "Sobald etwas fuer die Community wichtig ist, taucht es hier auf.")
+        }
       </div>
     </section>
   `;
@@ -941,7 +984,7 @@ function renderTeamPanel() {
         <article class="request-card">
           <div class="status-row">
             <span class="pill ${user.role === "admin" ? "amber" : user.role === "planner" ? "sky" : "teal"}">${escapeHtml(ROLE_LABELS[user.role])}</span>
-            <span class="timeline-meta">${escapeHtml(String(shiftCount))} Schichten · ${escapeHtml(String(requestCount))} offen</span>
+            <span class="timeline-meta">${escapeHtml(String(shiftCount))} Schichten | ${escapeHtml(String(requestCount))} offen</span>
           </div>
           <div>
             <h3>${escapeHtml(user.displayName)}</h3>
@@ -1059,18 +1102,230 @@ function renderRequestAdminPanel() {
   `;
 }
 
+function renderTeamPanelV2() {
+  const users = state.data.users || [];
+  const rows = users
+    .map((user) => {
+      const shiftCount = (state.data.shifts || []).filter((entry) => entry.memberId === user.id).length;
+      const requestCount = (state.data.requests || []).filter((entry) => entry.userId === user.id && entry.status !== "beruecksichtigt").length;
+
+      return `
+        <article class="request-card">
+          <div class="status-row">
+            <span class="pill ${user.role === "admin" ? "amber" : user.role === "planner" ? "sky" : "teal"}">${escapeHtml(ROLE_LABELS[user.role])}</span>
+            <span class="timeline-meta">${escapeHtml(String(shiftCount))} Schichten · ${escapeHtml(String(requestCount))} offen</span>
+          </div>
+          <div class="profile-head">
+            ${renderUserAvatar(user, "profile-avatar")}
+            <div>
+              <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+              <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
+              ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
+            </div>
+          </div>
+          ${
+            canManageUsers()
+              ? `
+                <form data-form="user-update" data-user-id="${escapeHtml(user.id)}">
+                  <div class="field">
+                    <label for="vrchat-${escapeHtml(user.id)}">VRChat-Name</label>
+                    <input id="vrchat-${escapeHtml(user.id)}" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}">
+                  </div>
+                  <div class="field">
+                    <label for="discord-${escapeHtml(user.id)}">Discord-Name</label>
+                    <input id="discord-${escapeHtml(user.id)}" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}">
+                  </div>
+                  <div class="field">
+                    <label for="role-${escapeHtml(user.id)}">Rolle</label>
+                    <select id="role-${escapeHtml(user.id)}" name="role">
+                      ${buildRoleOptions(user.role)}
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="avatar-${escapeHtml(user.id)}">Profilbild-URL</label>
+                    <input id="avatar-${escapeHtml(user.id)}" name="avatarUrl" type="url" value="${escapeHtml(user.avatarUrl || "")}" placeholder="https://...">
+                  </div>
+                  <div class="field">
+                    <label for="bio-${escapeHtml(user.id)}">Kurzprofil</label>
+                    <textarea id="bio-${escapeHtml(user.id)}" name="bio" placeholder="Kurze Beschreibung fuer die Teamseite">${escapeHtml(user.bio || "")}</textarea>
+                  </div>
+                  <div class="field">
+                    <label for="password-${escapeHtml(user.id)}">Neues Passwort</label>
+                    <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen fuer keine Aenderung">
+                  </div>
+                  <div class="card-actions">
+                    <button type="submit" class="ghost small">Speichern</button>
+                    ${
+                      user.username !== "admin" && user.id !== state.session.id
+                        ? `<button type="button" class="danger small" data-action="delete-user" data-user-id="${escapeHtml(user.id)}">Loeschen</button>`
+                        : ""
+                    }
+                  </div>
+                </form>
+              `
+              : `<p class="helper-text">Dieser Account ist fuer Schichten, News und Feedback im Portal aktiv.</p>`
+          }
+        </article>
+      `;
+    })
+    .join("");
+
+  return `
+    <section class="panel span-4">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Team-Zugaenge</p>
+          <h2>Wer ist im Portal registriert?</h2>
+        </div>
+        <span class="pill neutral">${escapeHtml(String(users.length))} Accounts</span>
+      </div>
+
+      <div class="stack-list">
+        ${rows}
+      </div>
+
+      ${
+        canManageUsers()
+          ? `
+            <div class="catalog-group">
+              <h3>Neuen Account anlegen</h3>
+              <form class="stack-form" data-form="admin-user-create">
+                <div class="field">
+                  <label for="newVrchatName">VRChat-Name</label>
+                  <input id="newVrchatName" name="vrchatName" type="text" required>
+                </div>
+                <div class="field">
+                  <label for="newDiscordName">Discord-Name</label>
+                  <input id="newDiscordName" name="discordName" type="text" required>
+                </div>
+                <div class="field">
+                  <label for="newAvatarUrl">Profilbild-URL</label>
+                  <input id="newAvatarUrl" name="avatarUrl" type="url" placeholder="https://...">
+                </div>
+                <div class="field">
+                  <label for="newBio">Kurzprofil</label>
+                  <textarea id="newBio" name="bio" placeholder="Kurzbeschreibung fuer die Teamseite"></textarea>
+                </div>
+                <div class="field">
+                  <label for="newPassword">Startpasswort</label>
+                  <input id="newPassword" name="password" type="password" required>
+                </div>
+                <div class="field">
+                  <label for="newRole">Rolle</label>
+                  <select id="newRole" name="role">
+                    ${buildRoleOptions("viewer")}
+                  </select>
+                </div>
+                <button type="submit">Account anlegen</button>
+              </form>
+            </div>
+          `
+          : ""
+      }
+    </section>
+  `;
+}
+
+function renderFeedbackAdminPanel() {
+  const requests = state.data.requests || [];
+
+  return `
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Feedback und Wuensche</p>
+          <h2>Rueckmeldungen aus dem Team</h2>
+          <p class="section-copy">Hier landen Stimmungsbilder, Hinweise, Schichtwuensche und echtes Portal-Feedback.</p>
+        </div>
+      </div>
+
+      <div class="stack-list">
+        ${
+          requests.length
+            ? requests.map((entry) => renderAdminRequestCard(entry)).join("")
+            : renderEmptyState("Kein Feedback", "Sobald das Team etwas einreicht, erscheint es hier.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderFeedbackMemberPanel() {
+  return renderRequestMemberPanel();
+}
+
+function renderNewsPanel(managerView) {
+  return renderAnnouncementsPanel(managerView);
+}
+
+function renderProfilePanel(managerView) {
+  const user = state.session;
+
+  return `
+    <section class="panel ${managerView ? "span-5" : "span-12"}">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Profil</p>
+          <h2>Dein Auftritt im SONARA Portal</h2>
+          <p class="section-copy">Hier pflegst du Profilbild, Namen und Kurzprofil, damit die Community-Seite lebendiger wirkt.</p>
+        </div>
+      </div>
+
+      <div class="profile-panel">
+        <div class="profile-preview">
+          ${renderUserAvatar(user, "hero-avatar")}
+          <div>
+            <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+            <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
+            <p class="helper-text">${escapeHtml(user.bio || "Noch kein Kurzprofil gesetzt.")}</p>
+          </div>
+        </div>
+
+        <form class="stack-form" data-form="profile-update">
+          <div class="form-grid">
+            <div class="field">
+              <label for="profileVrchatName">VRChat-Name</label>
+              <input id="profileVrchatName" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}" required>
+            </div>
+            <div class="field">
+              <label for="profileDiscordName">Discord-Name</label>
+              <input id="profileDiscordName" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
+            </div>
+            <div class="field">
+              <label for="profileAvatarUrl">Profilbild-URL</label>
+              <input id="profileAvatarUrl" name="avatarUrl" type="url" value="${escapeHtml(user.avatarUrl || "")}" placeholder="https://...">
+            </div>
+            <div class="field">
+              <label for="profilePassword">Neues Passwort</label>
+              <input id="profilePassword" name="password" type="password" placeholder="Leer lassen fuer keine Aenderung">
+            </div>
+            <div class="field span-all">
+              <label for="profileBio">Kurzprofil</label>
+              <textarea id="profileBio" name="bio" placeholder="Schreibe kurz, wofuer du in SONARA stehst">${escapeHtml(user.bio || "")}</textarea>
+            </div>
+          </div>
+          <button type="submit">Profil speichern</button>
+        </form>
+      </div>
+    </section>
+  `;
+}
+
 function renderAdminRequestCard(entry) {
   const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "in_planung" ? "amber" : "rose";
 
   return `
     <article class="request-card">
       <div class="status-row">
-        <span class="pill ${statusTone}">${escapeHtml(getStatusLabel(entry.status))}</span>
-        <span class="pill neutral">${escapeHtml(entry.type)}</span>
+        <div class="chip-list">
+          <span class="pill ${statusTone}">${escapeHtml(getStatusLabel(entry.status))}</span>
+          <span class="pill neutral">${escapeHtml(entry.type)}</span>
+          ${renderRatingPill(entry.rating)}
+        </div>
       </div>
       <div>
         <h3>${escapeHtml(entry.userName)}</h3>
-        <p class="timeline-meta">${escapeHtml(entry.date ? formatDate(entry.date) : "Ohne fixes Datum")} · ${escapeHtml(formatDateTime(entry.createdAt))}</p>
+        <p class="timeline-meta">${escapeHtml(entry.date ? formatDate(entry.date) : "Ohne fixes Datum")} | ${escapeHtml(formatDateTime(entry.createdAt))}</p>
       </div>
       <p>${escapeHtml(entry.content)}</p>
 
@@ -1098,9 +1353,9 @@ function renderAnnouncementsPanel(managerView) {
     <section class="panel ${managerView ? "span-4" : "span-7"}">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Infoboard</p>
-          <h2>Aenderungen fuer das gesamte Team</h2>
-          <p class="section-copy">Alles, was sofort sichtbar sein soll: Regeln, Event-Hinweise, Weltwechsel oder interne Updates.</p>
+          <p class="eyebrow">Community News</p>
+          <h2>News, Hinweise und Highlights aus SONARA</h2>
+          <p class="section-copy">Wichtige News, Event-Hinweise, neue Welten und sichtbare Community-Updates erscheinen hier gesammelt.</p>
         </div>
       </div>
 
@@ -1116,11 +1371,15 @@ function renderAnnouncementsPanel(managerView) {
                 <label for="announcementBody">Nachricht</label>
                 <textarea id="announcementBody" name="body" required></textarea>
               </div>
+              <div class="field">
+                <label for="announcementImageUrl">Bild-URL</label>
+                <input id="announcementImageUrl" name="imageUrl" type="url" placeholder="https://...">
+              </div>
               <label class="label-row">
                 <input name="pinned" type="checkbox">
                 <span>Oben anheften</span>
               </label>
-              <button type="submit">Info veroeffentlichen</button>
+              <button type="submit">News veroeffentlichen</button>
             </form>
           `
           : ""
@@ -1148,6 +1407,7 @@ function renderAnnouncementCard(item, managerView) {
         <h3>${escapeHtml(item.title)}</h3>
         <p class="timeline-meta">von ${escapeHtml(item.authorName)}</p>
       </div>
+      ${item.imageUrl ? `<img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.title)}" class="announcement-image">` : ""}
       <p>${escapeHtml(item.body)}</p>
       ${
         managerView
@@ -1554,9 +1814,9 @@ function renderRequestMemberPanel() {
     <section class="panel span-5">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Wuensche fuer die Leitung</p>
-          <h2>Notizen, Verfuegbarkeit, besondere Hinweise</h2>
-          <p class="section-copy">Diese Eintraege sieht nur die Teamleitung in ihrer Uebersicht.</p>
+          <p class="eyebrow">Feedback an die Leitung</p>
+          <h2>Wuensche, Hinweise und Stimmungsbild</h2>
+          <p class="section-copy">Hier meldest du Verfuegbarkeit, gibst Feedback zum Teamalltag oder schickst eine kurze Notiz an die Leitung.</p>
         </div>
       </div>
 
@@ -1565,6 +1825,7 @@ function renderRequestMemberPanel() {
           <div class="field">
             <label for="requestType">Typ</label>
             <select id="requestType" name="type" required>
+              <option value="Feedback">Feedback</option>
               <option value="Wunsch">Wunsch</option>
               <option value="Notiz">Notiz</option>
               <option value="Verfuegbarkeit">Verfuegbarkeit</option>
@@ -1575,11 +1836,22 @@ function renderRequestMemberPanel() {
             <input id="requestDate" name="date" type="date">
           </div>
           <div class="field">
+            <label for="requestRating">Bewertung</label>
+            <select id="requestRating" name="rating">
+              <option value="0">Keine Bewertung</option>
+              <option value="5">5 - Sehr gut</option>
+              <option value="4">4 - Gut</option>
+              <option value="3">3 - Mittel</option>
+              <option value="2">2 - Eher schwierig</option>
+              <option value="1">1 - Kritisch</option>
+            </select>
+          </div>
+          <div class="field span-all">
             <label for="requestContent">Nachricht</label>
             <textarea id="requestContent" name="content" placeholder="Schichtwunsch, Ausfall, Wunschwelt oder andere Info" required></textarea>
           </div>
         </div>
-        <button type="submit">An Leitung senden</button>
+        <button type="submit">Feedback senden</button>
       </form>
 
       <div class="stack-list">
@@ -1599,11 +1871,14 @@ function renderMemberRequestCard(entry) {
   return `
     <article class="request-card">
       <div class="status-row">
-        <span class="pill ${statusTone}">${escapeHtml(getStatusLabel(entry.status))}</span>
-        <span class="pill neutral">${escapeHtml(entry.type)}</span>
+        <div class="chip-list">
+          <span class="pill ${statusTone}">${escapeHtml(getStatusLabel(entry.status))}</span>
+          <span class="pill neutral">${escapeHtml(entry.type)}</span>
+          ${renderRatingPill(entry.rating)}
+        </div>
       </div>
       <p>${escapeHtml(entry.content)}</p>
-      <p class="timeline-meta">${escapeHtml(entry.date ? formatDate(entry.date) : "Ohne fixes Datum")} · ${escapeHtml(formatDateTime(entry.createdAt))}</p>
+      <p class="timeline-meta">${escapeHtml(entry.date ? formatDate(entry.date) : "Ohne fixes Datum")} | ${escapeHtml(formatDateTime(entry.createdAt))}</p>
       ${entry.adminNote ? `<p class="helper-text">Leitungsnotiz: ${escapeHtml(entry.adminNote)}</p>` : ""}
     </article>
   `;
@@ -1644,7 +1919,7 @@ async function handleSubmit(event) {
           api("/api/login", {
             method: "POST",
             body: JSON.stringify({
-              username: formData.get("username"),
+              identifier: formData.get("identifier"),
               password: formData.get("password")
             })
           }),
@@ -1668,10 +1943,10 @@ async function handleSubmit(event) {
           api("/api/register", {
             method: "POST",
             body: JSON.stringify({
-              displayName: formData.get("displayName"),
-              username: formData.get("username"),
               vrchatName: formData.get("vrchatName"),
               discordName: formData.get("discordName"),
+              avatarUrl: formData.get("avatarUrl"),
+              bio: formData.get("bio"),
               password
             })
           }),
@@ -1731,7 +2006,8 @@ async function handleSubmit(event) {
             body: JSON.stringify({
               type: formData.get("type"),
               date: formData.get("date"),
-              content: formData.get("content")
+              content: formData.get("content"),
+              rating: formData.get("rating")
             })
           }),
         "Deine Rueckmeldung wurde gespeichert."
@@ -1765,7 +2041,8 @@ async function handleSubmit(event) {
             body: JSON.stringify({
               title: formData.get("title"),
               body: formData.get("body"),
-              pinned: formData.get("pinned") === "on"
+              pinned: formData.get("pinned") === "on",
+              imageUrl: formData.get("imageUrl")
             })
           }),
         "Neue Info wurde veroeffentlicht."
@@ -1828,10 +2105,10 @@ async function handleSubmit(event) {
           api("/api/admin/users", {
             method: "POST",
             body: JSON.stringify({
-              displayName: formData.get("displayName"),
-              username: formData.get("username"),
               vrchatName: formData.get("vrchatName"),
               discordName: formData.get("discordName"),
+              avatarUrl: formData.get("avatarUrl"),
+              bio: formData.get("bio"),
               password: formData.get("password"),
               role: formData.get("role")
             })
@@ -1852,10 +2129,31 @@ async function handleSubmit(event) {
               role: formData.get("role"),
               password: formData.get("password"),
               vrchatName: formData.get("vrchatName"),
-              discordName: formData.get("discordName")
+              discordName: formData.get("discordName"),
+              avatarUrl: formData.get("avatarUrl"),
+              bio: formData.get("bio")
             })
           }),
         "Account wurde aktualisiert."
+      );
+      break;
+    }
+
+    case "profile-update": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/profile", {
+            method: "PATCH",
+            body: JSON.stringify({
+              vrchatName: formData.get("vrchatName"),
+              discordName: formData.get("discordName"),
+              avatarUrl: formData.get("avatarUrl"),
+              bio: formData.get("bio"),
+              password: formData.get("password")
+            })
+          }),
+        "Profil wurde aktualisiert."
       );
       break;
     }
@@ -2074,8 +2372,8 @@ function canManagePortal() {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "planning", "team", "chat", "time", "settings"]
-    : ["overview", "schedule", "requests", "time", "chat"];
+    ? ["overview", "planning", "team", "news", "feedback", "chat", "time", "profile", "settings"]
+    : ["overview", "schedule", "feedback", "news", "chat", "time", "profile"];
 
   return allowed.includes(tab) ? tab : "overview";
 }
@@ -2184,8 +2482,42 @@ function canManageUsers() {
   return state.session?.role === "admin";
 }
 
+function getPrimaryDisplayName(user) {
+  return String(user?.vrchatName || user?.displayName || user?.discordName || "Unbekannt").trim() || "Unbekannt";
+}
+
+function getInitials(name) {
+  return String(name || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "SO";
+}
+
+function renderUserAvatar(user, className = "") {
+  const label = getPrimaryDisplayName(user);
+  const classes = ["avatar", className].filter(Boolean).join(" ");
+
+  if (user?.avatarUrl) {
+    return `
+      <div class="${classes}">
+        <img src="${escapeHtml(user.avatarUrl)}" alt="Profilbild von ${escapeHtml(label)}" class="avatar-image">
+      </div>
+    `;
+  }
+
+  return `<div class="${classes}" aria-hidden="true">${escapeHtml(getInitials(label))}</div>`;
+}
+
+function renderRatingPill(rating) {
+  const value = Number(rating || 0);
+  if (!value) return "";
+  return `<span class="pill neutral">Bewertung ${escapeHtml(`${value}/5`)}</span>`;
+}
+
 function getAssignableUsers() {
-  return (state.data.users || []).slice().sort((left, right) => left.displayName.localeCompare(right.displayName, "de"));
+  return (state.data.users || []).slice().sort((left, right) => getPrimaryDisplayName(left).localeCompare(getPrimaryDisplayName(right), "de"));
 }
 
 function roleLabelForUserId(userId) {
@@ -2280,7 +2612,7 @@ function buildUserOptions(users, selectedId) {
     ...users.map(
       (user) => `
         <option value="${escapeHtml(user.id)}" ${user.id === selectedId ? "selected" : ""}>
-          ${escapeHtml(user.displayName)} (@${escapeHtml(user.username)})
+          ${escapeHtml(getPrimaryDisplayName(user))}${user.discordName ? ` | ${escapeHtml(user.discordName)}` : ""}
         </option>
       `
     )

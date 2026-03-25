@@ -72,11 +72,10 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/login") {
     const body = await readJson(req);
     const store = readStore();
-    const username = normalizeUsername(body.username);
-    const user = store.users.find((entry) => entry.username === username);
+    const user = findUserByLoginIdentifier(store.users, body.identifier || body.username);
 
     if (!user || !verifyPassword(String(body.password || ""), user.passwordHash)) {
-      sendJson(res, 401, { error: "Benutzername oder Passwort ist falsch." });
+      sendJson(res, 401, { error: "VRChat-Name, Discord-Name oder Passwort ist falsch." });
       return;
     }
 
@@ -98,6 +97,8 @@ async function handleApi(req, res, url) {
       role: "viewer",
       vrchatName: normalized.vrchatName,
       discordName: normalized.discordName,
+      avatarUrl: normalized.avatarUrl,
+      bio: normalized.bio,
       passwordHash: hashPassword(normalized.password)
     };
 
@@ -123,6 +124,30 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && url.pathname === "/api/bootstrap") {
     sendPortalData(res, 200, auth.user, auth.store);
+    return;
+  }
+
+  if (req.method === "PATCH" && url.pathname === "/api/profile") {
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+    const target = nextStore.users.find((entry) => entry.id === auth.user.id);
+
+    if (!target) {
+      sendJson(res, 404, { error: "Profil nicht gefunden." });
+      return;
+    }
+
+    applyUserIdentityUpdates(nextStore.users, target, body, true);
+
+    if (body.password) {
+      const password = String(body.password || "").trim();
+      validatePassword(password);
+      target.passwordHash = hashPassword(password);
+    }
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "profile-updated" });
+    sendPortalData(res, 200, target, savedStore);
     return;
   }
 
@@ -266,6 +291,7 @@ async function handleApi(req, res, url) {
       content: normalized.content,
       status: "offen",
       adminNote: "",
+      rating: normalized.rating,
       createdAt: new Date().toISOString()
     });
 
@@ -309,6 +335,7 @@ async function handleApi(req, res, url) {
       body: normalized.body,
       pinned: normalized.pinned,
       authorId: auth.user.id,
+      imageUrl: normalized.imageUrl,
       createdAt: new Date().toISOString()
     });
 
@@ -555,6 +582,8 @@ async function handleApi(req, res, url) {
       role: normalized.role,
       vrchatName: normalized.vrchatName,
       discordName: normalized.discordName,
+      avatarUrl: normalized.avatarUrl,
+      bio: normalized.bio,
       passwordHash: hashPassword(normalized.password)
     });
 
@@ -584,23 +613,7 @@ async function handleApi(req, res, url) {
         target.role = nextRole;
       }
 
-      if (body.vrchatName !== undefined) {
-        const vrchatName = String(body.vrchatName || "").trim();
-        if (!vrchatName) {
-          sendJson(res, 400, { error: "VRChat-Name darf nicht leer sein." });
-          return;
-        }
-        target.vrchatName = vrchatName;
-      }
-
-      if (body.discordName !== undefined) {
-        const discordName = String(body.discordName || "").trim();
-        if (!discordName) {
-          sendJson(res, 400, { error: "Discord-Name darf nicht leer sein." });
-          return;
-        }
-        target.discordName = discordName;
-      }
+      applyUserIdentityUpdates(nextStore.users, target, body, true);
 
       if (body.password) {
         const password = String(body.password || "").trim();
@@ -652,11 +665,11 @@ function ensureDataStore() {
 
 function buildDefaultStore() {
   const users = [
-    buildSeedUser("admin", "System Admin", "admin", "admin123!", "System Admin", "system-admin"),
-    buildSeedUser("aiko", "Aiko", "viewer", "mod123!", "Aiko", "aiko_vrc"),
-    buildSeedUser("mika", "Mika", "viewer", "mod123!", "Mika", "mika_vrc"),
-    buildSeedUser("ren", "Ren", "viewer", "mod123!", "Ren", "ren_vrc"),
-    buildSeedUser("sora", "Sora", "viewer", "mod123!", "Sora", "sora_vrc")
+    buildSeedUser("admin", "System Admin", "admin", "admin123!", "System Admin", "system-admin", "", "Leitet das SONARA Portal und prueft neue Team-Updates."),
+    buildSeedUser("aiko", "Aiko", "viewer", "mod123!", "Aiko", "aiko_vrc", "", "Fokus auf Begruessung und Community-Einstieg."),
+    buildSeedUser("mika", "Mika", "viewer", "mod123!", "Mika", "mika_vrc", "", "Hat die Public-Bereiche und Zwischenschichten im Blick."),
+    buildSeedUser("ren", "Ren", "viewer", "mod123!", "Ren", "ren_vrc", "", "Betreut gern Events und Briefings."),
+    buildSeedUser("sora", "Sora", "viewer", "mod123!", "Sora", "sora_vrc", "", "Support und Koordination fuer spaete Stunden.")
   ];
 
   const userByName = new Map(users.map((entry) => [entry.displayName, entry.id]));
@@ -685,6 +698,7 @@ function buildDefaultStore() {
         content: "Wenn moeglich keine Spaetschicht am Wochenende, ich bin nur bis 22 Uhr sicher online.",
         status: "in_planung",
         adminNote: "Beim naechsten Update beruecksichtigen.",
+        rating: 4,
         createdAt: new Date().toISOString()
       },
       {
@@ -695,6 +709,7 @@ function buildDefaultStore() {
         content: "Ich uebernehme Events gerne, brauche aber vorher die Sprecherliste.",
         status: "offen",
         adminNote: "",
+        rating: 5,
         createdAt: new Date().toISOString()
       }
     ],
@@ -705,6 +720,7 @@ function buildDefaultStore() {
         body: "Bitte alle Schichtupdates, Weltwechsel und Event-Infos nur noch hier posten, damit das ganze Team denselben Stand sieht.",
         pinned: true,
         authorId: users[0].id,
+        imageUrl: "",
         createdAt: new Date().toISOString()
       },
       {
@@ -713,6 +729,7 @@ function buildDefaultStore() {
         body: "Fuer Events bitte 10 Minuten vor Schichtbeginn online sein. Ein- und Ausstempeln ist ab sofort Pflicht fuer alle Moderatoren.",
         pinned: false,
         authorId: users[0].id,
+        imageUrl: "",
         createdAt: new Date().toISOString()
       }
     ],
@@ -722,7 +739,7 @@ function buildDefaultStore() {
   };
 }
 
-function buildSeedUser(username, displayName, role, password, vrchatName = "", discordName = "") {
+function buildSeedUser(username, displayName, role, password, vrchatName = "", discordName = "", avatarUrl = "", bio = "") {
   return {
     id: crypto.randomUUID(),
     username,
@@ -730,6 +747,8 @@ function buildSeedUser(username, displayName, role, password, vrchatName = "", d
     role,
     vrchatName,
     discordName,
+    avatarUrl,
+    bio,
     passwordHash: hashPassword(password)
   };
 }
@@ -803,13 +822,16 @@ function normalizeUsers(users, legacyModeratorNames) {
 
   for (const entry of users) {
     const username = normalizeUsername(entry.username);
-    const displayName = String(entry.displayName || "").trim();
-    const vrchatName = String(entry.vrchatName || displayName).trim();
+    const fallbackDisplayName = String(entry.displayName || "").trim();
+    const vrchatName = String(entry.vrchatName || fallbackDisplayName).trim();
+    const displayName = vrchatName || fallbackDisplayName;
     const discordName = String(entry.discordName || username).trim();
+    const avatarUrl = normalizeOptionalUrl(entry.avatarUrl);
+    const bio = String(entry.bio || "").trim();
     const passwordHash = String(entry.passwordHash || "").trim();
     const role = ["viewer", "planner", "admin"].includes(entry.role) ? entry.role : "viewer";
 
-    if (!username || !displayName || !passwordHash || usedUsernames.has(username)) continue;
+    if (!username || !displayName || !vrchatName || !discordName || !passwordHash || usedUsernames.has(username)) continue;
 
     usedUsernames.add(username);
     normalized.push({
@@ -819,6 +841,8 @@ function normalizeUsers(users, legacyModeratorNames) {
       role,
       vrchatName,
       discordName,
+      avatarUrl,
+      bio,
       passwordHash
     });
   }
@@ -838,6 +862,8 @@ function normalizeUsers(users, legacyModeratorNames) {
       role: "viewer",
       vrchatName: name,
       discordName: username,
+      avatarUrl: "",
+      bio: "",
       passwordHash: hashPassword("mod123!")
     });
   }
@@ -937,6 +963,7 @@ function normalizeRequests(requests, users) {
       content: String(entry.content || "").trim(),
       status: validateRequestStatus(entry.status),
       adminNote: String(entry.adminNote || "").trim(),
+      rating: normalizeRating(entry.rating),
       createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString()
     }))
     .filter((entry) => validUserIds.has(entry.userId) && entry.content);
@@ -953,6 +980,7 @@ function normalizeAnnouncements(announcements, users) {
       body: String(entry.body || "").trim(),
       pinned: Boolean(entry.pinned),
       authorId: validUserIds.has(String(entry.authorId || "").trim()) ? String(entry.authorId).trim() : fallbackAuthorId,
+      imageUrl: normalizeOptionalUrl(entry.imageUrl),
       createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString()
     }))
     .filter((entry) => entry.title && entry.body);
@@ -1163,7 +1191,9 @@ function sanitizeUser(user) {
     displayName: user.displayName,
     role: user.role,
     vrchatName: user.vrchatName || "",
-    discordName: user.discordName || ""
+    discordName: user.discordName || "",
+    avatarUrl: user.avatarUrl || "",
+    bio: user.bio || ""
   };
 }
 
@@ -1180,7 +1210,8 @@ function sendPortalData(res, statusCode, user, store, headers = {}) {
 }
 
 function findUserName(users, userId) {
-  return users.find((entry) => entry.id === userId)?.displayName || "Unbekannt";
+  const user = users.find((entry) => entry.id === userId);
+  return user?.vrchatName || user?.displayName || "Unbekannt";
 }
 
 function buildNotifications(user, store) {
@@ -1310,27 +1341,31 @@ function createSession(userId) {
 }
 
 function validateRegistrationPayload(body, store) {
-  const displayName = String(body.displayName || "").trim();
-  const username = normalizeUsername(body.username);
   const password = String(body.password || "").trim();
   const vrchatName = String(body.vrchatName || "").trim();
   const discordName = String(body.discordName || "").trim();
+  const avatarUrl = normalizeOptionalUrl(body.avatarUrl);
+  const bio = String(body.bio || "").trim();
 
-  if (!displayName || !username || !password || !vrchatName || !discordName) {
-    const error = new Error("Bitte Anzeigename, Benutzername, Passwort, VRChat-Name und Discord-Name angeben.");
+  if (!password || !vrchatName || !discordName) {
+    const error = new Error("Bitte VRChat-Name, Discord-Name und Passwort angeben.");
     error.statusCode = 400;
     throw error;
   }
 
   validatePassword(password);
 
-  if (store.users.some((entry) => entry.username === username)) {
-    const error = new Error("Dieser Benutzername existiert bereits.");
-    error.statusCode = 409;
-    throw error;
-  }
+  ensureUserIdentityUnique(store.users, null, { vrchatName, discordName });
 
-  return { displayName, username, password, vrchatName, discordName };
+  return {
+    displayName: vrchatName,
+    username: createUniqueUsername(vrchatName, store.users.map((entry) => entry.username)),
+    password,
+    vrchatName,
+    discordName,
+    avatarUrl,
+    bio
+  };
 }
 
 function validateAdminUserPayload(body, store) {
@@ -1369,6 +1404,7 @@ function validateRequestPayload(body) {
   const type = String(body.type || "Notiz").trim() || "Notiz";
   const date = String(body.date || "").trim();
   const content = String(body.content || "").trim();
+  const rating = normalizeRating(body.rating);
 
   if (!content) {
     const error = new Error("Bitte eine Rueckmeldung eintragen.");
@@ -1382,7 +1418,7 @@ function validateRequestPayload(body) {
     throw error;
   }
 
-  return { type, date, content };
+  return { type, date, content, rating };
 }
 
 function validateRequestStatus(status) {
@@ -1394,6 +1430,7 @@ function validateAnnouncementPayload(body) {
   const title = String(body.title || "").trim();
   const bodyText = String(body.body || "").trim();
   const pinned = Boolean(body.pinned);
+  const imageUrl = normalizeOptionalUrl(body.imageUrl);
 
   if (!title || !bodyText) {
     const error = new Error("Titel und Nachricht sind erforderlich.");
@@ -1401,7 +1438,7 @@ function validateAnnouncementPayload(body) {
     throw error;
   }
 
-  return { title, body: bodyText, pinned };
+  return { title, body: bodyText, pinned, imageUrl };
 }
 
 function validateChatPayload(body, user, store) {
@@ -1558,6 +1595,59 @@ function ensureUserIsNotLinked(userId, store) {
   }
 }
 
+function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
+  const nextVrchatName = body.vrchatName !== undefined ? String(body.vrchatName || "").trim() : target.vrchatName;
+  const nextDiscordName = body.discordName !== undefined ? String(body.discordName || "").trim() : target.discordName;
+  const nextAvatarUrl = body.avatarUrl !== undefined ? normalizeOptionalUrl(body.avatarUrl) : target.avatarUrl || "";
+  const nextBio = body.bio !== undefined ? String(body.bio || "").trim() : target.bio || "";
+
+  if (!nextVrchatName) {
+    const error = new Error("VRChat-Name darf nicht leer sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!nextDiscordName) {
+    const error = new Error("Discord-Name darf nicht leer sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!allowEmptyBio && body.bio !== undefined && !nextBio) {
+    const error = new Error("Profiltext darf nicht leer sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  ensureUserIdentityUnique(users, target.id, {
+    vrchatName: nextVrchatName,
+    discordName: nextDiscordName
+  });
+
+  target.vrchatName = nextVrchatName;
+  target.displayName = nextVrchatName;
+  target.discordName = nextDiscordName;
+  target.avatarUrl = nextAvatarUrl;
+  target.bio = nextBio;
+}
+
+function ensureUserIdentityUnique(users, currentUserId, identity) {
+  const vrchatKey = normalizeLoginIdentifier(identity.vrchatName);
+  const discordKey = normalizeLoginIdentifier(identity.discordName);
+
+  if (users.some((entry) => entry.id !== currentUserId && normalizeLoginIdentifier(entry.vrchatName) === vrchatKey)) {
+    const error = new Error("Dieser VRChat-Name ist bereits vergeben.");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  if (users.some((entry) => entry.id !== currentUserId && normalizeLoginIdentifier(entry.discordName) === discordKey)) {
+    const error = new Error("Dieser Discord-Name ist bereits vergeben.");
+    error.statusCode = 409;
+    throw error;
+  }
+}
+
 function isSettingsValueInUse(key, value, store) {
   const property = {
     shiftTypes: "shiftType",
@@ -1598,6 +1688,25 @@ function normalizeUsername(value) {
     .replace(/\s+/g, "");
 }
 
+function normalizeLoginIdentifier(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function findUserByLoginIdentifier(users, identifier) {
+  const normalized = normalizeLoginIdentifier(identifier);
+  if (!normalized) return null;
+
+  return (
+    users.find((entry) => normalizeLoginIdentifier(entry.vrchatName) === normalized) ||
+    users.find((entry) => normalizeLoginIdentifier(entry.discordName) === normalized) ||
+    users.find((entry) => normalizeLoginIdentifier(entry.username) === normalized) ||
+    null
+  );
+}
+
 function createUniqueUsername(value, existingUsernames) {
   const used = new Set(existingUsernames.map((entry) => entry.toLowerCase()));
   const base = String(value || "")
@@ -1618,6 +1727,19 @@ function createUniqueUsername(value, existingUsernames) {
 
 function uniqueStrings(values) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function normalizeOptionalUrl(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+  return "";
+}
+
+function normalizeRating(value) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(5, Math.round(numeric)));
 }
 
 function normalizeTimeValue(value) {

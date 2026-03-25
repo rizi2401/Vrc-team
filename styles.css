@@ -391,9 +391,37 @@ h3 {
   border-radius: 16px;
   display: grid;
   place-items: center;
+  overflow: hidden;
   background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(180, 83, 9, 0.22));
   font-family: "Space Grotesk", sans-serif;
   font-weight: 700;
+  color: #fff7eb;
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.toolbar-avatar {
+  width: 68px;
+  height: 68px;
+  border-radius: 22px;
+}
+
+.profile-avatar,
+.hero-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 26px;
+}
+
+.list-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
 }
 
 .dashboard-grid {
@@ -485,6 +513,7 @@ h3 {
   align-items: center;
   gap: 16px;
   padding: 14px 16px;
+  color: #354152;
 }
 
 .flash-success {
@@ -501,6 +530,12 @@ h3 {
 
 .flash-info {
   background: rgba(240, 247, 255, 0.92);
+}
+
+.flash .ghost {
+  color: #354152;
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(53, 65, 82, 0.18);
 }
 
 .form-grid {
@@ -578,7 +613,7 @@ h3 {
 
 .pill.neutral {
   background: rgba(24, 33, 31, 0.08);
-  color: var(--ink);
+  color: #2b3443;
 }
 
 .mini-card {
@@ -691,7 +726,8 @@ button.small {
   padding: 16px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
-  background: rgba(255, 253, 249, 0.9);
+  background: rgba(245, 239, 230, 0.94);
+  color: #34404f;
 }
 
 .compact-form {
@@ -717,6 +753,76 @@ button.small {
 
 .announcement-card.pinned {
   background: linear-gradient(145deg, rgba(255, 248, 237, 0.94), rgba(255, 255, 255, 0.92));
+}
+
+.chat-card h3,
+.announcement-card h3,
+.request-card h3,
+.time-entry h3,
+.demo-card h3,
+.auth-card h3,
+.empty-state h3,
+.profile-preview h3,
+.profile-head h3 {
+  color: #18212d;
+}
+
+.chat-card p,
+.announcement-card p,
+.request-card p,
+.time-entry p,
+.demo-card p,
+.auth-card p,
+.empty-state p,
+.profile-preview p,
+.profile-head p,
+.planner-hint p,
+.login-note {
+  color: #556172;
+}
+
+.chat-card .timeline-meta,
+.announcement-card .timeline-meta,
+.request-card .timeline-meta,
+.time-entry .timeline-meta,
+.demo-card .timeline-meta,
+.auth-card .timeline-meta,
+.profile-preview .timeline-meta,
+.profile-head .timeline-meta {
+  color: #667385;
+}
+
+.profile-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.profile-preview,
+.profile-head {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 248, 238, 0.86);
+  border: 1px solid rgba(24, 33, 45, 0.08);
+}
+
+.roster-identity {
+  display: grid;
+  gap: 4px;
+}
+
+.announcement-image {
+  width: 100%;
+  max-height: 240px;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 1px solid rgba(24, 33, 45, 0.08);
+}
+
+.span-all {
+  grid-column: 1 / -1;
 }
 
 .roster-row {
