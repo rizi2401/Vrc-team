@@ -15,7 +15,8 @@ const staticFiles = {
   "/": "index.html",
   "/index.html": "index.html",
   "/app.js": "app.js",
-  "/styles.css": "styles.css"
+  "/styles.css": "styles.css",
+  "/sonara-crest.png": "ChatGPT Image 19. März 2026, 13_32_37.png"
 };
 
 const sessionStore = new Map();

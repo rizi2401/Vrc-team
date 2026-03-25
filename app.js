@@ -26,6 +26,7 @@ const SHIFT_WINDOW_PRESETS = [
   { value: "02:00|06:00", label: "Zwischenschicht 02:00 - 06:00" },
   { value: "06:00|10:00", label: "Zwischenschicht 06:00 - 10:00" }
 ];
+const SONARA_ART_PATH = "/sonara-crest.png";
 
 const state = {
   session: null,
@@ -177,6 +178,25 @@ function applyPayload(payload) {
   }
 }
 
+function renderSonaraHero({ eyebrow, title, intro, chips = [] }) {
+  return `
+    <header class="site-header sonara-header">
+      <div class="sonara-copy">
+        <p class="eyebrow">${escapeHtml(eyebrow)}</p>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="intro sonara-intro">${escapeHtml(intro)}</p>
+        <div class="hero-chip-row">
+          ${chips.map((chip) => `<span class="hero-chip">${escapeHtml(chip)}</span>`).join("")}
+        </div>
+      </div>
+      <div class="sonara-art-card">
+        <div class="sonara-art-glow"></div>
+        <img src="${SONARA_ART_PATH}" alt="SONARA Wappen" class="sonara-art">
+      </div>
+    </header>
+  `;
+}
+
 function render() {
   root.innerHTML = state.session ? renderDashboard() : renderAuth();
   syncChatStream();
@@ -208,16 +228,12 @@ async function performAction(callback, successMessage = "", successTone = "succe
 function renderAuth() {
   return `
     <div class="app-shell">
-      <header class="site-header">
-        <div>
-          <p class="eyebrow">VRChat Moderation Ops</p>
-          <h1>ShiftHub fuer dein Moderations-Team</h1>
-        </div>
-        <p class="intro">
-          Plane Schichten, Welten und Aufgaben, sammle Wuensche vom Team, teile Aenderungen sofort
-          aus und halte Ein- und Ausstempelzeiten an einem Ort fest.
-        </p>
-      </header>
+      ${renderSonaraHero({
+        eyebrow: "SONARA Community Portal",
+        title: "Moderation, Planung und Community an einem Ort",
+        intro: "Das Portal verbindet Schichtplanung, Team-Kommunikation und den Stil deiner Community in einem gemeinsamen Hub.",
+        chips: ["Tag & Nacht", "Moderation", "Community Hub"]
+      })}
 
       <div class="auth-layout">
         <section class="panel">
@@ -350,20 +366,30 @@ function renderDashboard() {
   const manager = canManagePortal();
   const user = state.session;
   const activeTab = normalizeActiveTab(state.ui.activeTab);
+  const openRequests = (state.data?.requests || []).filter((entry) => entry.status === "offen").length;
+  const liveEntries = (state.data?.timeEntries || []).filter((entry) => !entry.checkOutAt).length;
+  const upcomingShifts = getSortedShifts(state.data?.shifts || []).slice(0, 1);
 
   return `
     <div class="app-shell">
-      <header class="site-header">
-        <div>
-          <p class="eyebrow">VRChat Moderation Ops</p>
-          <h1>${manager ? "Planung und Teamsteuerung" : "Dein Schichtbereich"}</h1>
-        </div>
-        <p class="intro">
-          ${manager
-            ? "Plane Einsaetze, verarbeite Teamwuensche, veroeffentliche Aenderungen und halte Stempelzeiten zentral im Blick."
-            : "Hier siehst du nur deine Schichten, deine Notizen an die Leitung, den Tausch-Chat und deine Stempelzeiten."}
-        </p>
-      </header>
+      ${renderSonaraHero({
+        eyebrow: manager ? "SONARA Leitstand" : "SONARA Einsatzbereich",
+        title: manager ? "Planung und Teamsteuerung" : "Dein persoenlicher Schichtbereich",
+        intro: manager
+          ? "Plane Einsaetze, verarbeite Teamwuensche, veroeffentliche Updates und halte die Community-Atmosphaere im Blick."
+          : "Hier siehst du deine Schichten, Hinweise, Tauschwuesche und Stempelzeiten in einem gemeinsamen SONARA-Look.",
+        chips: manager
+          ? [
+              `${liveEntries} aktiv`,
+              `${openRequests} offen`,
+              upcomingShifts[0] ? `${formatDate(upcomingShifts[0].date)} · ${formatShiftWindow(upcomingShifts[0])}` : "Keine Schicht offen"
+            ]
+          : [
+              ROLE_LABELS[user.role] || user.role,
+              upcomingShifts[0] ? `${formatDate(upcomingShifts[0].date)} · ${formatShiftWindow(upcomingShifts[0])}` : "Noch kein Einsatz",
+              `${(state.data?.notifications || []).length} Hinweise`
+            ]
+      })}
 
       <div class="dashboard-shell">
         ${renderFlash()}
