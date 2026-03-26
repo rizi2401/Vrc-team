@@ -1,8 +1,9 @@
 const root = document.getElementById("app");
 
 const ROLE_LABELS = {
-  viewer: "Moderator",
-  planner: "Planer",
+  member: "Mitglied",
+  moderator: "Moderator",
+  planner: "Leitung",
   admin: "Admin"
 };
 
@@ -31,6 +32,7 @@ const SONARA_ART_PATH = "/sonara-crest.png";
 const state = {
   session: null,
   data: null,
+  publicData: null,
   vrchatOverview: null,
   vrchatLoading: false,
   discordStatus: null,
@@ -53,6 +55,9 @@ boot();
 async function boot() {
   syncNotificationPermission();
   await refreshBootstrap();
+  if (!state.session) {
+    await refreshPublicData();
+  }
   if (canManageUsers()) {
     await refreshDiscordStatus(false);
     await refreshVrchatOverview(false);
@@ -88,8 +93,17 @@ async function refreshBootstrap() {
     if (error.status === 401) {
       state.session = null;
       state.data = null;
+      await refreshPublicData();
       return;
     }
+    setFlash(error.message, "danger");
+  }
+}
+
+async function refreshPublicData() {
+  try {
+    state.publicData = await api("/api/public");
+  } catch (error) {
     setFlash(error.message, "danger");
   }
 }
@@ -198,7 +212,7 @@ function renderSonaraHero({ eyebrow, title, intro, chips = [] }) {
 }
 
 function render() {
-  root.innerHTML = state.session ? renderDashboard() : renderAuth();
+  root.innerHTML = state.session ? renderDashboard() : renderPublicPortal();
   syncChatStream();
   syncNotificationPermission();
   emitBrowserNotifications();
@@ -225,52 +239,59 @@ async function performAction(callback, successMessage = "", successTone = "succe
   render();
 }
 
-function renderAuth() {
+function renderPublicPortal() {
+  const community = getCommunityData();
+  const stats = community.stats || {};
+  const eyebrow = "SONARA Community Portal";
+  const title = "Community, News und Team an einem Ort";
+  const intro = "Hier landet das Wichtigste aus SONARA: News, Events, Regeln, Community-Team und der Zugang fuer Mitglieder und Staff.";
+  const chips = [
+    `${stats.members || 0} Mitglieder`,
+    `${stats.moderators || 0} Moderatoren`,
+    `${(community.events || []).length} Events`
+  ];
+
   return `
     <div class="app-shell">
-      ${renderSonaraHero({
-        eyebrow: "SONARA Community Portal",
-        title: "Moderation, Planung und Community an einem Ort",
-        intro: "Das Portal verbindet Schichtplanung, Team-Kommunikation und den Stil deiner Community in einem gemeinsamen Hub.",
-        chips: ["Tag & Nacht", "Moderation", "Community Hub"]
-      })}
+      ${renderSonaraHero({ eyebrow, title, intro, chips })}
 
-      <div class="auth-layout">
+      ${renderFlash()}
+
+      <div class="auth-layout public-grid">
         <section class="panel">
-          ${renderFlash()}
-          <p class="eyebrow">Portal fuer Leitung und Team</p>
-          <h2>Ein Zugang pro Person, persoenlicher Plan pro Moderator.</h2>
+          <p class="eyebrow">Community Einstieg</p>
+          <h2>Was du auf der Webseite findest</h2>
           <p class="auth-kicker">
-            Teamleitung und Planer verwalten Schichten mit Welt und Aufgabe. Moderatoren sehen nur ihre
-            eigenen Einsaetze, geben Wuensche ab, nutzen den Tausch-Chat und stempeln sich fuer ihre
-            aktiven Schichten ein und aus.
+            Die Webseite ist der zentrale Hub fuer die SONARA Community. Oeffentliche News, kommende Events,
+            Regeln, Ansprechpartner und der Mitgliederbereich liegen an einem Ort, waehrend Moderation und
+            Planung intern getrennt bleiben.
           </p>
 
           <div class="feature-grid">
             <article class="feature-card">
-              <h3>Persoenliche Schichten</h3>
-              <p>Jeder Moderator sieht nur den eigenen Einsatzplan mit Welt, Aufgabe und Notizen.</p>
+              <h3>Community News</h3>
+              <p>Wichtige Hinweise, Event-Ankuendigungen und sichtbare Updates stehen direkt auf der Seite.</p>
             </article>
             <article class="feature-card">
-              <h3>Wuensche an die Leitung</h3>
-              <p>Verfuegbarkeit, Notizen und Schichtwuensche landen direkt im Leitungsbereich.</p>
+              <h3>Events</h3>
+              <p>Kommende Treffen, Welten und Hosts sind fuer jedes Mitglied schnell sichtbar.</p>
             </article>
             <article class="feature-card">
-              <h3>Infoboard</h3>
-              <p>Allgemeine Aenderungen und Hinweise werden sofort fuer das ganze Team sichtbar.</p>
+              <h3>Mitgliederbereich</h3>
+              <p>Registrierte Mitglieder bekommen Profil, Feedback, News und Community-Chat.</p>
             </article>
             <article class="feature-card">
-              <h3>Tausch und Zeiten</h3>
-              <p>Chat fuer Schichttausch und Buttons zum Ein- und Ausstempeln fuer mehr Ueberblick.</p>
+              <h3>Staff-Bereich</h3>
+              <p>Moderatoren, Leitung und Admins arbeiten intern mit Schichten, Zeiten und Teamtools.</p>
             </article>
           </div>
         </section>
 
-        <div class="auth-stack">
+        <div class="auth-stack public-auth-stack">
           <form class="panel auth-card" data-form="login">
             <div>
               <p class="eyebrow">Login</p>
-              <h3>Mit bestehendem Zugang anmelden</h3>
+              <h3>Mitglied oder Staff einloggen</h3>
             </div>
 
             <div class="auth-fieldset">
@@ -289,8 +310,8 @@ function renderAuth() {
 
           <form class="panel auth-card" data-form="register">
             <div>
-              <p class="eyebrow">Neues Teammitglied</p>
-              <h3>Eigenen Zugang anlegen</h3>
+              <p class="eyebrow">Registrierung</p>
+              <h3>Neues Community-Konto anlegen</h3>
             </div>
 
             <div class="auth-fieldset">
@@ -320,7 +341,7 @@ function renderAuth() {
               </div>
             </div>
 
-            <p class="login-note">Neue Registrierungen werden automatisch als Moderator angelegt.</p>
+            <p class="login-note">Neue Registrierungen werden automatisch als Community-Mitglied angelegt.</p>
             <button type="submit">Zugang erstellen</button>
           </form>
 
@@ -328,35 +349,42 @@ function renderAuth() {
             <div class="section-head">
               <div>
                 <p class="eyebrow">Hinweis</p>
-                <h3>Demo-Zugaenge nur im Demo-Store</h3>
+                <h3>Rollen auf der Seite</h3>
               </div>
             </div>
 
             <div class="demo-list">
               <div class="demo-item">
                 <div>
-                  <strong>Admin</strong>
-                  <p class="subtle">Gilt nur bei frischem oder von einem Admin zurueckgesetztem Demo-Store.</p>
+                  <strong>Mitglied</strong>
+                  <p class="subtle">Sieht Community-Bereiche, Profil, News, Events, Chat und Feedback.</p>
                 </div>
-                <code>admin / admin123!</code>
+                <code>Automatische Rolle bei Registrierung</code>
               </div>
               <div class="demo-item">
                 <div>
-                  <strong>Moderator Aiko</strong>
-                  <p class="subtle">Nur in der Demo-Initialisierung vorhanden.</p>
+                  <strong>Moderator</strong>
+                  <p class="subtle">Bekommt zusaetzlich Staff-Bereiche wie Schichten, Zeiten und Tauschwunsch.</p>
                 </div>
-                <code>aiko / mod123!</code>
+                <code>Wird von Leitung/Admin vergeben</code>
               </div>
               <div class="demo-item">
                 <div>
-                  <strong>Immer moeglich</strong>
-                  <p class="subtle">Wenn dein aktueller Datenstand andere Zugaenge hat, lege dir einfach ueber das Formular oben einen neuen Moderator-Account an.</p>
+                  <strong>Leitung und Admin</strong>
+                  <p class="subtle">Verwalten News, Team, Planung, Rollen und spaeter Integrationen.</p>
                 </div>
-                <code>Registrierung ohne Login</code>
+                <code>Nur intern</code>
               </div>
             </div>
           </section>
         </div>
+      </div>
+
+      <div class="dashboard-grid">
+        ${renderPublicCommunityOverview()}
+        ${renderPublicEventsPanel()}
+        ${renderPublicRulesPanel()}
+        ${renderPublicTeamPanel()}
       </div>
     </div>
   `;
@@ -365,32 +393,52 @@ function renderAuth() {
 function renderDashboard() {
   const manager = canManagePortal();
   const user = state.session;
+  const staff = canAccessStaffArea();
   const activeTab = normalizeActiveTab(state.ui.activeTab);
   const openRequests = (state.data?.requests || []).filter((entry) => entry.status === "offen").length;
   const liveEntries = (state.data?.timeEntries || []).filter((entry) => !entry.checkOutAt).length;
   const upcomingShifts = getSortedShifts(state.data?.shifts || []).slice(0, 1);
+  const announcements = getAnnouncementFeed();
+  const community = getCommunityData();
+
+  let eyebrow = "SONARA Community";
+  let title = "Dein Community-Bereich";
+  let intro = "News, Events, Profil und Community-Funktionen liegen fuer dich an einem Ort.";
+  let chips = [
+    ROLE_LABELS[user.role] || user.role,
+    `${announcements.length} News`,
+    `${(community.events || []).length} Events`
+  ];
+
+  if (manager) {
+    eyebrow = "SONARA Leitstand";
+    title = "Community und Team steuern";
+    intro = "Hier verwaltest du Community-News, Staff-Bereiche, Planung, Feedback und interne Organisation.";
+    chips = [
+      `${liveEntries} aktiv`,
+      `${openRequests} offen`,
+      upcomingShifts[0] ? `${formatDate(upcomingShifts[0].date)} | ${formatShiftWindow(upcomingShifts[0])}` : "Keine Schicht offen"
+    ];
+  } else if (staff) {
+    eyebrow = "SONARA Staff";
+    title = "Dein Staff-Bereich";
+    intro = "Community-Bereich und Moderationsarbeit laufen hier zusammen, ohne dass die Seite unuebersichtlich wird.";
+    chips = [
+      ROLE_LABELS[user.role] || user.role,
+      upcomingShifts[0] ? `${formatDate(upcomingShifts[0].date)} | ${formatShiftWindow(upcomingShifts[0])}` : "Noch kein Einsatz",
+      `${(state.data?.notifications || []).length} Hinweise`
+    ];
+  }
+
+  const toolbarCopy = manager
+    ? "Du steuerst Community, Planung, Feedback und den internen Staff-Bereich."
+    : staff
+      ? "Du siehst Community, Staff-Chat, deine Schichten und deine Zeiten in einem Bereich."
+      : "Du nutzt hier deinen Mitgliederbereich mit Profil, News, Events, Feedback und Community-Chat.";
 
   return `
     <div class="app-shell">
-      ${renderSonaraHero({
-        eyebrow: manager ? "SONARA Leitstand" : "SONARA Einsatzbereich",
-        title: manager ? "Planung und Teamsteuerung" : "Dein persoenlicher Schichtbereich",
-        intro: manager
-          ? "Plane Einsaetze, verarbeite Teamwuensche, veroeffentliche Updates und halte die Community-Atmosphaere im Blick."
-          : "Hier siehst du deine Schichten, Hinweise, Tauschwuesche und Stempelzeiten in einem gemeinsamen SONARA-Look.",
-        chips: manager
-          ? [
-              `${liveEntries} aktiv`,
-              `${openRequests} offen`,
-              upcomingShifts[0] ? `${formatDate(upcomingShifts[0].date)} · ${formatShiftWindow(upcomingShifts[0])}` : "Keine Schicht offen"
-            ]
-          : [
-              ROLE_LABELS[user.role] || user.role,
-              upcomingShifts[0] ? `${formatDate(upcomingShifts[0].date)} · ${formatShiftWindow(upcomingShifts[0])}` : "Noch kein Einsatz",
-              `${(state.data?.notifications || []).length} Hinweise`
-            ]
-      })}
-
+      ${renderSonaraHero({ eyebrow, title, intro, chips })}
       <div class="dashboard-shell">
         ${renderFlash()}
         <section class="panel toolbar">
@@ -399,11 +447,7 @@ function renderDashboard() {
             <div>
               <p class="eyebrow">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</p>
               <h2>${escapeHtml(getPrimaryDisplayName(user))}</h2>
-              <p class="section-copy">
-                ${manager
-                  ? "Du steuerst Schichten, Team-Infos und Rueckmeldungen."
-                  : "Du siehst nur deinen persoenlichen Plan und deine eigenen Daten."}
-              </p>
+              <p class="section-copy">${escapeHtml(toolbarCopy)}</p>
             </div>
           </div>
 
@@ -414,38 +458,56 @@ function renderDashboard() {
         </section>
 
         ${renderStatsStrip()}
-        ${renderDashboardTabs(manager, activeTab)}
+        ${renderDashboardTabs(activeTab)}
 
         <div class="dashboard-grid focused-grid">
-          ${manager ? renderManagerDashboard(activeTab) : renderModeratorDashboard(activeTab)}
+          ${manager ? renderManagerDashboard(activeTab) : staff ? renderModeratorDashboard(activeTab) : renderMemberDashboard(activeTab)}
         </div>
       </div>
     </div>
   `;
 }
 
-function renderDashboardTabs(manager, activeTab) {
-  const tabs = manager
-    ? [
-        { id: "overview", label: "Dashboard" },
-        { id: "planning", label: "Planung" },
-        { id: "team", label: "Team" },
-        { id: "news", label: "News" },
-        { id: "feedback", label: "Feedback" },
-        { id: "chat", label: "Chat" },
-        { id: "time", label: "Zeiten" },
-        { id: "profile", label: "Profil" },
-        { id: "settings", label: "Einstellungen" }
-      ]
-    : [
-        { id: "overview", label: "Dashboard" },
-        { id: "schedule", label: "Meine Schichten" },
-        { id: "feedback", label: "Feedback" },
-        { id: "news", label: "News" },
-        { id: "chat", label: "Chat" },
-        { id: "time", label: "Zeiten" },
-        { id: "profile", label: "Profil" }
-      ];
+function renderDashboardTabs(activeTab) {
+  let tabs = [];
+
+  if (canManagePortal()) {
+    tabs = [
+      { id: "overview", label: "Dashboard" },
+      { id: "community", label: "Community" },
+      { id: "events", label: "Events" },
+      { id: "news", label: "News" },
+      { id: "feedback", label: "Feedback" },
+      { id: "planning", label: "Planung" },
+      { id: "team", label: "Team" },
+      { id: "chat", label: "Chat" },
+      { id: "time", label: "Zeiten" },
+      { id: "profile", label: "Profil" },
+      { id: "settings", label: "Einstellungen" }
+    ];
+  } else if (canAccessStaffArea()) {
+    tabs = [
+      { id: "overview", label: "Dashboard" },
+      { id: "community", label: "Community" },
+      { id: "events", label: "Events" },
+      { id: "news", label: "News" },
+      { id: "schedule", label: "Meine Schichten" },
+      { id: "feedback", label: "Feedback" },
+      { id: "chat", label: "Chat" },
+      { id: "time", label: "Zeiten" },
+      { id: "profile", label: "Profil" }
+    ];
+  } else {
+    tabs = [
+      { id: "overview", label: "Dashboard" },
+      { id: "community", label: "Community" },
+      { id: "events", label: "Events" },
+      { id: "news", label: "News" },
+      { id: "feedback", label: "Feedback" },
+      { id: "chat", label: "Chat" },
+      { id: "profile", label: "Profil" }
+    ];
+  }
 
   return `
     <nav class="panel tab-bar" aria-label="Hauptbereiche">
@@ -469,28 +531,54 @@ function renderDashboardTabs(manager, activeTab) {
 
 function renderStatsStrip() {
   if (canManagePortal()) {
-    const memberCount = (state.data.users || []).filter((entry) => entry.role === "viewer").length;
+    const memberCount = (state.data.users || []).filter((entry) => entry.role === "member").length;
+    const moderatorCount = (state.data.users || []).filter((entry) => entry.role === "moderator").length;
     const liveEntries = (state.data.timeEntries || []).filter((entry) => !entry.checkOutAt).length;
     const openRequests = (state.data.requests || []).filter((entry) => entry.status !== "beruecksichtigt").length;
     const nextWeekShifts = getSortedShifts(state.data.shifts || []).filter((entry) => daysBetween(getLocalDateKey(), entry.date) <= 7);
 
     return `
       <section class="stats-strip">
-        ${renderStatCard("Moderatoren", memberCount, "Registrierte Teammitglieder", "teal")}
+        ${renderStatCard("Mitglieder", memberCount, "Registrierte Community-Accounts", "teal")}
+        ${renderStatCard("Moderatoren", moderatorCount, "Aktive Staff-Mitglieder", "amber")}
         ${renderStatCard("Schichten", nextWeekShifts.length, "Einsaetze in den naechsten 7 Tagen", "amber")}
-        ${renderStatCard("Offene Wuensche", openRequests, "Noch nicht komplett eingeplant", "rose")}
+        ${renderStatCard("Offenes Feedback", openRequests, "Rueckmeldungen warten auf Sichtung", "rose")}
         ${renderStatCard("Eingestempelt", liveEntries, "Aktuell aktive Moderatoren", "sky")}
       </section>
     `;
   }
 
-  const myShifts = getSortedShifts(state.data.shifts || []);
-  const nextShift = myShifts.find((entry) => entry.date >= getLocalDateKey());
+  if (canAccessStaffArea()) {
+    const myShifts = getSortedShifts(state.data.shifts || []);
+    const nextShift = myShifts.find((entry) => entry.date >= getLocalDateKey());
+    const openRequests = (state.data.requests || []).filter((entry) => entry.status !== "beruecksichtigt").length;
+    const activeEntry = getOpenEntryForViewer();
+    const totalHours = (state.data.timeEntries || [])
+      .filter((entry) => entry.checkOutAt)
+      .reduce((total, entry) => total + Math.max(0, new Date(entry.checkOutAt) - new Date(entry.checkInAt)), 0);
+
+    return `
+      <section class="stats-strip">
+        ${renderStatCard("Naechste Schicht", nextShift ? `${formatDate(nextShift.date)} | ${formatShiftWindow(nextShift)}` : "-", nextShift ? `${nextShift.shiftType} | ${nextShift.world}` : "Noch nichts geplant", "teal")}
+        ${renderStatCard("Meine Einsaetze", myShifts.length, "Aktuell in deinem Plan", "amber")}
+        ${renderStatCard("Offene Notizen", openRequests, "Rueckmeldungen mit offenem Status", "rose")}
+        ${renderStatCard("Erfasste Zeit", formatDuration(totalHours), activeEntry ? "Gerade aktiv eingestempelt" : "Gesamt aus abgeschlossenen Schichten", "sky")}
+      </section>
+    `;
+  }
+
+  const community = getCommunityData();
+  const stats = community.stats || {};
   const openRequests = (state.data.requests || []).filter((entry) => entry.status !== "beruecksichtigt").length;
-  const activeEntry = getOpenEntryForViewer();
-  const totalHours = (state.data.timeEntries || [])
-    .filter((entry) => entry.checkOutAt)
-    .reduce((total, entry) => total + Math.max(0, new Date(entry.checkOutAt) - new Date(entry.checkInAt)), 0);
+
+  return `
+    <section class="stats-strip">
+      ${renderStatCard("Community News", getAnnouncementFeed().length, "Aktuelle sichtbare Updates", "teal")}
+      ${renderStatCard("Events", (community.events || []).length, "Geplante Community-Termine", "amber")}
+      ${renderStatCard("Feedback", openRequests, "Deine offenen Rueckmeldungen", "rose")}
+      ${renderStatCard("Staff", (stats.moderators || 0) + (stats.planners || 0), "Moderation und Leitung im Portal", "sky")}
+    </section>
+  `;
 
   return `
     <section class="stats-strip">
@@ -514,6 +602,10 @@ function renderStatCard(label, value, detail, tone) {
 
 function renderManagerDashboard(activeTab) {
   switch (activeTab) {
+    case "community":
+      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "events":
+      return renderEventsPanel();
     case "planning":
       return [renderPlannerPanel(), renderSwapPanel(true), renderRequestAdminPanel()].join("");
     case "team":
@@ -527,16 +619,16 @@ function renderManagerDashboard(activeTab) {
     case "time":
       return renderAttendancePanel(true);
     case "chat":
-      return [renderAnnouncementsPanel(true), renderChatPanel(true)].join("");
+      return [renderAnnouncementsPanel(true), renderChatPanel("staff")].join("");
     case "profile":
       return renderProfilePanel(true);
     case "overview":
     default:
       return [
         renderNotificationsPanel(),
-        renderDashboardGuidePanel(true),
+        renderDashboardGuidePanel("manager"),
         renderNewsSpotlightPanel(),
-        renderPlannerPanel(),
+        renderCommunityOverviewPanel(),
         renderRequestAdminPanel()
       ].join("");
   }
@@ -544,6 +636,10 @@ function renderManagerDashboard(activeTab) {
 
 function renderModeratorDashboard(activeTab) {
   switch (activeTab) {
+    case "community":
+      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "events":
+      return renderEventsPanel();
     case "schedule":
       return [renderMySchedulePanel(), renderSwapPanel(false)].join("");
     case "feedback":
@@ -553,45 +649,79 @@ function renderModeratorDashboard(activeTab) {
     case "time":
       return renderAttendancePanel(false);
     case "chat":
-      return [renderAnnouncementsPanel(false), renderChatPanel(false)].join("");
+      return [renderAnnouncementsPanel(false), renderChatPanel("staff")].join("");
     case "profile":
       return renderProfilePanel(false);
     case "overview":
     default:
       return [
         renderNotificationsPanel(),
-        renderDashboardGuidePanel(false),
+        renderDashboardGuidePanel("moderator"),
         renderNewsSpotlightPanel(),
         renderMySchedulePanel(),
-        renderSwapPanel(false)
+        renderCommunityOverviewPanel()
       ].join("");
   }
 }
 
-function renderDashboardGuidePanel(managerView) {
-  const items = managerView
-    ? [
-        { title: "Planung", text: "Hier legst du Schichten, Welten und Aufgaben fuer das Team an." },
-        { title: "Team", text: "Hier verwaltest du Rollen, Benutzer und den Ueberblick pro Moderator." },
-        { title: "News", text: "Hier veroeffentlichst du sichtbare Community- und Team-News." },
-        { title: "Feedback", text: "Hier sammelst du Wuensche, Meinungen und Team-Rueckmeldungen." },
-        { title: "Chat", text: "Hier landen Team-Infos und der Live-Chat fuer schnelle Absprachen." },
-        { title: "Zeiten", text: "Hier siehst du, wer aktiv eingestempelt ist und welche Einsaetze liefen." }
-      ]
-    : [
-        { title: "Meine Schichten", text: "Hier findest du nur deine eigenen Einsaetze mit Welt und Aufgabe." },
-        { title: "Feedback", text: "Hier schickst du Feedback, Wuensche und Hinweise an die Leitung." },
-        { title: "News", text: "Hier siehst du die aktuellsten News und Hinweise aus SONARA." },
-        { title: "Chat", text: "Hier kommen Team-Infos und der Live-Chat fuer schnelle Rueckfragen zusammen." },
-        { title: "Zeiten", text: "Hier stempelst du ein und aus und siehst deine Einsatzzeiten." }
-      ];
+function renderMemberDashboard(activeTab) {
+  switch (activeTab) {
+    case "community":
+      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "events":
+      return renderEventsPanel();
+    case "news":
+      return renderNewsPanel(false);
+    case "feedback":
+      return renderFeedbackMemberPanel();
+    case "chat":
+      return renderChatPanel("community");
+    case "profile":
+      return renderProfilePanel(false);
+    case "overview":
+    default:
+      return [
+        renderNotificationsPanel(),
+        renderDashboardGuidePanel("member"),
+        renderNewsSpotlightPanel(),
+        renderCommunityOverviewPanel()
+      ].join("");
+  }
+}
+
+function renderDashboardGuidePanel(mode) {
+  const items =
+    mode === "manager"
+      ? [
+          { title: "Community", text: "Hier pflegst du oeffentliche Bereiche wie Teamvorstellung, Regeln und den Community-Eindruck." },
+          { title: "Events", text: "Hier sehen Mitglieder die wichtigsten Termine, Welten und Hosts." },
+          { title: "Planung", text: "Hier legst du Schichten, Welten und Aufgaben fuer das Team an." },
+          { title: "Team", text: "Hier verwaltest du Rollen, Benutzer und den Ueberblick pro Moderator." },
+          { title: "News", text: "Hier veroeffentlichst du sichtbare Community- und Team-News." },
+          { title: "Zeiten", text: "Hier siehst du, wer aktiv eingestempelt ist und welche Einsaetze liefen." }
+        ]
+      : mode === "moderator"
+        ? [
+            { title: "Community", text: "Hier findest du die oeffentlichen SONARA-Bereiche wie Mitglieder sie sehen." },
+            { title: "Meine Schichten", text: "Hier findest du nur deine eigenen Einsaetze mit Welt und Aufgabe." },
+            { title: "Feedback", text: "Hier schickst du Feedback, Wuensche und Hinweise an die Leitung." },
+            { title: "Chat", text: "Hier laufen Staff-Absprachen und schnelle Rueckfragen." },
+            { title: "Zeiten", text: "Hier stempelst du ein und aus und siehst deine Einsatzzeiten." }
+          ]
+        : [
+            { title: "Community", text: "Hier findest du Teamvorstellung, Regeln, FAQ und den Aufbau der Community." },
+            { title: "Events", text: "Hier siehst du die kommenden Termine, Welten und Hosts." },
+            { title: "News", text: "Hier stehen die aktuellsten Hinweise und Ankuendigungen aus SONARA." },
+            { title: "Feedback", text: "Hier schickst du Fragen, Wuensche oder Rueckmeldungen an die Leitung." },
+            { title: "Chat", text: "Hier kannst du dich direkt im Portal mit der Community austauschen." }
+          ];
 
   return `
     <section class="panel span-12">
       <div class="section-head">
         <div>
           <p class="eyebrow">Schnellzugriff</p>
-          <h2>${managerView ? "So ist das Portal aufgebaut" : "So findest du dich schnell zurecht"}</h2>
+          <h2>${mode === "manager" ? "So ist das Portal aufgebaut" : "So findest du dich schnell zurecht"}</h2>
           <p class="section-copy">Jeder Bereich hat genau einen klaren Zweck, damit die Seite uebersichtlich bleibt.</p>
         </div>
       </div>
@@ -2066,6 +2196,7 @@ async function handleSubmit(event) {
 
     case "chat": {
       const formData = new FormData(form);
+      const successMessage = canAccessStaffArea() ? "Nachricht im Staff-Chat gepostet." : "Nachricht im Community-Chat gepostet.";
       await performAction(
         () =>
           api("/api/chat", {
@@ -2075,7 +2206,7 @@ async function handleSubmit(event) {
               content: formData.get("content")
             })
           }),
-        "Nachricht im Tausch-Chat gepostet."
+        successMessage
       );
       break;
     }
@@ -2217,6 +2348,7 @@ async function handleClick(event) {
       state.discordLoading = false;
       state.ui.editingShiftId = "";
       state.ui.activeTab = "";
+      await refreshPublicData();
       render();
       break;
 
@@ -2822,4 +2954,602 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function canAccessStaffArea() {
+  return ["moderator", "planner", "admin"].includes(state.session?.role);
+}
+
+function normalizeActiveTab(tab) {
+  const allowed = canManagePortal()
+    ? ["overview", "community", "events", "news", "feedback", "planning", "team", "chat", "time", "profile", "settings"]
+    : canAccessStaffArea()
+      ? ["overview", "community", "events", "news", "schedule", "feedback", "chat", "time", "profile"]
+      : ["overview", "community", "events", "news", "feedback", "chat", "profile"];
+
+  return allowed.includes(tab) ? tab : "overview";
+}
+
+function getCommunityData() {
+  return (
+    state.data?.community ||
+    state.publicData?.community || {
+      team: [],
+      events: [],
+      rules: [],
+      faq: [],
+      stats: {}
+    }
+  );
+}
+
+function getAnnouncementFeed() {
+  return state.data?.announcements || state.publicData?.announcements || [];
+}
+
+function getChatFeed(mode = "community") {
+  if (mode === "staff") {
+    return state.data?.staffChatMessages || state.data?.chatMessages || [];
+  }
+  return state.data?.communityChatMessages || [];
+}
+
+function renderStatsStrip() {
+  if (canManagePortal()) {
+    const memberCount = (state.data?.users || []).filter((entry) => entry.role === "member").length;
+    const moderatorCount = (state.data?.users || []).filter((entry) => entry.role === "moderator").length;
+    const liveEntries = (state.data?.timeEntries || []).filter((entry) => !entry.checkOutAt).length;
+    const openRequests = (state.data?.requests || []).filter((entry) => entry.status !== "beruecksichtigt").length;
+    const nextWeekShifts = getSortedShifts(state.data?.shifts || []).filter((entry) => daysBetween(getLocalDateKey(), entry.date) <= 7);
+
+    return `
+      <section class="stats-strip">
+        ${renderStatCard("Mitglieder", memberCount, "Registrierte Community-Accounts", "teal")}
+        ${renderStatCard("Moderatoren", moderatorCount, "Aktive Staff-Mitglieder", "amber")}
+        ${renderStatCard("Schichten", nextWeekShifts.length, "Einsaetze in den naechsten 7 Tagen", "amber")}
+        ${renderStatCard("Offenes Feedback", openRequests, "Rueckmeldungen warten auf Sichtung", "rose")}
+        ${renderStatCard("Eingestempelt", liveEntries, "Aktuell aktive Moderatoren", "sky")}
+      </section>
+    `;
+  }
+
+  if (canAccessStaffArea()) {
+    const myShifts = getSortedShifts(state.data?.shifts || []);
+    const nextShift = myShifts.find((entry) => entry.date >= getLocalDateKey());
+    const openRequests = (state.data?.requests || []).filter((entry) => entry.status !== "beruecksichtigt").length;
+    const activeEntry = getOpenEntryForViewer();
+    const totalHours = (state.data?.timeEntries || [])
+      .filter((entry) => entry.checkOutAt)
+      .reduce((total, entry) => total + Math.max(0, new Date(entry.checkOutAt) - new Date(entry.checkInAt)), 0);
+
+    return `
+      <section class="stats-strip">
+        ${renderStatCard("Naechste Schicht", nextShift ? `${formatDate(nextShift.date)} | ${formatShiftWindow(nextShift)}` : "-", nextShift ? `${nextShift.shiftType} | ${nextShift.world}` : "Noch nichts geplant", "teal")}
+        ${renderStatCard("Meine Einsaetze", myShifts.length, "Aktuell in deinem Plan", "amber")}
+        ${renderStatCard("Offene Notizen", openRequests, "Rueckmeldungen mit offenem Status", "rose")}
+        ${renderStatCard("Erfasste Zeit", formatDuration(totalHours), activeEntry ? "Gerade aktiv eingestempelt" : "Gesamt aus abgeschlossenen Schichten", "sky")}
+      </section>
+    `;
+  }
+
+  const community = getCommunityData();
+  const stats = community.stats || {};
+  const openRequests = (state.data?.requests || []).filter((entry) => entry.status !== "beruecksichtigt").length;
+
+  return `
+    <section class="stats-strip">
+      ${renderStatCard("Community News", getAnnouncementFeed().length, "Aktuelle sichtbare Updates", "teal")}
+      ${renderStatCard("Events", (community.events || []).length, "Geplante Community-Termine", "amber")}
+      ${renderStatCard("Feedback", openRequests, "Deine offenen Rueckmeldungen", "rose")}
+      ${renderStatCard("Staff", (stats.moderators || 0) + (stats.planners || 0), "Moderation und Leitung im Portal", "sky")}
+    </section>
+  `;
+}
+
+function renderPublicCommunityOverview() {
+  const community = getCommunityData();
+  const stats = community.stats || {};
+  const latestNews = getAnnouncementFeed().slice(0, 2);
+
+  return `
+    <section class="panel span-7">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Community Hub</p>
+          <h2>Was SONARA gerade ausmacht</h2>
+          <p class="section-copy">Mitgliederzahlen, sichtbare News und der aktuelle Eindruck der Community liegen hier kompakt zusammen.</p>
+        </div>
+      </div>
+
+      <div class="community-overview-grid">
+        <div class="community-stat-grid">
+          ${renderStatCard("Mitglieder", stats.members || 0, "Registrierte Community-Accounts", "teal")}
+          ${renderStatCard("Staff", (stats.moderators || 0) + (stats.planners || 0), "Moderation und Leitung", "amber")}
+          ${renderStatCard("News", getAnnouncementFeed().length, "Aktuelle sichtbare Hinweise", "rose")}
+          ${renderStatCard("Events", (community.events || []).length, "Kommende Community-Termine", "sky")}
+        </div>
+        <div class="community-side-stack">
+          ${
+            latestNews.length
+              ? latestNews.map((entry) => renderAnnouncementCard(entry, false)).join("")
+              : renderEmptyState("Noch keine News", "Sobald es sichtbare Community-Updates gibt, erscheinen sie hier.")
+          }
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderPublicEventsPanel() {
+  const events = (getCommunityData().events || []).slice(0, 3);
+
+  return `
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Events</p>
+          <h2>Was als Naechstes ansteht</h2>
+          <p class="section-copy">Kommende Termine, Welten und Hosts sind sofort sichtbar, ohne Discord durchsuchen zu muessen.</p>
+        </div>
+      </div>
+
+      <div class="event-grid">
+        ${
+          events.length
+            ? events.map((event) => renderEventCard(event)).join("")
+            : renderEmptyState("Noch keine Events", "Sobald neue Termine geplant werden, tauchen sie hier auf.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderPublicRulesPanel() {
+  const community = getCommunityData();
+
+  return `
+    <section class="panel span-6">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Regeln und FAQ</p>
+          <h2>Wie SONARA aufgebaut ist</h2>
+          <p class="section-copy">Neue Leute sehen direkt, wie die Community funktioniert und wo sie Antworten finden.</p>
+        </div>
+      </div>
+
+      <div class="rule-list">
+        ${(community.rules || []).map((entry) => renderRuleCard(entry)).join("")}
+      </div>
+
+      <div class="faq-list">
+        ${(community.faq || []).map((entry) => renderFaqCard(entry)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderPublicTeamPanel() {
+  const team = (getCommunityData().team || []).slice(0, 4);
+
+  return `
+    <section class="panel span-6">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Team</p>
+          <h2>Wer sich um SONARA kuemmert</h2>
+          <p class="section-copy">Moderation, Leitung und wichtige Ansprechpartner werden offen und greifbar dargestellt.</p>
+        </div>
+      </div>
+
+      <div class="team-grid">
+        ${
+          team.length
+            ? team.map((user) => renderTeamSpotlightCard(user)).join("")
+            : renderEmptyState("Noch kein Team sichtbar", "Sobald Staff-Mitglieder gepflegt sind, erscheinen sie hier.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderCommunityOverviewPanel() {
+  const community = getCommunityData();
+  const stats = community.stats || {};
+  const latestNews = getAnnouncementFeed().slice(0, 3);
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Community Ueberblick</p>
+          <h2>Die wichtigsten Community-Daten auf einen Blick</h2>
+          <p class="section-copy">Hier laufen Stimmung, News und sichtbare Kerninfos zusammen, ohne den Staff-Bereich zu vermischen.</p>
+        </div>
+      </div>
+
+      <div class="community-overview-grid">
+        <div class="community-stat-grid">
+          ${renderStatCard("Mitglieder", stats.members || 0, "Registrierte Community-Accounts", "teal")}
+          ${renderStatCard("Moderatoren", stats.moderators || 0, "Aktive Moderation", "amber")}
+          ${renderStatCard("Leitung", stats.planners || 0, "Planung und Admin", "rose")}
+          ${renderStatCard("Events", (community.events || []).length, "Kommende Termine", "sky")}
+        </div>
+        <div class="community-side-stack">
+          ${
+            latestNews.length
+              ? latestNews.map((entry) => renderAnnouncementCard(entry, false)).join("")
+              : renderEmptyState("Noch keine News", "Sobald es Ankuendigungen gibt, erscheinen sie hier.")
+          }
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderCommunityRulesPanel() {
+  const community = getCommunityData();
+
+  return `
+    <section class="panel span-7">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Community Leitlinien</p>
+          <h2>Regeln, Haltung und Antworten</h2>
+          <p class="section-copy">So bleibt die Community fuer Mitglieder klar, freundlich und leicht verstaendlich.</p>
+        </div>
+      </div>
+
+      <div class="rule-list">
+        ${(community.rules || []).map((entry) => renderRuleCard(entry)).join("")}
+      </div>
+
+      <div class="faq-list">
+        ${(community.faq || []).map((entry) => renderFaqCard(entry)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderCommunityTeamPanel() {
+  const team = getCommunityData().team || [];
+
+  return `
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Staff-Vorstellung</p>
+          <h2>Moderation und Leitung</h2>
+          <p class="section-copy">Die Community sieht hier, wer fuer Moderation, Events und Organisation zustaendig ist.</p>
+        </div>
+      </div>
+
+      <div class="team-grid">
+        ${
+          team.length
+            ? team.map((user) => renderTeamSpotlightCard(user)).join("")
+            : renderEmptyState("Noch keine Profile", "Sobald Staff-Profile gepflegt sind, erscheinen sie hier.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderEventsPanel() {
+  const events = getCommunityData().events || [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Eventplan</p>
+          <h2>Kommende SONARA-Events</h2>
+          <p class="section-copy">Welten, Hosts und Zeiten bleiben fuer Mitglieder und Staff an einem Ort sichtbar.</p>
+        </div>
+      </div>
+
+      <div class="event-grid">
+        ${
+          events.length
+            ? events.map((event) => renderEventCard(event)).join("")
+            : renderEmptyState("Noch keine Events", "Sobald neue Termine feststehen, erscheinen sie hier.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderEventCard(event) {
+  return `
+    <article class="mini-card event-card">
+      <div class="status-row">
+        <span class="pill amber">Event</span>
+        <span class="timeline-meta">${escapeHtml(event.dateLabel || "-")}</span>
+      </div>
+      <div>
+        <h3>${escapeHtml(event.title)}</h3>
+        <p class="timeline-meta">${escapeHtml(event.world)} | Host: ${escapeHtml(event.host)}</p>
+      </div>
+      <p>${escapeHtml(event.summary)}</p>
+    </article>
+  `;
+}
+
+function renderRuleCard(entry) {
+  return `
+    <article class="mini-card community-rule-card">
+      <h3>${escapeHtml(entry.title)}</h3>
+      <p>${escapeHtml(entry.body)}</p>
+    </article>
+  `;
+}
+
+function renderFaqCard(entry) {
+  return `
+    <article class="mini-card community-faq-card">
+      <h3>${escapeHtml(entry.question)}</h3>
+      <p>${escapeHtml(entry.answer)}</p>
+    </article>
+  `;
+}
+
+function renderTeamSpotlightCard(user) {
+  return `
+    <article class="mini-card team-card">
+      <div class="profile-head">
+        ${renderUserAvatar(user, "list-avatar")}
+        <div class="roster-identity">
+          <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+          <p class="timeline-meta">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</p>
+        </div>
+      </div>
+      <p class="helper-text">Discord: ${escapeHtml(user.discordName || "-")}</p>
+      <p>${escapeHtml(user.bio || "Noch kein Kurzprofil vorhanden.")}</p>
+    </article>
+  `;
+}
+
+function renderNewsSpotlightPanel() {
+  const featured = getAnnouncementFeed().slice(0, 2);
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">SONARA News</p>
+          <h2>Was gerade in der Community wichtig ist</h2>
+          <p class="section-copy">News, Highlights und wichtige Hinweise werden hier direkt im Dashboard sichtbar.</p>
+        </div>
+      </div>
+      <div class="card-list guide-grid">
+        ${
+          featured.length
+            ? featured.map((entry) => renderAnnouncementCard(entry, false)).join("")
+            : renderEmptyState("Noch keine News", "Sobald etwas fuer die Community wichtig ist, taucht es hier auf.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderNotificationsPanel() {
+  const notifications = state.data?.notifications || [];
+  const browserSupport = typeof window !== "undefined" && "Notification" in window;
+  const manager = canManagePortal();
+  const staff = canAccessStaffArea();
+  const title = manager
+    ? "Automatische Hinweise fuer Leitung und Planung"
+    : staff
+      ? "Automatische Hinweise fuer Schichten und Staff-News"
+      : "Das Wichtigste aus Community, News und Events";
+  const copy = manager
+    ? "Offene Rueckmeldungen, heutige Einsaetze und laufende Schichten werden hier automatisch zusammengefasst."
+    : staff
+      ? "Heute, morgen und bald anstehende Einsaetze erscheinen hier zusammen mit angehefteten Staff-Infos."
+      : "Angeheftete News und kommende Events werden hier automatisch fuer dich gesammelt.";
+  const emptyBody = manager
+    ? "Sobald neue Rueckmeldungen oder Einsaetze anstehen, erscheinen sie hier."
+    : staff
+      ? "Sobald neue Staff-Hinweise oder Schichten anstehen, erscheinen sie hier."
+      : "Sobald es neue News oder Events gibt, erscheinen sie hier.";
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Benachrichtigungen</p>
+          <h2>${escapeHtml(title)}</h2>
+          <p class="section-copy">${escapeHtml(copy)}</p>
+        </div>
+        ${
+          browserSupport
+            ? `
+              <button
+                type="button"
+                class="ghost small"
+                data-action="enable-browser-notifications"
+                ${state.ui.notificationPermission === "granted" ? "disabled" : ""}
+              >
+                ${
+                  state.ui.notificationPermission === "granted"
+                    ? "Browser-Popups aktiv"
+                    : "Browser-Popups aktivieren"
+                }
+              </button>
+            `
+            : '<span class="pill neutral">Browser-Popups nicht verfuegbar</span>'
+        }
+      </div>
+
+      <div class="card-list notification-list">
+        ${
+          notifications.length
+            ? notifications.map((entry) => renderNotificationCard(entry)).join("")
+            : renderEmptyState("Keine neuen Hinweise", emptyBody)
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderAnnouncementsPanel(managerView) {
+  const items = getAnnouncementFeed();
+
+  return `
+    <section class="panel ${managerView ? "span-4" : "span-7"}">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Community News</p>
+          <h2>News, Hinweise und Highlights aus SONARA</h2>
+          <p class="section-copy">Wichtige News, Event-Hinweise, neue Welten und sichtbare Community-Updates erscheinen hier gesammelt.</p>
+        </div>
+      </div>
+
+      ${
+        managerView
+          ? `
+            <form class="stack-form" data-form="announcement">
+              <div class="field">
+                <label for="announcementTitle">Titel</label>
+                <input id="announcementTitle" name="title" type="text" required>
+              </div>
+              <div class="field">
+                <label for="announcementBody">Nachricht</label>
+                <textarea id="announcementBody" name="body" required></textarea>
+              </div>
+              <div class="field">
+                <label for="announcementImageUrl">Bild-URL</label>
+                <input id="announcementImageUrl" name="imageUrl" type="url" placeholder="https://...">
+              </div>
+              <label class="label-row">
+                <input name="pinned" type="checkbox">
+                <span>Oben anheften</span>
+              </label>
+              <button type="submit">News veroeffentlichen</button>
+            </form>
+          `
+          : ""
+      }
+
+      <div class="stack-list ${managerView ? "" : "chat-list"}">
+        ${
+          items.length
+            ? items.map((item) => renderAnnouncementCard(item, managerView)).join("")
+            : renderEmptyState("Noch keine Infos", "Neue Community-News erscheinen hier, sobald etwas wichtig wird.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderChatPanel(mode = "community", compact = false) {
+  const staffMode = mode === "staff";
+  const availableShifts = staffMode ? getSortedShifts(state.data?.shifts || []) : [];
+  const messages = getChatFeed(mode);
+  const sectionSpan = compact ? "span-5" : staffMode ? "span-8" : "span-12";
+  const eyebrow = staffMode ? "Staff-Chat" : "Community-Chat";
+  const title = staffMode ? "Echtzeit-Chat fuer schnelle Staff-Absprachen" : "Echtzeit-Chat fuer die Community";
+  const copy = staffMode
+    ? "Neue Nachrichten erscheinen automatisch, ohne dass jemand neu laden muss."
+    : "Mitglieder koennen sich hier direkt im Portal austauschen, ohne auf Discord wechseln zu muessen.";
+  const placeholder = staffMode
+    ? "z. B. Wer kann die Schicht heute spaeter uebernehmen?"
+    : "z. B. Wer ist heute Abend beim Event dabei?";
+  const emptyTitle = staffMode ? "Noch kein Staff-Chat" : "Noch kein Community-Chat";
+  const emptyText = staffMode
+    ? "Die erste Nachricht erscheint sofort fuer alle Staff-Mitglieder online."
+    : "Die erste Nachricht erscheint sofort fuer alle Mitglieder online.";
+
+  return `
+    <section class="panel ${sectionSpan}">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">${escapeHtml(eyebrow)}</p>
+          <h2>${escapeHtml(title)}</h2>
+          <p class="section-copy">${escapeHtml(copy)}</p>
+        </div>
+        <span class="pill ${state.ui.liveChatConnected ? "success" : "amber"}">${state.ui.liveChatConnected ? "Live verbunden" : "Verbindung wird aufgebaut"}</span>
+      </div>
+
+      <form class="stack-form" data-form="chat">
+        <div class="form-grid">
+          ${
+            staffMode
+              ? `
+                <div class="field">
+                  <label for="chatShift">Bezug zu einer Schicht</label>
+                  <select id="chatShift" name="relatedShiftId">
+                    <option value="">Keine konkrete Schicht</option>
+                    ${availableShifts.map((shift) => renderShiftSelectOption(shift)).join("")}
+                  </select>
+                </div>
+              `
+              : ""
+          }
+          <div class="field ${staffMode ? "" : "span-all"}">
+            <label for="chatMessage">${staffMode ? "Nachricht" : "Beitrag"}</label>
+            <textarea id="chatMessage" name="content" placeholder="${escapeHtml(placeholder)}" required></textarea>
+          </div>
+        </div>
+
+        <button type="submit">${staffMode ? "Im Staff-Chat posten" : "In Community posten"}</button>
+      </form>
+
+      <div class="stack-list chat-list">
+        ${
+          messages.length
+            ? messages.map((message) => renderChatMessage(message)).join("")
+            : renderEmptyState(emptyTitle, emptyText)
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderChatMessage(message) {
+  const shiftText = message.relatedShift
+    ? `${formatDate(message.relatedShift.date)} | ${formatShiftWindow(message.relatedShift)} | ${message.relatedShift.shiftType} | ${message.relatedShift.world}`
+    : "";
+  const channelTone = message.channel === "staff" ? "amber" : "sky";
+  const channelLabel = message.channel === "staff" ? "Staff" : "Community";
+
+  return `
+    <article class="chat-card">
+      <div class="chat-meta">
+        <div>
+          <h3>${escapeHtml(message.authorName)}</h3>
+          <p class="timeline-meta">${escapeHtml(formatDateTime(message.createdAt))}</p>
+        </div>
+        <div class="status-row">
+          <span class="pill ${channelTone}">${escapeHtml(channelLabel)}</span>
+          ${shiftText ? `<span class="pill neutral">${escapeHtml(shiftText)}</span>` : ""}
+        </div>
+      </div>
+      <p>${escapeHtml(message.content)}</p>
+    </article>
+  `;
+}
+
+function getAssignableUsers() {
+  return (state.data?.users || [])
+    .filter((entry) => entry.role !== "member")
+    .slice()
+    .sort((left, right) => getPrimaryDisplayName(left).localeCompare(getPrimaryDisplayName(right), "de"));
+}
+
+function buildRoleOptions(selectedRole) {
+  const normalizedRole = selectedRole === "viewer" ? "member" : selectedRole;
+  return ["member", "moderator", "planner", "admin"]
+    .map(
+      (role) => `
+        <option value="${role}" ${role === normalizedRole ? "selected" : ""}>
+          ${escapeHtml(ROLE_LABELS[role])}
+        </option>
+      `
+    )
+    .join("");
+}
+
+function renderShiftSelectOption(shift) {
+  const label = `${formatDate(shift.date)} | ${formatShiftWindow(shift)} | ${shift.shiftType} | ${shift.world}${shift.memberName ? ` | ${shift.memberName}` : ""}`;
+  return `<option value="${escapeHtml(shift.id)}">${escapeHtml(label)}</option>`;
 }

@@ -851,6 +851,58 @@ code {
   font-family: "IBM Plex Sans", monospace;
 }
 
+.public-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  align-items: start;
+}
+
+.public-auth-stack {
+  align-content: start;
+}
+
+.community-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 16px;
+}
+
+.community-stat-grid,
+.community-side-stack,
+.event-grid,
+.team-grid,
+.rule-list,
+.faq-list {
+  display: grid;
+  gap: 12px;
+}
+
+.community-stat-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.event-grid,
+.team-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.community-rule-card,
+.community-faq-card,
+.event-card,
+.team-card {
+  background: linear-gradient(160deg, rgba(244, 170, 49, 0.08), rgba(13, 22, 37, 0.92));
+}
+
+.team-card .profile-head {
+  background: rgba(255, 248, 238, 0.92);
+}
+
+.community-rule-card p,
+.community-faq-card p,
+.event-card p,
+.team-card p {
+  line-height: 1.55;
+}
+
 @media (max-width: 1180px) {
   .site-header,
   .auth-layout,
@@ -865,6 +917,12 @@ code {
   }
 
   .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .public-grid,
+  .community-overview-grid,
+  .community-stat-grid {
     grid-template-columns: 1fr;
   }
 
@@ -892,7 +950,12 @@ code {
   .form-grid,
   .feature-grid,
   .dashboard-grid,
-  .stats-strip {
+  .stats-strip,
+  .public-grid,
+  .community-overview-grid,
+  .community-stat-grid,
+  .event-grid,
+  .team-grid {
     grid-template-columns: 1fr;
   }
 

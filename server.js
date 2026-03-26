@@ -11,6 +11,67 @@ const ROOT = __dirname;
 const STORE_PATH = process.env.STORE_PATH ? path.resolve(process.env.STORE_PATH) : path.join(ROOT, "data", "store.json");
 const DATA_DIR = path.dirname(STORE_PATH);
 
+const COMMUNITY_EVENTS = [
+  {
+    id: "welcome-night",
+    title: "Welcome Night",
+    dateLabel: "Freitag · 20:00 Uhr",
+    world: "Community Hub",
+    host: "SONARA Team",
+    summary: "Neue Mitglieder kennenlernen, Gruppeninfos teilen und entspannt in den Abend starten."
+  },
+  {
+    id: "world-tour",
+    title: "World Tour",
+    dateLabel: "Samstag · 21:00 Uhr",
+    world: "Event Arena",
+    host: "Event Team",
+    summary: "Gemeinsame Weltreise mit Stopps fuer Screenshots, Spiele und kleine Community-Momente."
+  },
+  {
+    id: "late-lounge",
+    title: "Late Lounge",
+    dateLabel: "Sonntag · 22:00 Uhr",
+    world: "Sunset Lounge",
+    host: "Night Crew",
+    summary: "Ruhiger Community-Abend mit Musik, offenen Gespraechen und lockerer Moderationspraesenz."
+  }
+];
+
+const COMMUNITY_RULES = [
+  {
+    title: "Respekt zuerst",
+    body: "Behandle andere fair, freundlich und ohne persoenliche Angriffe. SONARA lebt von angenehmer Stimmung."
+  },
+  {
+    title: "Kein Drama im Hub",
+    body: "Konflikte werden nicht im Hauptbereich ausgetragen. Fuer Probleme sind Moderatoren und Feedback da."
+  },
+  {
+    title: "Sichere Community",
+    body: "Kein Belästigen, kein gezieltes Stören, keine toxischen Aktionen. Moderationsanweisungen gelten."
+  },
+  {
+    title: "Events ernst nehmen",
+    body: "Hosts, Moderation und Briefings werden respektiert, damit Events fuer alle sauber laufen."
+  }
+];
+
+const COMMUNITY_FAQ = [
+  {
+    question: "Wie werde ich Teil der Community?",
+    answer: "Registriere dich im Portal, pflege dein Profil und schau in News, Events und Feedback-Bereich vorbei."
+  },
+  {
+    question: "Wo sehe ich wichtige Updates?",
+    answer: "Auf der Startseite, im News-Bereich und spaeter optional ueber Discord-Hinweise."
+  },
+  {
+    question: "Wie werde ich Moderator?",
+    answer: "Nutze den Feedback-Bereich fuer Bewerbungen oder kontaktiere die Leitung direkt mit deinem Interesse."
+  }
+];
+
 const staticFiles = {
   "/": "index.html",
   "/index.html": "index.html",
@@ -94,7 +155,7 @@ async function handleApi(req, res, url) {
       id: crypto.randomUUID(),
       username: normalized.username,
       displayName: normalized.displayName,
-      role: "viewer",
+      role: "member",
       vrchatName: normalized.vrchatName,
       discordName: normalized.discordName,
       avatarUrl: normalized.avatarUrl,
@@ -113,6 +174,12 @@ async function handleApi(req, res, url) {
     const sessionId = getSessionId(req);
     if (sessionId) sessionStore.delete(sessionId);
     sendJson(res, 200, { ok: true }, { "Set-Cookie": createSessionCookie("", true) });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/public") {
+    const store = readStore();
+    sendJson(res, 200, buildPublicPortalData(store));
     return;
   }
 
@@ -367,6 +434,7 @@ async function handleApi(req, res, url) {
     nextStore.chatMessages.unshift({
       id: crypto.randomUUID(),
       authorId: auth.user.id,
+      channel: normalized.channel,
       relatedShiftId: normalized.relatedShiftId,
       content: normalized.content,
       createdAt: new Date().toISOString()
@@ -666,10 +734,12 @@ function ensureDataStore() {
 function buildDefaultStore() {
   const users = [
     buildSeedUser("admin", "System Admin", "admin", "admin123!", "System Admin", "system-admin", "", "Leitet das SONARA Portal und prueft neue Team-Updates."),
-    buildSeedUser("aiko", "Aiko", "viewer", "mod123!", "Aiko", "aiko_vrc", "", "Fokus auf Begruessung und Community-Einstieg."),
-    buildSeedUser("mika", "Mika", "viewer", "mod123!", "Mika", "mika_vrc", "", "Hat die Public-Bereiche und Zwischenschichten im Blick."),
-    buildSeedUser("ren", "Ren", "viewer", "mod123!", "Ren", "ren_vrc", "", "Betreut gern Events und Briefings."),
-    buildSeedUser("sora", "Sora", "viewer", "mod123!", "Sora", "sora_vrc", "", "Support und Koordination fuer spaete Stunden.")
+    buildSeedUser("lyra", "Lyra", "planner", "plan123!", "Lyra", "lyra_plan", "", "Koordiniert den Staff-Bereich und Events."),
+    buildSeedUser("aiko", "Aiko", "moderator", "mod123!", "Aiko", "aiko_vrc", "", "Fokus auf Begruessung und Community-Einstieg."),
+    buildSeedUser("mika", "Mika", "moderator", "mod123!", "Mika", "mika_vrc", "", "Hat die Public-Bereiche und Zwischenschichten im Blick."),
+    buildSeedUser("ren", "Ren", "moderator", "mod123!", "Ren", "ren_vrc", "", "Betreut gern Events und Briefings."),
+    buildSeedUser("sora", "Sora", "moderator", "mod123!", "Sora", "sora_vrc", "", "Support und Koordination fuer spaete Stunden."),
+    buildSeedUser("nuri", "Nuri", "member", "member123!", "Nuri", "nuri_vrc", "", "Aktives Community-Mitglied mit Fokus auf Events.")
   ];
 
   const userByName = new Map(users.map((entry) => [entry.displayName, entry.id]));
@@ -829,7 +899,8 @@ function normalizeUsers(users, legacyModeratorNames) {
     const avatarUrl = normalizeOptionalUrl(entry.avatarUrl);
     const bio = String(entry.bio || "").trim();
     const passwordHash = String(entry.passwordHash || "").trim();
-    const role = ["viewer", "planner", "admin"].includes(entry.role) ? entry.role : "viewer";
+    const normalizedRole = entry.role === "viewer" ? "moderator" : entry.role;
+    const role = ["member", "moderator", "planner", "admin"].includes(normalizedRole) ? normalizedRole : "member";
 
     if (!username || !displayName || !vrchatName || !discordName || !passwordHash || usedUsernames.has(username)) continue;
 
@@ -859,7 +930,7 @@ function normalizeUsers(users, legacyModeratorNames) {
       id: crypto.randomUUID(),
       username,
       displayName: name,
-      role: "viewer",
+      role: "moderator",
       vrchatName: name,
       discordName: username,
       avatarUrl: "",
@@ -1043,7 +1114,7 @@ function requireAuth(req) {
 }
 
 function requireRole(user, role) {
-  const order = { viewer: 1, planner: 2, admin: 3 };
+  const order = { member: 1, moderator: 2, planner: 3, admin: 4 };
   if (order[user.role] < order[role]) {
     const error = new Error("Keine Berechtigung.");
     error.statusCode = 403;
@@ -1052,6 +1123,7 @@ function requireRole(user, role) {
 }
 
 function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
   const notifications = buildNotifications(user, store);
   const announcements = store.announcements
     .slice()
@@ -1067,14 +1139,24 @@ function projectDataForRole(user, store) {
     .map((entry) => decorateChatMessage(entry, store));
 
   const base = {
-    settings: store.settings,
+    community,
     announcements,
     chatMessages,
     notifications,
     swapRequests: getSwapRequestsForUser(user, store)
   };
 
-  if (user.role === "viewer") {
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
     return {
       ...base,
       shifts: store.shifts
@@ -1094,9 +1176,10 @@ function projectDataForRole(user, store) {
 
   return {
     ...base,
+    settings: store.settings,
     users: store.users
       .slice()
-      .sort((left, right) => left.displayName.localeCompare(right.displayName, "de"))
+      .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
       .map(sanitizeUser),
     shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
     requests: store.requests
@@ -1165,12 +1248,16 @@ function decorateSwapRequest(entry, store) {
 }
 
 function getSwapRequestsForUser(user, store) {
+  if (user.role === "member") {
+    return [];
+  }
+
   const all = (store.swapRequests || [])
     .slice()
     .sort((left, right) => new Date(right.updatedAt) - new Date(left.updatedAt))
     .map((entry) => decorateSwapRequest(entry, store));
 
-  if (user.role === "viewer") {
+  if (user.role === "moderator") {
     return all.filter(
       (entry) =>
         ["offen", "angeboten"].includes(entry.status) ||
@@ -1209,17 +1296,81 @@ function sendPortalData(res, statusCode, user, store, headers = {}) {
   );
 }
 
+function buildPublicPortalData(store) {
+  return {
+    community: buildCommunityPayload(store),
+    announcements: store.announcements
+      .slice()
+      .sort((left, right) => {
+        if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+        return new Date(right.createdAt) - new Date(left.createdAt);
+      })
+      .map((entry) => decorateAnnouncement(entry, store))
+      .slice(0, 6)
+  };
+}
+
+function buildCommunityPayload(store) {
+  const staff = store.users
+    .filter((entry) => entry.role !== "member")
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  return {
+    team: staff,
+    events: COMMUNITY_EVENTS,
+    rules: COMMUNITY_RULES,
+    faq: COMMUNITY_FAQ,
+    stats: {
+      members: store.users.filter((entry) => entry.role === "member").length,
+      moderators: store.users.filter((entry) => entry.role === "moderator").length,
+      planners: store.users.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
+      news: store.announcements.length
+    }
+  };
+}
+
 function findUserName(users, userId) {
   const user = users.find((entry) => entry.id === userId);
   return user?.vrchatName || user?.displayName || "Unbekannt";
 }
 
 function buildNotifications(user, store) {
-  if (user.role === "viewer") {
+  if (user.role === "member") {
+    return buildCommunityNotifications(store);
+  }
+
+  if (user.role === "moderator") {
     return buildViewerNotifications(user, store);
   }
 
   return buildManagerNotifications(store);
+}
+
+function buildCommunityNotifications(store) {
+  const notifications = store.announcements
+    .filter((entry) => entry.pinned)
+    .slice(0, 3)
+    .map((entry) => ({
+      id: `announcement-${entry.id}`,
+      title: `News: ${entry.title}`,
+      body: entry.body,
+      tone: "sky",
+      createdAt: entry.createdAt,
+      category: "news"
+    }));
+
+  const eventNotifications = COMMUNITY_EVENTS.slice(0, 2).map((entry, index) => ({
+    id: `event-${entry.id}`,
+    title: entry.title,
+    body: `${entry.dateLabel} | ${entry.world} | Host: ${entry.host}`,
+    tone: "amber",
+    createdAt: new Date(Date.now() - index * 60000).toISOString(),
+    category: "event"
+  }));
+
+  return [...notifications, ...eventNotifications].slice(0, 6);
 }
 
 function buildViewerNotifications(user, store) {
@@ -1452,13 +1603,19 @@ function validateChatPayload(body, user, store) {
   }
 
   if (relatedShiftId) {
+    if (user.role === "member") {
+      const error = new Error("Community-Mitglieder koennen keine Schichten im Chat referenzieren.");
+      error.statusCode = 403;
+      throw error;
+    }
+
     const shift = store.shifts.find((entry) => entry.id === relatedShiftId);
     if (!shift) {
       const error = new Error("Die ausgewaehlte Schicht existiert nicht.");
       error.statusCode = 400;
       throw error;
     }
-    if (user.role === "viewer" && shift.memberId !== user.id) {
+    if (user.role === "moderator" && shift.memberId !== user.id) {
       const error = new Error("Moderatoren duerfen nur ihre eigenen Schichten referenzieren.");
       error.statusCode = 403;
       throw error;
@@ -1469,6 +1626,12 @@ function validateChatPayload(body, user, store) {
 }
 
 function validateSwapRequestPayload(body, user, store) {
+  if (user.role === "member") {
+    const error = new Error("Nur Moderatoren koennen Tauschwuesche fuer Schichten erstellen.");
+    error.statusCode = 403;
+    throw error;
+  }
+
   const shiftId = String(body.shiftId || "").trim();
   const message = String(body.message || "").trim();
   const shift = store.shifts.find((entry) => entry.id === shiftId);
@@ -1479,7 +1642,7 @@ function validateSwapRequestPayload(body, user, store) {
     throw error;
   }
 
-  if (user.role === "viewer" && shift.memberId !== user.id) {
+  if (user.role === "moderator" && shift.memberId !== user.id) {
     const error = new Error("Du kannst nur fuer deine eigene Schicht einen Tauschwunsch senden.");
     error.statusCode = 403;
     throw error;
@@ -1498,6 +1661,12 @@ function validateSwapRequestPayload(body, user, store) {
 }
 
 function validateSwapOffer(swapRequest, user, store) {
+  if (user.role === "member") {
+    const error = new Error("Nur Moderatoren koennen Schichten uebernehmen.");
+    error.statusCode = 403;
+    throw error;
+  }
+
   const shift = store.shifts.find((entry) => entry.id === swapRequest.shiftId);
   if (!shift) {
     const error = new Error("Die zugehoerige Schicht existiert nicht mehr.");
@@ -1544,7 +1713,7 @@ function validateSwapDecision(body) {
 }
 
 function validateRole(role) {
-  if (!["viewer", "planner", "admin"].includes(role)) {
+  if (!["member", "moderator", "planner", "admin"].includes(role)) {
     const error = new Error("Ungueltige Rolle.");
     error.statusCode = 400;
     throw error;
@@ -2124,4 +2293,160 @@ function formatShiftWindow(startTime, endTime) {
   if (!start) return `bis ${end}`;
   if (!end) return `ab ${start}`;
   return `${start} - ${end}`;
+}
+
+function normalizeChatMessages(messages, users, shifts) {
+  const validUserIds = new Set(users.map((entry) => entry.id));
+  const validShiftIds = new Set(shifts.map((entry) => entry.id));
+  const validChannels = new Set(["community", "staff"]);
+
+  return messages
+    .map((entry) => {
+      const channel = validChannels.has(String(entry.channel || "").trim()) ? String(entry.channel).trim() : "staff";
+      return {
+        id: String(entry.id || crypto.randomUUID()),
+        authorId: String(entry.authorId || "").trim(),
+        channel,
+        relatedShiftId: validShiftIds.has(String(entry.relatedShiftId || "").trim()) ? String(entry.relatedShiftId).trim() : "",
+        content: String(entry.content || "").trim(),
+        createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString()
+      };
+    })
+    .filter((entry) => validUserIds.has(entry.authorId) && entry.content);
+}
+
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+
+  const base = {
+    community,
+    announcements,
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store)
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: store.users
+      .slice()
+      .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+      .map(sanitizeUser),
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
+function getChatMessagesForUser(user, store, channel) {
+  if (channel === "staff" && user.role === "member") {
+    return [];
+  }
+
+  return store.chatMessages
+    .filter((entry) => entry.channel === channel)
+    .slice()
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+    .map((entry) => decorateChatMessage(entry, store));
+}
+
+function decorateChatMessage(entry, store) {
+  const relatedShift = store.shifts.find((shift) => shift.id === entry.relatedShiftId);
+  return {
+    ...entry,
+    authorName: findUserName(store.users, entry.authorId),
+    relatedShift: relatedShift ? decorateShift(relatedShift, store) : null
+  };
+}
+
+function validateChatPayload(body, user, store) {
+  const content = String(body.content || "").trim();
+  const requestedChannel = String(body.channel || "").trim();
+  const channel = ["community", "staff"].includes(requestedChannel)
+    ? requestedChannel
+    : user.role === "member"
+      ? "community"
+      : "staff";
+  const relatedShiftId = String(body.relatedShiftId || "").trim();
+
+  if (!content) {
+    const error = new Error("Bitte eine Chat-Nachricht eingeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (channel === "staff" && user.role === "member") {
+    const error = new Error("Community-Mitglieder koennen nicht in den Staff-Chat posten.");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (channel === "community" && relatedShiftId) {
+    const error = new Error("Im Community-Chat koennen keine Schichten referenziert werden.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (relatedShiftId) {
+    const shift = store.shifts.find((entry) => entry.id === relatedShiftId);
+    if (!shift) {
+      const error = new Error("Die ausgewaehlte Schicht existiert nicht.");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (user.role === "moderator" && shift.memberId !== user.id) {
+      const error = new Error("Moderatoren duerfen nur ihre eigenen Schichten referenzieren.");
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
+  return { content, relatedShiftId, channel };
 }
