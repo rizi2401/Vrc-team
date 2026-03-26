@@ -3875,6 +3875,365 @@ function formatDuration(milliseconds) {
   return `${hours}h ${String(minutes).padStart(2, "0")}m`;
 }
 
+function buildRoleOptions(selectedRole) {
+  const normalizedRole = selectedRole === "viewer" ? "member" : selectedRole;
+  return ["member", "moderator", "planner", "admin"]
+    .map(
+      (role) => `
+        <option value="${role}" ${role === normalizedRole ? "selected" : ""}>
+          ${escapeHtml(ROLE_LABELS[role] || role)}
+        </option>
+      `
+    )
+    .join("");
+}
+
+async function handleSubmit(event) {
+  const form = event.target;
+  const formName = form.dataset.form;
+  if (!formName) return;
+
+  event.preventDefault();
+
+  switch (formName) {
+    case "login": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/login", {
+            method: "POST",
+            body: JSON.stringify({
+              identifier: formData.get("identifier"),
+              password: formData.get("password")
+            })
+          }),
+        "Willkommen im Portal."
+      );
+      break;
+    }
+
+    case "register": {
+      const formData = new FormData(form);
+      const password = String(formData.get("password") || "");
+      const confirmPassword = String(formData.get("confirmPassword") || "");
+      if (password !== confirmPassword) {
+        setFlash("Die Passwoerter stimmen nicht ueberein.", "danger");
+        render();
+        return;
+      }
+
+      const avatarUrl = await readImageFileInput(form.querySelector('input[name="avatarFile"]'));
+      await performAction(
+        () =>
+          api("/api/register", {
+            method: "POST",
+            body: JSON.stringify({
+              vrchatName: formData.get("vrchatName"),
+              discordName: formData.get("discordName"),
+              bio: formData.get("bio"),
+              avatarUrl: avatarUrl || "",
+              password
+            })
+          }),
+        "Zugang wurde erstellt."
+      );
+      break;
+    }
+
+    case "shift": {
+      const formData = new FormData(form);
+      const payload = {
+        date: formData.get("date"),
+        startTime: normalizeTimeValue(formData.get("startTime")),
+        endTime: normalizeTimeValue(formData.get("endTime")),
+        memberId: formData.get("memberId"),
+        shiftType: String(formData.get("shiftType") || "").trim(),
+        world: String(formData.get("world") || "").trim(),
+        task: String(formData.get("task") || "").trim(),
+        notes: formData.get("notes")
+      };
+      const catalogAdds = collectCatalogAddsForShift(payload, state.data.settings);
+      if (catalogAdds.shiftTypes.length || catalogAdds.worlds.length || catalogAdds.tasks.length) {
+        const lines = [
+          "Diese Werte sind neu und noch nicht im Katalog:",
+          ...catalogAdds.shiftTypes.map((entry) => `- Schichttyp: ${entry}`),
+          ...catalogAdds.worlds.map((entry) => `- Welt: ${entry}`),
+          ...catalogAdds.tasks.map((entry) => `- Aufgabe: ${entry}`),
+          "",
+          "Sollen diese Werte zusaetzlich in die Listen aufgenommen werden?"
+        ];
+        if (window.confirm(lines.join("\n"))) payload.catalogAdds = catalogAdds;
+      }
+
+      const shiftId = state.ui.editingShiftId;
+      await performAction(
+        () =>
+          api(shiftId ? `/api/shifts/${encodeURIComponent(shiftId)}` : "/api/shifts", {
+            method: shiftId ? "PATCH" : "POST",
+            body: JSON.stringify(payload)
+          }),
+        shiftId ? "Schicht wurde aktualisiert." : "Neue Schicht wurde gespeichert."
+      );
+      state.ui.editingShiftId = "";
+      render();
+      break;
+    }
+
+    case "request": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/requests", {
+            method: "POST",
+            body: JSON.stringify({
+              type: formData.get("type"),
+              date: formData.get("date"),
+              content: formData.get("content"),
+              rating: formData.get("rating")
+            })
+          }),
+        "Deine Rueckmeldung wurde gespeichert."
+      );
+      break;
+    }
+
+    case "request-admin": {
+      const formData = new FormData(form);
+      const requestId = form.dataset.requestId;
+      await performAction(
+        () =>
+          api(`/api/requests/${encodeURIComponent(requestId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              status: formData.get("status"),
+              adminNote: formData.get("adminNote")
+            })
+          }),
+        "Rueckmeldung fuer das Teammitglied gespeichert."
+      );
+      break;
+    }
+
+    case "announcement": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/announcements", {
+            method: "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              body: formData.get("body"),
+              pinned: formData.get("pinned") === "on",
+              imageUrl: formData.get("imageUrl")
+            })
+          }),
+        "Neue Info wurde veroeffentlicht."
+      );
+      break;
+    }
+
+    case "catalog": {
+      const formData = new FormData(form);
+      const key = form.dataset.key;
+      await performAction(
+        () =>
+          api(`/api/settings/${encodeURIComponent(key)}`, {
+            method: "POST",
+            body: JSON.stringify({ value: formData.get("value") })
+          }),
+        "Listenwert hinzugefuegt."
+      );
+      break;
+    }
+
+    case "chat": {
+      const formData = new FormData(form);
+      const channel = String(formData.get("channel") || "");
+      await performAction(
+        () =>
+          api("/api/chat", {
+            method: "POST",
+            body: JSON.stringify({
+              channel,
+              relatedShiftId: formData.get("relatedShiftId"),
+              content: formData.get("content")
+            })
+          }),
+        channel === "staff" ? "Nachricht im Staff-Chat gepostet." : "Nachricht im allgemeinen Chat gepostet."
+      );
+      break;
+    }
+
+    case "direct-message": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/direct-messages", {
+            method: "POST",
+            body: JSON.stringify({
+              recipientId: form.dataset.recipientId || formData.get("recipientId"),
+              content: formData.get("content")
+            })
+          }),
+        "Direktnachricht wurde gesendet."
+      );
+      break;
+    }
+
+    case "forum-thread": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/forum-threads", {
+            method: "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              category: formData.get("category"),
+              body: formData.get("content")
+            })
+          }),
+        "Thread wurde erstellt."
+      );
+      break;
+    }
+
+    case "forum-reply": {
+      const formData = new FormData(form);
+      const threadId = form.dataset.threadId;
+      await performAction(
+        () =>
+          api(`/api/forum-threads/${encodeURIComponent(threadId)}/replies`, {
+            method: "POST",
+            body: JSON.stringify({
+              body: formData.get("content")
+            })
+          }),
+        "Antwort wurde gespeichert."
+      );
+      break;
+    }
+
+    case "warning-create": {
+      const formData = new FormData(form);
+      const userId = form.dataset.userId;
+      await performAction(
+        () =>
+          api("/api/warnings", {
+            method: "POST",
+            body: JSON.stringify({
+              userId,
+              reason: formData.get("reason")
+            })
+          }),
+        "Verwarnung wurde gesendet."
+      );
+      break;
+    }
+
+    case "warning-ack": {
+      const warningId = form.dataset.warningId;
+      await performAction(
+        () =>
+          api(`/api/warnings/${encodeURIComponent(warningId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ action: "acknowledge" })
+          }),
+        "Verwarnung wurde bestaetigt.",
+        "warning"
+      );
+      break;
+    }
+
+    case "warning-clear": {
+      const warningId = form.dataset.warningId;
+      await performAction(
+        () =>
+          api(`/api/warnings/${encodeURIComponent(warningId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ action: "clear" })
+          }),
+        "Verwarnung wurde abgeschlossen."
+      );
+      break;
+    }
+
+    case "swap-decision": {
+      const formData = new FormData(form);
+      const swapRequestId = form.dataset.swapRequestId;
+      const status = String(event.submitter?.value || "");
+      await performAction(
+        () =>
+          api(`/api/swap-requests/${encodeURIComponent(swapRequestId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              status,
+              candidateId: formData.get("candidateId")
+            })
+          }),
+        status === "genehmigt" ? "Tauschwunsch wurde genehmigt und die Schicht neu zugewiesen." : "Tauschwunsch wurde abgelehnt."
+      );
+      break;
+    }
+
+    case "admin-user-create": {
+      const { formData, payload } = await buildProfilePayload(form);
+      await performAction(
+        () =>
+          api("/api/admin/users", {
+            method: "POST",
+            body: JSON.stringify({
+              vrchatName: formData.get("vrchatName"),
+              discordName: formData.get("discordName"),
+              avatarUrl: payload.avatarUrl || "",
+              bio: payload.bio,
+              contactNote: payload.contactNote,
+              creatorBlurb: payload.creatorBlurb,
+              creatorLinks: payload.creatorLinks,
+              creatorVisible: payload.creatorVisible,
+              password: formData.get("password"),
+              role: formData.get("role")
+            })
+          }),
+        "Account wurde angelegt."
+      );
+      break;
+    }
+
+    case "user-update": {
+      const userId = form.dataset.userId;
+      const { formData, payload } = await buildProfilePayload(form);
+      payload.role = formData.get("role");
+      payload.password = formData.get("password");
+      await performAction(
+        () =>
+          api(`/api/admin/users/${encodeURIComponent(userId)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          }),
+        "Account wurde aktualisiert."
+      );
+      break;
+    }
+
+    case "profile-update": {
+      const { formData, payload } = await buildProfilePayload(form);
+      payload.password = formData.get("password");
+      await performAction(
+        () =>
+          api("/api/profile", {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          }),
+        "Profil wurde aktualisiert."
+      );
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
 function getLocalDateKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

@@ -2783,6 +2783,81 @@ function validateChatPayload(body, user, store) {
   return { content, relatedShiftId, channel };
 }
 
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+
+  const base = {
+    community,
+    announcements,
+    directory,
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store)
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: directory,
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
 function normalizeSlots(source, fallback = []) {
   const raw = Array.isArray(source) && source.length ? source : Array.isArray(fallback) ? fallback : [];
 
