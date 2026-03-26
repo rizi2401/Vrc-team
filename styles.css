@@ -1088,22 +1088,32 @@ code {
   margin-top: 4px;
 }
 
-.team-user-card .helper-text,
 .creator-card .timeline-meta,
 .forum-thread-card .timeline-meta,
-.dm-thread-card .timeline-meta {
-  color: rgba(216, 220, 231, 0.78);
-}
-
-.public-grid .feature-card p,
-.public-grid .auth-card p,
-.public-grid .helper-text,
-.profile-panel .helper-text,
-.team-user-card p,
-.team-user-card label,
+.dm-thread-card .timeline-meta,
 .forum-thread-card p,
 .dm-thread-card p {
   color: rgba(216, 220, 231, 0.82);
+}
+
+.public-grid .feature-card p {
+  color: rgba(216, 220, 231, 0.82);
+}
+
+.public-grid .auth-card p,
+.public-grid .auth-card label,
+.public-grid .auth-card .helper-text,
+.profile-panel .helper-text,
+.team-user-card p,
+.team-user-card label,
+.team-user-card .helper-text {
+  color: #546274;
+}
+
+.team-user-card .timeline-meta,
+.profile-panel .timeline-meta,
+.public-grid .auth-card .timeline-meta {
+  color: #6a7788;
 }
 
 .profile-preview .creator-link-list {
