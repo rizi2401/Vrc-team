@@ -447,6 +447,134 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/direct-messages") {
+    const body = await readJson(req);
+    const normalized = validateDirectMessagePayload(body, auth.user, auth.store);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.directMessages.unshift({
+      id: crypto.randomUUID(),
+      senderId: auth.user.id,
+      recipientId: normalized.recipientId,
+      content: normalized.content,
+      createdAt: new Date().toISOString()
+    });
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "direct-message" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/forum-threads") {
+    const body = await readJson(req);
+    const normalized = validateForumThreadPayload(body);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.forumThreads.unshift({
+      id: crypto.randomUUID(),
+      authorId: auth.user.id,
+      title: normalized.title,
+      body: normalized.body,
+      category: normalized.category,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      replies: []
+    });
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "forum-thread" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  const forumReplyMatch = url.pathname.match(/^\/api\/forum-threads\/([^/]+)\/replies$/);
+  if (forumReplyMatch && req.method === "POST") {
+    const threadId = decodeURIComponent(forumReplyMatch[1]);
+    const body = await readJson(req);
+    const normalized = validateForumReplyPayload(body);
+    const nextStore = structuredClone(auth.store);
+    const thread = (nextStore.forumThreads || []).find((entry) => entry.id === threadId);
+
+    if (!thread) {
+      sendJson(res, 404, { error: "Forenbeitrag nicht gefunden." });
+      return;
+    }
+
+    thread.replies = Array.isArray(thread.replies) ? thread.replies : [];
+    thread.replies.push({
+      id: crypto.randomUUID(),
+      authorId: auth.user.id,
+      body: normalized.body,
+      createdAt: new Date().toISOString()
+    });
+    thread.updatedAt = new Date().toISOString();
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "forum-reply" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/warnings") {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const normalized = validateWarningPayload(body, auth.store);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.warnings.unshift({
+      id: crypto.randomUUID(),
+      userId: normalized.userId,
+      reason: normalized.reason,
+      createdAt: new Date().toISOString(),
+      createdBy: auth.user.id,
+      status: "active",
+      acknowledgedAt: "",
+      clearedAt: "",
+      clearedBy: ""
+    });
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "warning-created" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  const warningMatch = url.pathname.match(/^\/api\/warnings\/([^/]+)$/);
+  if (warningMatch && req.method === "PATCH") {
+    const warningId = decodeURIComponent(warningMatch[1]);
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+    const warning = (nextStore.warnings || []).find((entry) => entry.id === warningId);
+
+    if (!warning) {
+      sendJson(res, 404, { error: "Verwarnung nicht gefunden." });
+      return;
+    }
+
+    const action = String(body.action || "").trim();
+    if (action === "acknowledge") {
+      if (warning.userId !== auth.user.id) {
+        sendJson(res, 403, { error: "Du kannst nur deine eigenen Verwarnungen bestaetigen." });
+        return;
+      }
+      warning.acknowledgedAt = warning.acknowledgedAt || new Date().toISOString();
+    } else if (action === "clear") {
+      requireRole(auth.user, "planner");
+      warning.status = "cleared";
+      warning.clearedAt = new Date().toISOString();
+      warning.clearedBy = auth.user.id;
+    } else {
+      sendJson(res, 400, { error: "Ungueltige Verwarnungsaktion." });
+      return;
+    }
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "warning-updated" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/swap-requests") {
     const body = await readJson(req);
     const normalized = validateSwapRequestPayload(body, auth.user, auth.store);
@@ -2293,6 +2421,865 @@ function formatShiftWindow(startTime, endTime) {
   if (!start) return `bis ${end}`;
   if (!end) return `ab ${start}`;
   return `${start} - ${end}`;
+}
+
+function normalizeOptionalUrl(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+  if (/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(normalized) && normalized.length <= 2_500_000) {
+    return normalized;
+  }
+  return "";
+}
+
+function validateRegistrationPayload(body, store) {
+  const password = String(body.password || "").trim();
+  const vrchatName = String(body.vrchatName || "").trim();
+  const discordName = String(body.discordName || "").trim();
+  const avatarUrl = normalizeOptionalUrl(body.avatarUrl);
+  const bio = String(body.bio || "").trim();
+
+  if (!password || !vrchatName || !discordName) {
+    const error = new Error("Bitte VRChat-Name, Discord-Name und Passwort angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (body.avatarUrl && !avatarUrl) {
+    const error = new Error("Das Profilbild muss ein gueltiges Bild sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  validatePassword(password);
+  ensureUserIdentityUnique(store.users, null, { vrchatName, discordName });
+
+  return {
+    displayName: vrchatName,
+    username: createUniqueUsername(vrchatName, store.users.map((entry) => entry.username)),
+    password,
+    vrchatName,
+    discordName,
+    avatarUrl,
+    bio
+  };
+}
+
+function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
+  const nextVrchatName = body.vrchatName !== undefined ? String(body.vrchatName || "").trim() : target.vrchatName;
+  const nextDiscordName = body.discordName !== undefined ? String(body.discordName || "").trim() : target.discordName;
+  const nextAvatarUrl = body.avatarUrl !== undefined ? normalizeOptionalUrl(body.avatarUrl) : target.avatarUrl || "";
+  const nextBio = body.bio !== undefined ? String(body.bio || "").trim() : target.bio || "";
+
+  if (!nextVrchatName) {
+    const error = new Error("VRChat-Name darf nicht leer sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!nextDiscordName) {
+    const error = new Error("Discord-Name darf nicht leer sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (body.avatarUrl !== undefined && body.avatarUrl && !nextAvatarUrl) {
+    const error = new Error("Das Profilbild muss ein gueltiges Bild sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!allowEmptyBio && body.bio !== undefined && !nextBio) {
+    const error = new Error("Profiltext darf nicht leer sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  ensureUserIdentityUnique(users, target.id, {
+    vrchatName: nextVrchatName,
+    discordName: nextDiscordName
+  });
+
+  target.vrchatName = nextVrchatName;
+  target.displayName = nextVrchatName;
+  target.discordName = nextDiscordName;
+  target.avatarUrl = nextAvatarUrl;
+  target.bio = nextBio;
+}
+
+function normalizeChatMessages(messages, users, shifts) {
+  const validUserIds = new Set(users.map((entry) => entry.id));
+  const validShiftIds = new Set(shifts.map((entry) => entry.id));
+  const validChannels = new Set(["community", "staff"]);
+
+  return messages
+    .map((entry) => ({
+      id: String(entry.id || crypto.randomUUID()),
+      authorId: String(entry.authorId || "").trim(),
+      channel: validChannels.has(String(entry.channel || "").trim()) ? String(entry.channel).trim() : "community",
+      relatedShiftId: validShiftIds.has(String(entry.relatedShiftId || "").trim()) ? String(entry.relatedShiftId).trim() : "",
+      content: String(entry.content || "").trim(),
+      createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString()
+    }))
+    .filter((entry) => validUserIds.has(entry.authorId) && entry.content);
+}
+
+function normalizeDirectMessages(messages, users) {
+  const validUserIds = new Set(users.map((entry) => entry.id));
+
+  return (messages || [])
+    .map((entry) => ({
+      id: String(entry.id || crypto.randomUUID()),
+      senderId: String(entry.senderId || "").trim(),
+      recipientId: String(entry.recipientId || "").trim(),
+      content: String(entry.content || "").trim(),
+      createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString()
+    }))
+    .filter((entry) => validUserIds.has(entry.senderId) && validUserIds.has(entry.recipientId) && entry.senderId !== entry.recipientId && entry.content);
+}
+
+function normalizeForumThreads(threads, users) {
+  const validUserIds = new Set(users.map((entry) => entry.id));
+
+  return (threads || [])
+    .map((entry) => ({
+      id: String(entry.id || crypto.randomUUID()),
+      authorId: String(entry.authorId || "").trim(),
+      title: String(entry.title || "").trim(),
+      body: String(entry.body || "").trim(),
+      category: String(entry.category || "Allgemein").trim() || "Allgemein",
+      createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
+      updatedAt: isIsoDate(entry.updatedAt) ? entry.updatedAt : isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
+      replies: Array.isArray(entry.replies)
+        ? entry.replies
+            .map((reply) => ({
+              id: String(reply.id || crypto.randomUUID()),
+              authorId: String(reply.authorId || "").trim(),
+              body: String(reply.body || "").trim(),
+              createdAt: isIsoDate(reply.createdAt) ? reply.createdAt : new Date().toISOString()
+            }))
+            .filter((reply) => validUserIds.has(reply.authorId) && reply.body)
+        : []
+    }))
+    .filter((entry) => validUserIds.has(entry.authorId) && entry.title && entry.body)
+    .sort((left, right) => new Date(right.updatedAt) - new Date(left.updatedAt));
+}
+
+function normalizeWarnings(warnings, users) {
+  const validUserIds = new Set(users.map((entry) => entry.id));
+  const validStatuses = new Set(["active", "cleared"]);
+
+  return (warnings || [])
+    .map((entry) => ({
+      id: String(entry.id || crypto.randomUUID()),
+      userId: String(entry.userId || "").trim(),
+      reason: String(entry.reason || "").trim(),
+      createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
+      createdBy: String(entry.createdBy || "").trim(),
+      status: validStatuses.has(String(entry.status || "").trim()) ? String(entry.status).trim() : "active",
+      acknowledgedAt: isIsoDate(entry.acknowledgedAt) ? entry.acknowledgedAt : "",
+      clearedAt: isIsoDate(entry.clearedAt) ? entry.clearedAt : "",
+      clearedBy: String(entry.clearedBy || "").trim()
+    }))
+    .filter((entry) => validUserIds.has(entry.userId) && validUserIds.has(entry.createdBy) && entry.reason)
+    .map((entry) => ({
+      ...entry,
+      clearedBy: validUserIds.has(entry.clearedBy) ? entry.clearedBy : ""
+    }));
+}
+
+function normalizeStore(store) {
+  const hasUsers = Array.isArray(store.users) && store.users.length;
+  if (!hasUsers) {
+    return {
+      ...buildDefaultStore(),
+      chatMessages: [],
+      directMessages: [],
+      forumThreads: [],
+      warnings: []
+    };
+  }
+
+  const users = normalizeUsers(store.users, store.lists?.moderators || []);
+  const settings = normalizeSettings(store.settings || store.lists || {}, Array.isArray(store.slots) ? store.slots : []);
+  const shifts = Array.isArray(store.shifts)
+    ? normalizeShifts(store.shifts, users)
+    : migrateLegacyPlanning(store, users, settings);
+
+  return {
+    users,
+    settings,
+    shifts,
+    requests: Array.isArray(store.requests) ? normalizeRequests(store.requests, users) : [],
+    announcements: Array.isArray(store.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
+    chatMessages: Array.isArray(store.chatMessages) ? normalizeChatMessages(store.chatMessages, users, shifts) : [],
+    directMessages: Array.isArray(store.directMessages) ? normalizeDirectMessages(store.directMessages, users) : [],
+    forumThreads: Array.isArray(store.forumThreads) ? normalizeForumThreads(store.forumThreads, users) : [],
+    warnings: Array.isArray(store.warnings) ? normalizeWarnings(store.warnings, users) : [],
+    swapRequests: Array.isArray(store.swapRequests) ? normalizeSwapRequests(store.swapRequests, users, shifts) : [],
+    timeEntries: Array.isArray(store.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : []
+  };
+}
+
+function validateChatPayload(body, user, store) {
+  const content = String(body.content || "").trim();
+  const requestedChannel = String(body.channel || "").trim();
+  const channel = ["community", "staff"].includes(requestedChannel)
+    ? requestedChannel
+    : user.role === "member"
+      ? "community"
+      : "staff";
+  const relatedShiftId = String(body.relatedShiftId || "").trim();
+
+  if (!content) {
+    const error = new Error("Bitte eine Chat-Nachricht eingeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (channel === "staff" && user.role === "member") {
+    const error = new Error("Community-Mitglieder koennen nicht in den Staff-Chat posten.");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (channel === "community" && relatedShiftId) {
+    const error = new Error("Im allgemeinen Chat koennen keine Schichten referenziert werden.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (relatedShiftId) {
+    const shift = store.shifts.find((entry) => entry.id === relatedShiftId);
+    if (!shift) {
+      const error = new Error("Die ausgewaehlte Schicht existiert nicht.");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (user.role === "moderator" && shift.memberId !== user.id) {
+      const error = new Error("Moderatoren duerfen nur ihre eigenen Schichten referenzieren.");
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
+  return { content, relatedShiftId, channel };
+}
+
+function normalizeExternalLink(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+
+  try {
+    const url = new URL(normalized);
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function deriveCreatorLabel(url) {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./i, "");
+    const base = hostname.split(".")[0] || "Link";
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  } catch {
+    return "Link";
+  }
+}
+
+function normalizeCreatorLinks(input) {
+  const rawEntries = Array.isArray(input)
+    ? input
+    : String(input || "")
+        .split(/\r?\n/)
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+
+  const links = [];
+  const seen = new Set();
+
+  for (const rawEntry of rawEntries) {
+    let label = "";
+    let url = "";
+
+    if (typeof rawEntry === "string") {
+      const [left, ...rightParts] = rawEntry.split("|");
+      if (rightParts.length) {
+        label = String(left || "").trim();
+        url = String(rightParts.join("|") || "").trim();
+      } else {
+        url = String(rawEntry || "").trim();
+      }
+    } else if (rawEntry && typeof rawEntry === "object") {
+      label = String(rawEntry.label || "").trim();
+      url = String(rawEntry.url || "").trim();
+    }
+
+    const normalizedUrl = normalizeExternalLink(url);
+    if (!normalizedUrl || seen.has(normalizedUrl)) continue;
+
+    seen.add(normalizedUrl);
+    links.push({
+      label: (label || deriveCreatorLabel(normalizedUrl)).slice(0, 60),
+      url: normalizedUrl
+    });
+
+    if (links.length >= 10) break;
+  }
+
+  return links;
+}
+
+function normalizeUsers(users, legacyModeratorNames) {
+  const normalized = [];
+  const usedUsernames = new Set();
+
+  for (const entry of users) {
+    const username = normalizeUsername(entry.username);
+    const fallbackDisplayName = String(entry.displayName || "").trim();
+    const vrchatName = String(entry.vrchatName || fallbackDisplayName).trim();
+    const displayName = vrchatName || fallbackDisplayName;
+    const discordName = String(entry.discordName || username).trim();
+    const avatarUrl = normalizeOptionalUrl(entry.avatarUrl);
+    const bio = String(entry.bio || "").trim().slice(0, 600);
+    const contactNote = String(entry.contactNote || "").trim().slice(0, 600);
+    const creatorBlurb = String(entry.creatorBlurb || "").trim().slice(0, 300);
+    const creatorLinks = normalizeCreatorLinks(entry.creatorLinks);
+    const creatorVisible = Boolean(entry.creatorVisible && (creatorLinks.length || creatorBlurb));
+    const passwordHash = String(entry.passwordHash || "").trim();
+    const normalizedRole = entry.role === "viewer" ? "member" : entry.role;
+    const role = ["member", "moderator", "planner", "admin"].includes(normalizedRole) ? normalizedRole : "member";
+
+    if (!username || !displayName || !vrchatName || !discordName || !passwordHash || usedUsernames.has(username)) continue;
+
+    usedUsernames.add(username);
+    normalized.push({
+      id: String(entry.id || crypto.randomUUID()),
+      username,
+      displayName,
+      role,
+      vrchatName,
+      discordName,
+      avatarUrl,
+      bio,
+      contactNote,
+      creatorBlurb,
+      creatorLinks,
+      creatorVisible,
+      passwordHash
+    });
+  }
+
+  if (!normalized.some((entry) => entry.role === "admin")) {
+    normalized.unshift(buildSeedUser("admin", "System Admin", "admin", "admin123!"));
+  }
+
+  for (const name of uniqueStrings(legacyModeratorNames)) {
+    if (normalized.some((entry) => entry.displayName.toLowerCase() === name.toLowerCase())) continue;
+
+    const username = createUniqueUsername(name, normalized.map((entry) => entry.username));
+    normalized.push({
+      id: crypto.randomUUID(),
+      username,
+      displayName: name,
+      role: "moderator",
+      vrchatName: name,
+      discordName: username,
+      avatarUrl: "",
+      bio: "",
+      contactNote: "",
+      creatorBlurb: "",
+      creatorLinks: [],
+      creatorVisible: false,
+      passwordHash: hashPassword("mod123!")
+    });
+  }
+
+  return normalized;
+}
+
+function sanitizeUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    role: user.role,
+    vrchatName: user.vrchatName || "",
+    discordName: user.discordName || "",
+    avatarUrl: user.avatarUrl || "",
+    bio: user.bio || "",
+    contactNote: user.contactNote || "",
+    creatorBlurb: user.creatorBlurb || "",
+    creatorLinks: Array.isArray(user.creatorLinks) ? user.creatorLinks : [],
+    creatorVisible: Boolean(user.creatorVisible)
+  };
+}
+
+function buildCommunityPayload(store) {
+  const team = store.users
+    .filter((entry) => entry.role !== "member")
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  const creators = store.users
+    .filter((entry) => entry.creatorVisible && (entry.creatorLinks || []).length)
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  return {
+    team,
+    creators,
+    events: COMMUNITY_EVENTS,
+    rules: COMMUNITY_RULES,
+    faq: COMMUNITY_FAQ,
+    stats: {
+      members: store.users.filter((entry) => entry.role === "member").length,
+      moderators: store.users.filter((entry) => entry.role === "moderator").length,
+      planners: store.users.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
+      news: store.announcements.length,
+      creators: creators.length
+    }
+  };
+}
+
+function validateRegistrationPayload(body, store) {
+  const password = String(body.password || "");
+  const vrchatName = String(body.vrchatName || "").trim();
+  const discordName = String(body.discordName || "").trim();
+  const avatarUrl = normalizeOptionalUrl(body.avatarUrl);
+  const bio = String(body.bio || "").trim().slice(0, 600);
+  const contactNote = String(body.contactNote || "").trim().slice(0, 600);
+  const creatorBlurb = String(body.creatorBlurb || "").trim().slice(0, 300);
+  const creatorLinks = normalizeCreatorLinks(body.creatorLinks);
+  const creatorVisible = Boolean(body.creatorVisible && (creatorLinks.length || creatorBlurb));
+
+  if (!password || !vrchatName || !discordName) {
+    const error = new Error("Bitte VRChat-Name, Discord-Name und Passwort ausfuellen.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (body.avatarUrl && !avatarUrl) {
+    const error = new Error("Das Profilbild muss eine gueltige Bild-URL oder ein gueltiges Bild sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  ensureUserIdentityUnique(store.users, null, { vrchatName, discordName });
+
+  return {
+    displayName: vrchatName,
+    username: createUniqueUsername(vrchatName, store.users.map((entry) => entry.username)),
+    passwordHash: hashPassword(password),
+    vrchatName,
+    discordName,
+    avatarUrl,
+    bio,
+    contactNote,
+    creatorBlurb,
+    creatorLinks,
+    creatorVisible
+  };
+}
+
+function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
+  const nextVrchatName = body.vrchatName !== undefined ? String(body.vrchatName || "").trim() : target.vrchatName;
+  const nextDiscordName = body.discordName !== undefined ? String(body.discordName || "").trim() : target.discordName;
+  const nextAvatarUrl = body.avatarUrl !== undefined ? normalizeOptionalUrl(body.avatarUrl) : target.avatarUrl || "";
+  const nextBio = body.bio !== undefined ? String(body.bio || "").trim().slice(0, 600) : target.bio || "";
+  const nextContactNote = body.contactNote !== undefined ? String(body.contactNote || "").trim().slice(0, 600) : target.contactNote || "";
+  const nextCreatorBlurb = body.creatorBlurb !== undefined ? String(body.creatorBlurb || "").trim().slice(0, 300) : target.creatorBlurb || "";
+  const nextCreatorLinks = body.creatorLinks !== undefined ? normalizeCreatorLinks(body.creatorLinks) : Array.isArray(target.creatorLinks) ? target.creatorLinks : [];
+  const nextCreatorVisible =
+    body.creatorVisible !== undefined
+      ? Boolean(body.creatorVisible && (nextCreatorLinks.length || nextCreatorBlurb))
+      : Boolean(target.creatorVisible && (nextCreatorLinks.length || nextCreatorBlurb));
+
+  if (!nextVrchatName) {
+    const error = new Error("Der VRChat-Name darf nicht leer sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!nextDiscordName) {
+    const error = new Error("Der Discord-Name darf nicht leer sein.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!allowEmptyBio && !nextBio) {
+    const error = new Error("Bitte ein Kurzprofil eintragen.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (body.avatarUrl !== undefined && body.avatarUrl && !nextAvatarUrl) {
+    const error = new Error("Das Profilbild ist nicht gueltig.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  ensureUserIdentityUnique(users, target.id, {
+    vrchatName: nextVrchatName,
+    discordName: nextDiscordName
+  });
+
+  target.vrchatName = nextVrchatName;
+  target.displayName = nextVrchatName;
+  target.discordName = nextDiscordName;
+  target.avatarUrl = nextAvatarUrl;
+  target.bio = nextBio;
+  target.contactNote = nextContactNote;
+  target.creatorBlurb = nextCreatorBlurb;
+  target.creatorLinks = nextCreatorLinks;
+  target.creatorVisible = nextCreatorVisible;
+}
+
+function normalizeStore(store) {
+  const defaults = buildDefaultStore();
+  const slots = normalizeSlots(store?.slots, defaults.slots);
+  const users = normalizeUsers(store?.users || [], slots.map((entry) => entry.name));
+  const settings = normalizeSettings(store?.settings || {}, slots);
+
+  return {
+    slots,
+    users,
+    settings,
+    shifts: normalizeShifts(Array.isArray(store?.shifts) ? store.shifts : migrateLegacyPlanning(store || defaults, users, settings), users),
+    requests: normalizeRequests(store?.requests, users),
+    announcements: normalizeAnnouncements(store?.announcements, users),
+    chatMessages: normalizeChatMessages(store?.chatMessages, users, Array.isArray(store?.shifts) ? normalizeShifts(store.shifts, users) : []),
+    timeEntries: normalizeTimeEntries(store?.timeEntries, users, Array.isArray(store?.shifts) ? normalizeShifts(store.shifts, users) : []),
+    swapRequests: normalizeSwapRequests(store?.swapRequests, users, Array.isArray(store?.shifts) ? normalizeShifts(store.shifts, users) : []),
+    discordStatus: normalizeDiscordStatus(store?.discordStatus),
+    vrchatAnalytics: normalizeVrchatAnalytics(store?.vrchatAnalytics),
+    directMessages: Array.isArray(store?.directMessages) ? normalizeDirectMessages(store.directMessages, users) : [],
+    forumThreads: Array.isArray(store?.forumThreads) ? normalizeForumThreads(store.forumThreads, users) : [],
+    warnings: Array.isArray(store?.warnings) ? normalizeWarnings(store.warnings, users) : []
+  };
+}
+
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+
+  const base = {
+    community,
+    announcements,
+    directory,
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store)
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: directory,
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
+function validateDirectMessagePayload(body, user, store) {
+  const recipientId = String(body.recipientId || "").trim();
+  const content = String(body.content || "").trim();
+
+  if (!recipientId || !content) {
+    const error = new Error("Bitte Empfaenger und Nachricht angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (recipientId === user.id) {
+    const error = new Error("Du kannst dir nicht selbst schreiben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!store.users.some((entry) => entry.id === recipientId)) {
+    const error = new Error("Der ausgewaehlte Empfaenger existiert nicht.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return { recipientId, content };
+}
+
+function validateForumThreadPayload(body) {
+  const title = String(body.title || "").trim();
+  const category = String(body.category || "Allgemein").trim() || "Allgemein";
+  const threadBody = String(body.body || "").trim();
+
+  if (!title || !threadBody) {
+    const error = new Error("Bitte Titel und Beitrag angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return { title, body: threadBody, category };
+}
+
+function validateForumReplyPayload(body) {
+  const replyBody = String(body.body || "").trim();
+  if (!replyBody) {
+    const error = new Error("Bitte eine Antwort eingeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return { body: replyBody };
+}
+
+function validateWarningPayload(body, store) {
+  const userId = String(body.userId || "").trim();
+  const reason = String(body.reason || "").trim();
+
+  if (!userId || !reason) {
+    const error = new Error("Bitte Benutzer und Begruendung angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!store.users.some((entry) => entry.id === userId)) {
+    const error = new Error("Der ausgewaehlte Benutzer existiert nicht.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return { userId, reason };
+}
+
+function decorateDirectMessage(entry, store) {
+  return {
+    ...entry,
+    senderName: findUserName(store.users, entry.senderId),
+    recipientName: findUserName(store.users, entry.recipientId)
+  };
+}
+
+function decorateForumThread(entry, store) {
+  return {
+    ...entry,
+    authorName: findUserName(store.users, entry.authorId),
+    replies: (entry.replies || [])
+      .slice()
+      .sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt))
+      .map((reply) => ({
+        ...reply,
+        authorName: findUserName(store.users, reply.authorId)
+      }))
+  };
+}
+
+function decorateWarning(entry, store) {
+  return {
+    ...entry,
+    userName: findUserName(store.users, entry.userId),
+    createdByName: findUserName(store.users, entry.createdBy),
+    clearedByName: entry.clearedBy ? findUserName(store.users, entry.clearedBy) : ""
+  };
+}
+
+function getChatMessagesForUser(user, store, channel) {
+  if (channel === "staff" && user.role === "member") {
+    return [];
+  }
+
+  return store.chatMessages
+    .filter((entry) => entry.channel === channel)
+    .slice()
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+    .map((entry) => decorateChatMessage(entry, store));
+}
+
+function getDirectMessagesForUser(user, store) {
+  return (store.directMessages || [])
+    .filter((entry) => entry.senderId === user.id || entry.recipientId === user.id)
+    .slice()
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+    .map((entry) => decorateDirectMessage(entry, store));
+}
+
+function getWarningsForUser(user, store) {
+  const warnings = (store.warnings || []).slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+  if (user.role === "planner" || user.role === "admin") {
+    return warnings.map((entry) => decorateWarning(entry, store));
+  }
+  return warnings.filter((entry) => entry.userId === user.id).map((entry) => decorateWarning(entry, store));
+}
+
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  const base = {
+    community,
+    announcements,
+    directory,
+    communityChatMessages: getChatMessagesForUser(user, store, "community"),
+    staffChatMessages: getChatMessagesForUser(user, store, "staff"),
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store)
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: directory,
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
+function buildNotifications(user, store) {
+  const warningNotifications = (store.warnings || [])
+    .filter((entry) => entry.status === "active" && entry.userId === user.id && !entry.acknowledgedAt)
+    .map((entry) => ({
+      id: `warning-${entry.id}`,
+      title: "Wichtige Verwarnung",
+      body: entry.reason,
+      tone: "rose",
+      createdAt: entry.createdAt,
+      category: "warnung"
+    }));
+
+  const rest =
+    user.role === "member"
+      ? buildCommunityNotifications(store)
+      : user.role === "moderator"
+        ? buildViewerNotifications(user, store)
+        : buildManagerNotifications(store);
+
+  return [...warningNotifications, ...rest]
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+    .slice(0, 8);
+}
+
+function ensureUserIsNotLinked(userId, store) {
+  const linked =
+    store.shifts.some((entry) => entry.memberId === userId) ||
+    store.requests.some((entry) => entry.userId === userId) ||
+    store.chatMessages.some((entry) => entry.authorId === userId) ||
+    (store.directMessages || []).some((entry) => entry.senderId === userId || entry.recipientId === userId) ||
+    (store.forumThreads || []).some(
+      (entry) => entry.authorId === userId || (entry.replies || []).some((reply) => reply.authorId === userId)
+    ) ||
+    (store.warnings || []).some((entry) => entry.userId === userId || entry.createdBy === userId || entry.clearedBy === userId) ||
+    store.swapRequests.some((entry) => entry.requesterId === userId || entry.candidateIds.includes(userId) || entry.approvedCandidateId === userId) ||
+    store.timeEntries.some((entry) => entry.userId === userId);
+
+  if (linked) {
+    const error = new Error("Der Benutzer hat noch verknuepfte Daten und kann nicht geloescht werden.");
+    error.statusCode = 400;
+    throw error;
+  }
 }
 
 function normalizeChatMessages(messages, users, shifts) {

@@ -988,3 +988,135 @@ code {
     min-height: 240px;
   }
 }
+
+.warning-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(8, 10, 18, 0.76);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.warning-modal {
+  width: min(920px, 100%);
+  background: linear-gradient(180deg, rgba(23, 27, 39, 0.98), rgba(13, 16, 26, 0.98));
+  border: 1px solid rgba(235, 153, 96, 0.32);
+  border-radius: 28px;
+  padding: 24px;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
+}
+
+.warning-grid,
+.forum-thread-list,
+.dm-thread-list,
+.wide-team-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.warning-grid,
+.wide-team-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.warning-card {
+  border: 1px solid rgba(229, 95, 124, 0.28);
+  background: rgba(45, 21, 31, 0.52);
+  border-radius: 20px;
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.creator-card,
+.forum-thread-card,
+.dm-thread-card,
+.team-user-card {
+  height: 100%;
+}
+
+.creator-link-list {
+  gap: 8px;
+}
+
+.dm-thread-list,
+.forum-thread-list {
+  margin-top: 18px;
+}
+
+.dm-thread-card,
+.forum-thread-card {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 24, 35, 0.82);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.dm-message-stack,
+.forum-replies {
+  display: grid;
+  gap: 10px;
+}
+
+.dm-bubble,
+.forum-reply-card {
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dm-bubble.outgoing {
+  background: rgba(44, 110, 167, 0.22);
+  border-color: rgba(89, 169, 245, 0.24);
+}
+
+.dm-bubble.incoming {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.compact-stack {
+  margin-top: 18px;
+}
+
+.team-user-card .form-grid,
+.forum-thread-card .form-grid {
+  margin-top: 4px;
+}
+
+.team-user-card .helper-text,
+.creator-card .timeline-meta,
+.forum-thread-card .timeline-meta,
+.dm-thread-card .timeline-meta {
+  color: rgba(216, 220, 231, 0.78);
+}
+
+.public-grid .feature-card p,
+.public-grid .auth-card p,
+.public-grid .helper-text,
+.profile-panel .helper-text,
+.team-user-card p,
+.team-user-card label,
+.forum-thread-card p,
+.dm-thread-card p {
+  color: rgba(216, 220, 231, 0.82);
+}
+
+.profile-preview .creator-link-list {
+  margin-top: 10px;
+}
+
+@media (max-width: 760px) {
+  .warning-modal {
+    padding: 18px;
+  }
+
+  .warning-grid,
+  .wide-team-grid {
+    grid-template-columns: 1fr;
+  }
+}

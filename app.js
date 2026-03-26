@@ -1441,6 +1441,388 @@ function renderProfilePanel(managerView) {
   `;
 }
 
+async function readImageFileInput(fileInput) {
+  const file = fileInput?.files?.[0];
+  if (!file) return null;
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Bitte nur Bilddateien hochladen.");
+  }
+  if (file.size > 1800000) {
+    throw new Error("Das Bild ist zu gross. Bitte unter 1,8 MB bleiben.");
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Das Bild konnte nicht gelesen werden."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function buildProfilePayload(form) {
+  const formData = new FormData(form);
+  const payload = {
+    vrchatName: formData.get("vrchatName"),
+    discordName: formData.get("discordName"),
+    bio: formData.get("bio"),
+    contactNote: formData.get("contactNote"),
+    creatorBlurb: formData.get("creatorBlurb"),
+    creatorLinks: formData.get("creatorLinks"),
+    creatorVisible: formData.get("creatorVisible") === "on"
+  };
+
+  const avatarData = await readImageFileInput(form.querySelector('input[name="avatarFile"]'));
+  if (avatarData) payload.avatarUrl = avatarData;
+
+  return { formData, payload };
+}
+
+async function handleSubmit(event) {
+  const form = event.target;
+  const formName = form.dataset.form;
+  if (!formName) return;
+
+  event.preventDefault();
+
+  switch (formName) {
+    case "login": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/login", {
+            method: "POST",
+            body: JSON.stringify({
+              identifier: formData.get("identifier"),
+              password: formData.get("password")
+            })
+          }),
+        "Willkommen im Portal."
+      );
+      break;
+    }
+
+    case "register": {
+      const formData = new FormData(form);
+      const password = String(formData.get("password") || "");
+      const confirmPassword = String(formData.get("confirmPassword") || "");
+      if (password !== confirmPassword) {
+        setFlash("Die Passwoerter stimmen nicht ueberein.", "danger");
+        render();
+        return;
+      }
+
+      const avatarUrl = await readImageFileInput(form.querySelector('input[name="avatarFile"]'));
+      await performAction(
+        () =>
+          api("/api/register", {
+            method: "POST",
+            body: JSON.stringify({
+              vrchatName: formData.get("vrchatName"),
+              discordName: formData.get("discordName"),
+              bio: formData.get("bio"),
+              avatarUrl: avatarUrl || "",
+              password
+            })
+          }),
+        "Zugang wurde erstellt."
+      );
+      break;
+    }
+
+    case "shift": {
+      const formData = new FormData(form);
+      const payload = {
+        date: formData.get("date"),
+        startTime: normalizeTimeValue(formData.get("startTime")),
+        endTime: normalizeTimeValue(formData.get("endTime")),
+        memberId: formData.get("memberId"),
+        shiftType: String(formData.get("shiftType") || "").trim(),
+        world: String(formData.get("world") || "").trim(),
+        task: String(formData.get("task") || "").trim(),
+        notes: formData.get("notes")
+      };
+      const catalogAdds = collectCatalogAddsForShift(payload, state.data.settings);
+      if (catalogAdds.shiftTypes.length || catalogAdds.worlds.length || catalogAdds.tasks.length) {
+        const lines = [
+          "Diese Werte sind neu und noch nicht im Katalog:",
+          ...catalogAdds.shiftTypes.map((entry) => `- Schichttyp: ${entry}`),
+          ...catalogAdds.worlds.map((entry) => `- Welt: ${entry}`),
+          ...catalogAdds.tasks.map((entry) => `- Aufgabe: ${entry}`),
+          "",
+          "Sollen diese Werte zusaetzlich in die Listen aufgenommen werden?"
+        ];
+        if (window.confirm(lines.join("\n"))) payload.catalogAdds = catalogAdds;
+      }
+
+      const shiftId = state.ui.editingShiftId;
+      await performAction(
+        () =>
+          api(shiftId ? `/api/shifts/${encodeURIComponent(shiftId)}` : "/api/shifts", {
+            method: shiftId ? "PATCH" : "POST",
+            body: JSON.stringify(payload)
+          }),
+        shiftId ? "Schicht wurde aktualisiert." : "Neue Schicht wurde gespeichert."
+      );
+      state.ui.editingShiftId = "";
+      render();
+      break;
+    }
+
+    case "request": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/requests", {
+            method: "POST",
+            body: JSON.stringify({
+              type: formData.get("type"),
+              date: formData.get("date"),
+              content: formData.get("content"),
+              rating: formData.get("rating")
+            })
+          }),
+        "Deine Rueckmeldung wurde gespeichert."
+      );
+      break;
+    }
+
+    case "request-admin": {
+      const formData = new FormData(form);
+      const requestId = form.dataset.requestId;
+      await performAction(
+        () =>
+          api(`/api/requests/${encodeURIComponent(requestId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              status: formData.get("status"),
+              adminNote: formData.get("adminNote")
+            })
+          }),
+        "Rueckmeldung fuer das Teammitglied gespeichert."
+      );
+      break;
+    }
+
+    case "announcement": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/announcements", {
+            method: "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              body: formData.get("body"),
+              pinned: formData.get("pinned") === "on",
+              imageUrl: formData.get("imageUrl")
+            })
+          }),
+        "Neue Info wurde veroeffentlicht."
+      );
+      break;
+    }
+
+    case "catalog": {
+      const formData = new FormData(form);
+      const key = form.dataset.key;
+      await performAction(
+        () =>
+          api(`/api/settings/${encodeURIComponent(key)}`, {
+            method: "POST",
+            body: JSON.stringify({ value: formData.get("value") })
+          }),
+        "Listenwert hinzugefuegt."
+      );
+      break;
+    }
+
+    case "chat": {
+      const formData = new FormData(form);
+      const channel = String(formData.get("channel") || "");
+      await performAction(
+        () =>
+          api("/api/chat", {
+            method: "POST",
+            body: JSON.stringify({
+              channel,
+              relatedShiftId: formData.get("relatedShiftId"),
+              content: formData.get("content")
+            })
+          }),
+        channel === "staff" ? "Nachricht im Staff-Chat gepostet." : "Nachricht im allgemeinen Chat gepostet."
+      );
+      break;
+    }
+
+    case "direct-message": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/direct-messages", {
+            method: "POST",
+            body: JSON.stringify({
+              recipientId: form.dataset.recipientId || formData.get("recipientId"),
+              content: formData.get("content")
+            })
+          }),
+        "Direktnachricht wurde gesendet."
+      );
+      break;
+    }
+
+    case "forum-thread": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/forum-threads", {
+            method: "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              category: formData.get("category"),
+              content: formData.get("content")
+            })
+          }),
+        "Thread wurde erstellt."
+      );
+      break;
+    }
+
+    case "forum-reply": {
+      const formData = new FormData(form);
+      const threadId = form.dataset.threadId;
+      await performAction(
+        () =>
+          api(`/api/forum-threads/${encodeURIComponent(threadId)}/replies`, {
+            method: "POST",
+            body: JSON.stringify({
+              content: formData.get("content")
+            })
+          }),
+        "Antwort wurde gespeichert."
+      );
+      break;
+    }
+
+    case "warning-create": {
+      const formData = new FormData(form);
+      const userId = form.dataset.userId;
+      await performAction(
+        () =>
+          api("/api/warnings", {
+            method: "POST",
+            body: JSON.stringify({
+              userId,
+              reason: formData.get("reason")
+            })
+          }),
+        "Verwarnung wurde gesendet."
+      );
+      break;
+    }
+
+    case "warning-ack": {
+      const warningId = form.dataset.warningId;
+      await performAction(
+        () =>
+          api(`/api/warnings/${encodeURIComponent(warningId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ action: "acknowledge" })
+          }),
+        "Verwarnung wurde bestaetigt.",
+        "warning"
+      );
+      break;
+    }
+
+    case "warning-clear": {
+      const warningId = form.dataset.warningId;
+      await performAction(
+        () =>
+          api(`/api/warnings/${encodeURIComponent(warningId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ action: "clear" })
+          }),
+        "Verwarnung wurde abgeschlossen."
+      );
+      break;
+    }
+
+    case "swap-decision": {
+      const formData = new FormData(form);
+      const swapRequestId = form.dataset.swapRequestId;
+      const status = String(event.submitter?.value || "");
+      await performAction(
+        () =>
+          api(`/api/swap-requests/${encodeURIComponent(swapRequestId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              status,
+              candidateId: formData.get("candidateId")
+            })
+          }),
+        status === "genehmigt" ? "Tauschwunsch wurde genehmigt und die Schicht neu zugewiesen." : "Tauschwunsch wurde abgelehnt."
+      );
+      break;
+    }
+
+    case "admin-user-create": {
+      const { formData, payload } = await buildProfilePayload(form);
+      await performAction(
+        () =>
+          api("/api/admin/users", {
+            method: "POST",
+            body: JSON.stringify({
+              vrchatName: formData.get("vrchatName"),
+              discordName: formData.get("discordName"),
+              avatarUrl: payload.avatarUrl || "",
+              bio: payload.bio,
+              contactNote: payload.contactNote,
+              creatorBlurb: payload.creatorBlurb,
+              creatorLinks: payload.creatorLinks,
+              creatorVisible: payload.creatorVisible,
+              password: formData.get("password"),
+              role: formData.get("role")
+            })
+          }),
+        "Account wurde angelegt."
+      );
+      break;
+    }
+
+    case "user-update": {
+      const userId = form.dataset.userId;
+      const { formData, payload } = await buildProfilePayload(form);
+      payload.role = formData.get("role");
+      payload.password = formData.get("password");
+      await performAction(
+        () =>
+          api(`/api/admin/users/${encodeURIComponent(userId)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          }),
+        "Account wurde aktualisiert."
+      );
+      break;
+    }
+
+    case "profile-update": {
+      const { formData, payload } = await buildProfilePayload(form);
+      payload.password = formData.get("password");
+      await performAction(
+        () =>
+          api("/api/profile", {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          }),
+        "Profil wurde aktualisiert."
+      );
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
 function renderAdminRequestCard(entry) {
   const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "in_planung" ? "amber" : "rose";
 
@@ -2510,6 +2892,584 @@ function normalizeActiveTab(tab) {
   return allowed.includes(tab) ? tab : "overview";
 }
 
+function renderWarningOverlay() {
+  const warnings = (state.data?.warnings || []).filter((entry) => entry.status === "active" && !entry.acknowledgedAt);
+  if (!warnings.length) return "";
+
+  return `
+    <div class="warning-overlay">
+      <div class="warning-modal">
+        <p class="eyebrow">Wichtige Verwarnung</p>
+        <h2>Bitte zuerst lesen</h2>
+        <div class="warning-grid">
+          ${warnings.map((entry) => renderWarningCard(entry, false)).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderWarningAdminPanel() {
+  if (!canManagePortal()) return "";
+  const warnings = (state.data?.warnings || []).filter((entry) => entry.status === "active").slice(0, 8);
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Verwarnungen</p>
+          <h2>Aktive Hinweise an Mitglieder</h2>
+        </div>
+      </div>
+      <div class="warning-grid">
+        ${warnings.length ? warnings.map((entry) => renderWarningCard(entry, true)).join("") : renderEmptyState("Keine aktiven Verwarnungen", "Aktuell ist nichts offen.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderWarningCard(entry, managerView) {
+  return `
+    <article class="warning-card">
+      <div class="status-row">
+        <span class="pill rose">${entry.acknowledgedAt ? "Bestaetigt" : "Offen"}</span>
+        <span class="timeline-meta">${escapeHtml(formatDateTime(entry.createdAt))}</span>
+      </div>
+      <h3>${escapeHtml(entry.userName || "Verwarnung")}</h3>
+      <p>${escapeHtml(entry.reason)}</p>
+      <p class="timeline-meta">von ${escapeHtml(entry.createdByName || "Leitung")}</p>
+      <div class="card-actions">
+        ${
+          managerView
+            ? `
+              <form data-form="warning-clear" data-warning-id="${escapeHtml(entry.id)}">
+                <button type="submit" class="ghost small">Als erledigt markieren</button>
+              </form>
+            `
+            : `
+              <form data-form="warning-ack" data-warning-id="${escapeHtml(entry.id)}">
+                <button type="submit" class="small">Ich habe es gelesen</button>
+              </form>
+            `
+        }
+      </div>
+    </article>
+  `;
+}
+
+function renderCreatorLinksText(user) {
+  return (user.creatorLinks || []).map((entry) => `${entry.label} | ${entry.url}`).join("\n");
+}
+
+function renderCreatorLinkList(user, compact = false) {
+  const links = user.creatorLinks || [];
+  if (!links.length) return compact ? "" : '<p class="helper-text">Noch keine Creator-Links.</p>';
+
+  return `
+    <div class="chip-list creator-link-list">
+      ${links
+        .map(
+          (entry) => `
+            <a class="pill ${compact ? "neutral" : "sky"}" href="${escapeHtml(entry.url)}" target="_blank" rel="noreferrer">
+              ${escapeHtml(entry.label)}
+            </a>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderCreatorCard(user) {
+  return `
+    <article class="team-card creator-card">
+      <div class="profile-head">
+        ${renderUserAvatar(user, "profile-avatar")}
+        <div>
+          <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+          <p class="timeline-meta">${escapeHtml(user.creatorBlurb || user.contactNote || "Creator-Profil")}</p>
+        </div>
+      </div>
+      ${renderCreatorLinkList(user, true)}
+    </article>
+  `;
+}
+
+function renderCreatorsPanel(managerView) {
+  const community = getCommunityData();
+  const creators = community.creators || [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Creator</p>
+          <h2>Content Creator aus SONARA</h2>
+        </div>
+      </div>
+      ${managerView ? '<p class="helper-text">Creator pflegen ihre Links im Profil. Im Team-Bereich kannst du sie bei Bedarf mit bearbeiten.</p>' : ""}
+      <div class="team-grid">
+        ${creators.length ? creators.map((entry) => renderCreatorCard(entry)).join("") : renderEmptyState("Noch keine Creator", "Sobald Creator Links hinterlegen, erscheinen sie hier.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderChatWorkspace(mode) {
+  const panels = [renderChatPanel("community"), renderDirectMessagesPanel()];
+  if (mode !== "member") panels.push(renderChatPanel("staff", true));
+  return panels.join("");
+}
+
+function renderChatPanel(mode = "community", compact = false) {
+  const messages = getChatFeed(mode);
+  const title = mode === "staff" ? "Staff-Chat" : "Allgemeiner Chat";
+  const copy = mode === "staff" ? "Interne Abstimmung im Team." : "Offener Live-Chat fuer die Community.";
+  const shifts = mode === "staff" && canAccessStaffArea() ? getSortedShifts(state.data?.shifts || []) : [];
+
+  return `
+    <section class="panel ${compact ? "span-5" : "span-7"}">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">${mode === "staff" ? "Intern" : "Community"}</p>
+          <h2>${title}</h2>
+          <p class="section-copy">${copy}</p>
+        </div>
+      </div>
+
+      <form class="stack-form" data-form="chat">
+        <input type="hidden" name="channel" value="${mode}">
+        ${
+          mode === "staff"
+            ? `
+              <div class="field">
+                <label for="chatShiftRef-${mode}">Schichtbezug</label>
+                <select id="chatShiftRef-${mode}" name="relatedShiftId">
+                  <option value="">Kein Schichtbezug</option>
+                  ${shifts.map((entry) => renderShiftSelectOption(entry)).join("")}
+                </select>
+              </div>
+            `
+            : ""
+        }
+        <div class="field">
+          <label for="chatContent-${mode}">Nachricht</label>
+          <textarea id="chatContent-${mode}" name="content" placeholder="Nachricht schreiben"></textarea>
+        </div>
+        <button type="submit">Senden</button>
+      </form>
+
+      <div class="chat-list">
+        ${messages.length ? messages.map((message) => renderChatMessage(message)).join("") : renderEmptyState("Noch nichts im Chat", "Sobald jemand schreibt, erscheint es hier.")}
+      </div>
+    </section>
+  `;
+}
+
+function buildDirectMessageConversations() {
+  const messages = state.data?.directMessages || [];
+  const users = new Map((state.data?.directory || []).map((entry) => [entry.id, entry]));
+  const conversations = new Map();
+
+  for (const message of messages) {
+    const otherId = message.senderId === state.session?.id ? message.recipientId : message.senderId;
+    if (!otherId) continue;
+    if (!conversations.has(otherId)) {
+      conversations.set(otherId, {
+        otherUser: users.get(otherId) || { id: otherId, vrchatName: message.senderName || "Unbekannt" },
+        messages: []
+      });
+    }
+    conversations.get(otherId).messages.push(message);
+  }
+
+  return Array.from(conversations.values())
+    .map((entry) => ({
+      ...entry,
+      messages: entry.messages.slice().sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt)),
+      lastAt: entry.messages.reduce((latest, message) => Math.max(latest, new Date(message.createdAt).getTime()), 0)
+    }))
+    .sort((left, right) => right.lastAt - left.lastAt);
+}
+
+function renderDirectMessageBubble(message) {
+  const outgoing = message.senderId === state.session?.id;
+  return `
+    <article class="dm-bubble ${outgoing ? "outgoing" : "incoming"}">
+      <div class="chat-meta">
+        <strong>${escapeHtml(outgoing ? "Du" : message.senderName)}</strong>
+        <span>${escapeHtml(formatDateTime(message.createdAt))}</span>
+      </div>
+      <p>${escapeHtml(message.content)}</p>
+    </article>
+  `;
+}
+
+function renderDirectMessageCard(conversation) {
+  return `
+    <article class="dm-thread-card">
+      <div class="profile-head">
+        ${renderUserAvatar(conversation.otherUser, "profile-avatar")}
+        <div>
+          <h3>${escapeHtml(getPrimaryDisplayName(conversation.otherUser))}</h3>
+          <p class="timeline-meta">${escapeHtml(conversation.otherUser.discordName || "")}</p>
+        </div>
+      </div>
+      <div class="dm-message-stack">
+        ${conversation.messages.slice(-6).map((message) => renderDirectMessageBubble(message)).join("")}
+      </div>
+      <form class="stack-form" data-form="direct-message" data-recipient-id="${escapeHtml(conversation.otherUser.id)}">
+        <div class="field">
+          <label for="dmReply-${escapeHtml(conversation.otherUser.id)}">Antwort</label>
+          <textarea id="dmReply-${escapeHtml(conversation.otherUser.id)}" name="content" placeholder="Direktnachricht schreiben"></textarea>
+        </div>
+        <button type="submit">Senden</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderDirectMessagesPanel() {
+  const recipients = (state.data?.directory || []).filter((entry) => entry.id !== state.session?.id);
+  const conversations = buildDirectMessageConversations();
+
+  return `
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Direktnachrichten</p>
+          <h2>Private Nachrichten</h2>
+        </div>
+      </div>
+
+      <form class="stack-form" data-form="direct-message">
+        <div class="field">
+          <label for="dmRecipient">An</label>
+          <select id="dmRecipient" name="recipientId" required>
+            <option value="">Person auswaehlen</option>
+            ${recipients.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(getPrimaryDisplayName(entry))}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label for="dmContent">Nachricht</label>
+          <textarea id="dmContent" name="content" placeholder="Private Nachricht"></textarea>
+        </div>
+        <button type="submit">Nachricht senden</button>
+      </form>
+
+      <div class="dm-thread-list">
+        ${conversations.length ? conversations.map((entry) => renderDirectMessageCard(entry)).join("") : renderEmptyState("Noch keine Direktnachrichten", "Sobald du jemandem schreibst, erscheint der Verlauf hier.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderForumReply(reply) {
+  return `
+    <article class="forum-reply-card">
+      <div class="chat-meta">
+        <strong>${escapeHtml(reply.authorName)}</strong>
+        <span>${escapeHtml(formatDateTime(reply.createdAt))}</span>
+      </div>
+      <p>${escapeHtml(reply.content)}</p>
+    </article>
+  `;
+}
+
+function renderForumThreadCard(thread) {
+  return `
+    <article class="forum-thread-card">
+      <div class="status-row">
+        <span class="pill sky">${escapeHtml(thread.category || "Allgemein")}</span>
+        <span class="timeline-meta">${escapeHtml(formatDateTime(thread.createdAt))}</span>
+      </div>
+      <h3>${escapeHtml(thread.title)}</h3>
+      <p class="timeline-meta">von ${escapeHtml(thread.authorName)}</p>
+      <p>${escapeHtml(thread.content)}</p>
+      <div class="forum-replies">
+        ${(thread.replies || []).length ? thread.replies.map((reply) => renderForumReply(reply)).join("") : '<p class="helper-text">Noch keine Antworten.</p>'}
+      </div>
+      <form class="stack-form" data-form="forum-reply" data-thread-id="${escapeHtml(thread.id)}">
+        <div class="field">
+          <label for="forumReply-${escapeHtml(thread.id)}">Antwort</label>
+          <textarea id="forumReply-${escapeHtml(thread.id)}" name="content" placeholder="Antwort schreiben"></textarea>
+        </div>
+        <button type="submit">Antworten</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderForumPanel(managerView) {
+  const threads = state.data?.forumThreads || [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Forum</p>
+          <h2>Fragen, Ideen und Anfragen</h2>
+        </div>
+      </div>
+
+      <form class="stack-form" data-form="forum-thread">
+        <div class="form-grid">
+          <div class="field">
+            <label for="forumTitle">Titel</label>
+            <input id="forumTitle" name="title" type="text" required>
+          </div>
+          <div class="field">
+            <label for="forumCategory">Kategorie</label>
+            <input id="forumCategory" name="category" type="text" placeholder="${managerView ? "z. B. Event, Feedback, Hilfe" : "z. B. Hilfe, Idee, Event"}">
+          </div>
+          <div class="field span-all">
+            <label for="forumContent">Beitrag</label>
+            <textarea id="forumContent" name="content" placeholder="Dein Anliegen"></textarea>
+          </div>
+        </div>
+        <button type="submit">Thread erstellen</button>
+      </form>
+
+      <div class="forum-thread-list">
+        ${threads.length ? threads.map((thread) => renderForumThreadCard(thread)).join("") : renderEmptyState("Noch keine Threads", "Sobald jemand ein Thema erstellt, erscheint es hier.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderTeamPanelV2() {
+  const users = state.data?.users || [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Team und Mitglieder</p>
+          <h2>Accounts, Rollen und Creator-Profile</h2>
+        </div>
+        <span class="pill neutral">${escapeHtml(String(users.length))} Accounts</span>
+      </div>
+
+      ${
+        canManageUsers()
+          ? `
+            <form class="stack-form" data-form="admin-user-create">
+              <div class="form-grid">
+                <div class="field">
+                  <label for="newVrchatName">VRChat-Name</label>
+                  <input id="newVrchatName" name="vrchatName" type="text" required>
+                </div>
+                <div class="field">
+                  <label for="newDiscordName">Discord-Name</label>
+                  <input id="newDiscordName" name="discordName" type="text" required>
+                </div>
+                <div class="field">
+                  <label for="newRole">Rolle</label>
+                  <select id="newRole" name="role">${buildRoleOptions("member")}</select>
+                </div>
+                <div class="field">
+                  <label for="newAvatarFile">Profilbild</label>
+                  <input id="newAvatarFile" name="avatarFile" type="file" accept="image/*">
+                </div>
+                <div class="field">
+                  <label for="newPassword">Startpasswort</label>
+                  <input id="newPassword" name="password" type="password" required>
+                </div>
+                <div class="field">
+                  <label for="newCreatorVisible">Im Creator-Bereich zeigen</label>
+                  <input id="newCreatorVisible" name="creatorVisible" type="checkbox">
+                </div>
+                <div class="field span-all">
+                  <label for="newBio">Kurzprofil</label>
+                  <textarea id="newBio" name="bio"></textarea>
+                </div>
+                <div class="field span-all">
+                  <label for="newContactNote">Kontakt / Hinweise</label>
+                  <textarea id="newContactNote" name="contactNote" placeholder="Discord-Server, Kontaktinfo oder kurze Hinweise"></textarea>
+                </div>
+                <div class="field">
+                  <label for="newCreatorBlurb">Creator-Text</label>
+                  <input id="newCreatorBlurb" name="creatorBlurb" type="text" placeholder="Kurztext fuer Creator-Bereich">
+                </div>
+                <div class="field span-all">
+                  <label for="newCreatorLinks">Creator-Links</label>
+                  <textarea id="newCreatorLinks" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...&#10;Spotify | https://..."></textarea>
+                </div>
+              </div>
+              <button type="submit">Account anlegen</button>
+            </form>
+          `
+          : ""
+      }
+
+      <div class="wide-team-grid">
+        ${users
+          .map((user) => {
+            const shiftCount = (state.data?.shifts || []).filter((entry) => entry.memberId === user.id).length;
+            const requestCount = (state.data?.requests || []).filter((entry) => entry.userId === user.id && entry.status !== "beruecksichtigt").length;
+
+            return `
+              <article class="request-card team-user-card">
+                <div class="status-row">
+                  <span class="pill ${user.role === "admin" ? "amber" : user.role === "planner" ? "sky" : user.role === "moderator" ? "teal" : "neutral"}">${escapeHtml(ROLE_LABELS[user.role])}</span>
+                  <span class="timeline-meta">${escapeHtml(String(shiftCount))} Schichten | ${escapeHtml(String(requestCount))} offen</span>
+                </div>
+                <div class="profile-head">
+                  ${renderUserAvatar(user, "profile-avatar")}
+                  <div>
+                    <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+                    <p class="timeline-meta">Discord: ${escapeHtml(user.discordName || "-")}</p>
+                    ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
+                    ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
+                    ${renderCreatorLinkList(user, true)}
+                  </div>
+                </div>
+
+                <form data-form="user-update" data-user-id="${escapeHtml(user.id)}">
+                  <div class="form-grid">
+                    <div class="field">
+                      <label for="vrchat-${escapeHtml(user.id)}">VRChat-Name</label>
+                      <input id="vrchat-${escapeHtml(user.id)}" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}" required>
+                    </div>
+                    <div class="field">
+                      <label for="discord-${escapeHtml(user.id)}">Discord-Name</label>
+                      <input id="discord-${escapeHtml(user.id)}" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
+                    </div>
+                    <div class="field">
+                      <label for="role-${escapeHtml(user.id)}">Rolle</label>
+                      <select id="role-${escapeHtml(user.id)}" name="role">${buildRoleOptions(user.role)}</select>
+                    </div>
+                    <div class="field">
+                      <label for="avatar-${escapeHtml(user.id)}">Profilbild</label>
+                      <input id="avatar-${escapeHtml(user.id)}" name="avatarFile" type="file" accept="image/*">
+                    </div>
+                    <div class="field">
+                      <label for="password-${escapeHtml(user.id)}">Neues Passwort</label>
+                      <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen = behalten">
+                    </div>
+                    <div class="field">
+                      <label for="creatorVisible-${escapeHtml(user.id)}">Im Creator-Bereich zeigen</label>
+                      <input id="creatorVisible-${escapeHtml(user.id)}" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
+                    </div>
+                    <div class="field span-all">
+                      <label for="bio-${escapeHtml(user.id)}">Kurzprofil</label>
+                      <textarea id="bio-${escapeHtml(user.id)}" name="bio">${escapeHtml(user.bio || "")}</textarea>
+                    </div>
+                    <div class="field span-all">
+                      <label for="contact-${escapeHtml(user.id)}">Kontakt / Hinweise</label>
+                      <textarea id="contact-${escapeHtml(user.id)}" name="contactNote">${escapeHtml(user.contactNote || "")}</textarea>
+                    </div>
+                    <div class="field">
+                      <label for="creatorBlurb-${escapeHtml(user.id)}">Creator-Text</label>
+                      <input id="creatorBlurb-${escapeHtml(user.id)}" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}">
+                    </div>
+                    <div class="field span-all">
+                      <label for="creatorLinks-${escapeHtml(user.id)}">Creator-Links</label>
+                      <textarea id="creatorLinks-${escapeHtml(user.id)}" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
+                    </div>
+                  </div>
+                  <div class="card-actions">
+                    <button type="submit" class="ghost small">Speichern</button>
+                    ${
+                      user.username !== "admin" && user.id !== state.session?.id
+                        ? `<button type="button" class="danger small" data-action="delete-user" data-user-id="${escapeHtml(user.id)}">Loeschen</button>`
+                        : ""
+                    }
+                  </div>
+                </form>
+
+                ${
+                  user.id !== state.session?.id
+                    ? `
+                      <form class="stack-form" data-form="warning-create" data-user-id="${escapeHtml(user.id)}">
+                        <div class="field">
+                          <label for="warning-${escapeHtml(user.id)}">Verwarnung an ${escapeHtml(getPrimaryDisplayName(user))}</label>
+                          <textarea id="warning-${escapeHtml(user.id)}" name="reason" placeholder="Begruendung"></textarea>
+                        </div>
+                        <button type="submit" class="ghost small">Verwarnung senden</button>
+                      </form>
+                    `
+                    : ""
+                }
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderProfilePanel(managerView) {
+  const user = state.session;
+
+  return `
+    <section class="panel ${managerView ? "span-12" : "span-12"}">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Profil</p>
+          <h2>Dein Community-Profil</h2>
+        </div>
+      </div>
+
+      <div class="profile-panel">
+        <div class="profile-preview">
+          ${renderUserAvatar(user, "hero-avatar")}
+          <div>
+            <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+            <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
+            ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
+            ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
+            ${renderCreatorLinkList(user, true)}
+          </div>
+        </div>
+
+        <form class="stack-form" data-form="profile-update">
+          <div class="form-grid">
+            <div class="field">
+              <label for="profileVrchatName">VRChat-Name</label>
+              <input id="profileVrchatName" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}" required>
+            </div>
+            <div class="field">
+              <label for="profileDiscordName">Discord-Name</label>
+              <input id="profileDiscordName" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
+            </div>
+            <div class="field">
+              <label for="profileAvatarFile">Profilbild</label>
+              <input id="profileAvatarFile" name="avatarFile" type="file" accept="image/*">
+            </div>
+            <div class="field">
+              <label for="profilePassword">Neues Passwort</label>
+              <input id="profilePassword" name="password" type="password" placeholder="Leer lassen = behalten">
+            </div>
+            <div class="field span-all">
+              <label for="profileBio">Kurzprofil</label>
+              <textarea id="profileBio" name="bio">${escapeHtml(user.bio || "")}</textarea>
+            </div>
+            <div class="field span-all">
+              <label for="profileContactNote">Kontakt / Hinweise</label>
+              <textarea id="profileContactNote" name="contactNote" placeholder="Discord-Server, kurze Erreichbarkeit oder Info">${escapeHtml(user.contactNote || "")}</textarea>
+            </div>
+            <div class="field">
+              <label for="profileCreatorBlurb">Creator-Text</label>
+              <input id="profileCreatorBlurb" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}" placeholder="z. B. Musik, Clips, Streams">
+            </div>
+            <div class="field">
+              <label for="profileCreatorVisible">Im Creator-Bereich zeigen</label>
+              <input id="profileCreatorVisible" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
+            </div>
+            <div class="field span-all">
+              <label for="profileCreatorLinks">Creator-Links</label>
+              <textarea id="profileCreatorLinks" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...&#10;Spotify | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
+            </div>
+          </div>
+          <button type="submit">Profil speichern</button>
+        </form>
+      </div>
+    </section>
+  `;
+}
+
 function syncChatStream() {
   if (!state.session) {
     closeChatStream();
@@ -3552,4 +4512,289 @@ function buildRoleOptions(selectedRole) {
 function renderShiftSelectOption(shift) {
   const label = `${formatDate(shift.date)} | ${formatShiftWindow(shift)} | ${shift.shiftType} | ${shift.world}${shift.memberName ? ` | ${shift.memberName}` : ""}`;
   return `<option value="${escapeHtml(shift.id)}">${escapeHtml(label)}</option>`;
+}
+
+function renderPublicPortal() {
+  const community = getCommunityData();
+  const stats = community.stats || {};
+  const creators = (community.creators || []).slice(0, 3);
+
+  return `
+    <div class="app-shell">
+      ${renderSonaraHero({
+        eyebrow: "SONARA Community Portal",
+        title: "Community, Team und Creator an einem Ort",
+        intro: "News, Events, Creator-Links und der Mitgliederbereich liegen hier kompakt zusammen.",
+        chips: [`${stats.members || 0} Mitglieder`, `${stats.creators || 0} Creator`, `${(community.events || []).length} Events`]
+      })}
+
+      ${renderFlash()}
+
+      <div class="auth-layout public-grid">
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Portal</p>
+              <h2>Das Wichtigste zuerst</h2>
+            </div>
+          </div>
+          <div class="feature-grid">
+            <article class="feature-card">
+              <h3>News</h3>
+              <p>Aktuelle Hinweise und Event-Infos.</p>
+            </article>
+            <article class="feature-card">
+              <h3>Community</h3>
+              <p>Regeln, Team, Creator und Kontaktwege.</p>
+            </article>
+            <article class="feature-card">
+              <h3>Mitgliederbereich</h3>
+              <p>Profil, Forum, Direktnachrichten und Chat.</p>
+            </article>
+            <article class="feature-card">
+              <h3>Staff</h3>
+              <p>Schichten, Zeiten und interne Abstimmung.</p>
+            </article>
+          </div>
+
+          ${
+            creators.length
+              ? `
+                <div class="stack-list compact-stack">
+                  <h3>Creator im Fokus</h3>
+                  <div class="team-grid">
+                    ${creators.map((entry) => renderCreatorCard(entry)).join("")}
+                  </div>
+                </div>
+              `
+              : ""
+          }
+        </section>
+
+        <div class="auth-stack public-auth-stack">
+          <form class="panel auth-card" data-form="login">
+            <div>
+              <p class="eyebrow">Login</p>
+              <h3>Einloggen</h3>
+            </div>
+            <div class="auth-fieldset">
+              <div class="field">
+                <label for="loginIdentifier">VRChat-Name oder Discord-Name</label>
+                <input id="loginIdentifier" name="identifier" type="text" autocomplete="username" required>
+              </div>
+              <div class="field">
+                <label for="loginPassword">Passwort</label>
+                <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+              </div>
+            </div>
+            <button type="submit">Einloggen</button>
+          </form>
+
+          <form class="panel auth-card" data-form="register">
+            <div>
+              <p class="eyebrow">Registrierung</p>
+              <h3>Konto anlegen</h3>
+            </div>
+            <div class="auth-fieldset">
+              <div class="field">
+                <label for="registerVrchatName">VRChat-Name</label>
+                <input id="registerVrchatName" name="vrchatName" type="text" required>
+              </div>
+              <div class="field">
+                <label for="registerDiscordName">Discord-Name</label>
+                <input id="registerDiscordName" name="discordName" type="text" required>
+              </div>
+              <div class="field">
+                <label for="registerAvatarFile">Profilbild</label>
+                <input id="registerAvatarFile" name="avatarFile" type="file" accept="image/*">
+              </div>
+              <div class="field span-all">
+                <label for="registerBio">Kurzprofil</label>
+                <textarea id="registerBio" name="bio" placeholder="Kurz und knapp"></textarea>
+              </div>
+              <div class="field">
+                <label for="registerPassword">Passwort</label>
+                <input id="registerPassword" name="password" type="password" required>
+              </div>
+              <div class="field">
+                <label for="registerConfirmPassword">Passwort bestaetigen</label>
+                <input id="registerConfirmPassword" name="confirmPassword" type="password" required>
+              </div>
+            </div>
+            <button type="submit">Zugang erstellen</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderDashboard() {
+  const user = state.session;
+  const manager = canManagePortal();
+  const staff = canAccessStaffArea();
+  const activeTab = normalizeActiveTab(state.ui.activeTab);
+
+  return `
+    ${renderWarningOverlay()}
+    <div class="app-shell">
+      ${renderSonaraHero({
+        eyebrow: manager ? "Leitung" : staff ? "Staff Portal" : "Mitgliederbereich",
+        title: `Willkommen ${getPrimaryDisplayName(user)}`,
+        intro: manager ? "Community, Team und Staff laufen hier zusammen." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
+        chips: [ROLE_LABELS[user.role] || user.role, user.vrchatName || "", user.discordName || ""].filter(Boolean)
+      })}
+      <div class="dashboard-shell">
+        ${renderFlash()}
+        <section class="panel toolbar">
+          <div class="toolbar-user">
+            ${renderUserAvatar(user, "toolbar-avatar")}
+            <div>
+              <p class="eyebrow">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</p>
+              <h2>${escapeHtml(getPrimaryDisplayName(user))}</h2>
+            </div>
+          </div>
+          <div class="toolbar-actions">
+            ${canManageUsers() ? '<button type="button" class="ghost small" data-action="reset-demo">Demo wiederherstellen</button>' : ""}
+            <button type="button" class="ghost small" data-action="logout">Abmelden</button>
+          </div>
+        </section>
+        ${renderStatsStrip()}
+        ${renderDashboardTabs(activeTab)}
+        <div class="dashboard-grid focused-grid">
+          ${manager ? renderManagerDashboard(activeTab) : staff ? renderModeratorDashboard(activeTab) : renderMemberDashboard(activeTab)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderDashboardTabs(activeTab) {
+  const common = [
+    { id: "overview", label: "Dashboard" },
+    { id: "community", label: "Community" },
+    { id: "events", label: "Events" },
+    { id: "news", label: "News" },
+    { id: "creators", label: "Creator" },
+    { id: "forum", label: "Forum" },
+    { id: "chat", label: "Chat" },
+    { id: "profile", label: "Profil" }
+  ];
+
+  let tabs = common;
+  if (canManagePortal()) {
+    tabs = [...common, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }, { id: "settings", label: "Einstellungen" }];
+  } else if (canAccessStaffArea()) {
+    tabs = [...common, { id: "schedule", label: "Meine Schichten" }, { id: "feedback", label: "Feedback" }, { id: "time", label: "Zeiten" }];
+  } else {
+    tabs = [...common, { id: "feedback", label: "Feedback" }];
+  }
+
+  return `
+    <nav class="panel tab-bar" aria-label="Hauptbereiche">
+      ${tabs
+        .map(
+          (tab) => `
+            <button type="button" class="tab-chip ${tab.id === activeTab ? "active" : ""}" data-action="set-tab" data-tab="${tab.id}">
+              ${escapeHtml(tab.label)}
+            </button>
+          `
+        )
+        .join("")}
+    </nav>
+  `;
+}
+
+function renderManagerDashboard(activeTab) {
+  switch (activeTab) {
+    case "community":
+      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "events":
+      return renderEventsPanel();
+    case "news":
+      return renderNewsPanel(true);
+    case "creators":
+      return renderCreatorsPanel(true);
+    case "forum":
+      return renderForumPanel(true);
+    case "feedback":
+      return renderFeedbackAdminPanel();
+    case "planning":
+      return [renderPlannerPanel(), renderSwapPanel(true), renderRequestAdminPanel()].join("");
+    case "team":
+      return [renderWarningAdminPanel(), renderTeamPanelV2()].join("");
+    case "chat":
+      return renderChatWorkspace("manager");
+    case "time":
+      return renderAttendancePanel(true);
+    case "profile":
+      return renderProfilePanel(true);
+    case "settings":
+      return [renderSettingsPanel(), renderDiscordPanel(), renderVrchatAnalyticsPanel()].join("");
+    case "overview":
+    default:
+      return [renderNotificationsPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
+  }
+}
+
+function renderModeratorDashboard(activeTab) {
+  switch (activeTab) {
+    case "community":
+      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "events":
+      return renderEventsPanel();
+    case "news":
+      return renderNewsPanel(false);
+    case "creators":
+      return renderCreatorsPanel(false);
+    case "forum":
+      return renderForumPanel(false);
+    case "schedule":
+      return [renderMySchedulePanel(), renderSwapPanel(false)].join("");
+    case "feedback":
+      return renderFeedbackMemberPanel();
+    case "chat":
+      return renderChatWorkspace("staff");
+    case "time":
+      return renderAttendancePanel(false);
+    case "profile":
+      return renderProfilePanel(false);
+    case "overview":
+    default:
+      return [renderNotificationsPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
+  }
+}
+
+function renderMemberDashboard(activeTab) {
+  switch (activeTab) {
+    case "community":
+      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "events":
+      return renderEventsPanel();
+    case "news":
+      return renderNewsPanel(false);
+    case "creators":
+      return renderCreatorsPanel(false);
+    case "forum":
+      return renderForumPanel(false);
+    case "feedback":
+      return renderFeedbackMemberPanel();
+    case "chat":
+      return renderChatWorkspace("member");
+    case "profile":
+      return renderProfilePanel(false);
+    case "overview":
+    default:
+      return [renderNotificationsPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderCommunityOverviewPanel()].join("");
+  }
+}
+
+function normalizeActiveTab(tab) {
+  const allowed = canManagePortal()
+    ? ["overview", "community", "events", "news", "creators", "forum", "feedback", "planning", "team", "chat", "time", "profile", "settings"]
+    : canAccessStaffArea()
+      ? ["overview", "community", "events", "news", "creators", "forum", "schedule", "feedback", "chat", "time", "profile"]
+      : ["overview", "community", "events", "news", "creators", "forum", "feedback", "chat", "profile"];
+
+  return allowed.includes(tab) ? tab : "overview";
 }
