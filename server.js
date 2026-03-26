@@ -2783,6 +2783,49 @@ function validateChatPayload(body, user, store) {
   return { content, relatedShiftId, channel };
 }
 
+function normalizeSlots(source, fallback = []) {
+  const raw = Array.isArray(source) && source.length ? source : Array.isArray(fallback) ? fallback : [];
+
+  return raw
+    .map((entry, index) => ({
+      id: String(entry?.id || `slot-${index + 1}`).trim(),
+      name: String(entry?.name || entry?.task || "").trim(),
+      task: String(entry?.task || entry?.name || "").trim()
+    }))
+    .filter((entry) => entry.id && entry.name)
+    .map((entry) => ({
+      ...entry,
+      task: entry.task || entry.name
+    }));
+}
+
+function normalizeDiscordStatus(source) {
+  return {
+    lastAttemptAt: isIsoDate(source?.lastAttemptAt) ? source.lastAttemptAt : discordState.lastAttemptAt || "",
+    lastSuccessAt: isIsoDate(source?.lastSuccessAt) ? source.lastSuccessAt : discordState.lastSuccessAt || "",
+    lastError: String(source?.lastError || discordState.lastError || "").trim(),
+    lastStatusCode: Number(source?.lastStatusCode || discordState.lastStatusCode || 0)
+  };
+}
+
+function normalizeVrchatAnalytics(source) {
+  if (!source || typeof source !== "object") {
+    return {};
+  }
+
+  const next = { ...source };
+  if (next.lastSyncAt && !isIsoDate(next.lastSyncAt)) {
+    delete next.lastSyncAt;
+  }
+  if (next.lastSuccessAt && !isIsoDate(next.lastSuccessAt)) {
+    delete next.lastSuccessAt;
+  }
+  if (next.lastErrorAt && !isIsoDate(next.lastErrorAt)) {
+    delete next.lastErrorAt;
+  }
+  return next;
+}
+
 function normalizeExternalLink(value) {
   const normalized = String(value || "").trim();
   if (!normalized) return "";
@@ -3061,17 +3104,19 @@ function normalizeStore(store) {
   const slots = normalizeSlots(store?.slots, defaults.slots);
   const users = normalizeUsers(store?.users || [], slots.map((entry) => entry.name));
   const settings = normalizeSettings(store?.settings || {}, slots);
+  const rawShifts = Array.isArray(store?.shifts) ? store.shifts : migrateLegacyPlanning(store || defaults, users, settings);
+  const shifts = normalizeShifts(rawShifts, users);
 
   return {
     slots,
     users,
     settings,
-    shifts: normalizeShifts(Array.isArray(store?.shifts) ? store.shifts : migrateLegacyPlanning(store || defaults, users, settings), users),
-    requests: normalizeRequests(store?.requests, users),
-    announcements: normalizeAnnouncements(store?.announcements, users),
-    chatMessages: normalizeChatMessages(store?.chatMessages, users, Array.isArray(store?.shifts) ? normalizeShifts(store.shifts, users) : []),
-    timeEntries: normalizeTimeEntries(store?.timeEntries, users, Array.isArray(store?.shifts) ? normalizeShifts(store.shifts, users) : []),
-    swapRequests: normalizeSwapRequests(store?.swapRequests, users, Array.isArray(store?.shifts) ? normalizeShifts(store.shifts, users) : []),
+    shifts,
+    requests: Array.isArray(store?.requests) ? normalizeRequests(store.requests, users) : [],
+    announcements: Array.isArray(store?.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
+    chatMessages: Array.isArray(store?.chatMessages) ? normalizeChatMessages(store.chatMessages, users, shifts) : [],
+    timeEntries: Array.isArray(store?.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : [],
+    swapRequests: Array.isArray(store?.swapRequests) ? normalizeSwapRequests(store.swapRequests, users, shifts) : [],
     discordStatus: normalizeDiscordStatus(store?.discordStatus),
     vrchatAnalytics: normalizeVrchatAnalytics(store?.vrchatAnalytics),
     directMessages: Array.isArray(store?.directMessages) ? normalizeDirectMessages(store.directMessages, users) : [],
