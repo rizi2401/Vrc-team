@@ -5157,3 +5157,402 @@ function normalizeActiveTab(tab) {
 
   return allowed.includes(tab) ? tab : "overview";
 }
+
+function getAvatarDraftStore() {
+  if (!state.ui.avatarDrafts) state.ui.avatarDrafts = {};
+  return state.ui.avatarDrafts;
+}
+
+function getAvatarDraftKey(source) {
+  const form = source?.tagName === "FORM" ? source : source?.closest?.("form");
+  if (!form) return "";
+  return `${form.dataset.form || "form"}:${form.dataset.userId || ""}`;
+}
+
+function getAvatarDraftInfo(key) {
+  return key ? getAvatarDraftStore()[key] || null : null;
+}
+
+function clearAvatarDraft(key) {
+  if (!key || !state.ui.avatarDrafts) return;
+  delete state.ui.avatarDrafts[key];
+}
+
+function renderAvatarDraftHint(draftKey, hasSavedAvatar) {
+  const draft = getAvatarDraftInfo(draftKey);
+  if (draft?.fileName) {
+    return `<p class="helper-text file-hint">Ausgewaehlt: ${escapeHtml(draft.fileName)}</p>`;
+  }
+  if (hasSavedAvatar) {
+    return '<p class="helper-text file-hint">Aktuelles Profilbild ist gespeichert.</p>';
+  }
+  return '<p class="helper-text file-hint">PNG, JPG, WebP oder GIF bis 1,8 MB.</p>';
+}
+
+async function captureAvatarDraft(fileInput) {
+  const draftKey = getAvatarDraftKey(fileInput);
+  if (!draftKey) return;
+
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    clearAvatarDraft(draftKey);
+    render();
+    return;
+  }
+
+  try {
+    const dataUrl = await readImageFileInput(fileInput);
+    getAvatarDraftStore()[draftKey] = {
+      dataUrl,
+      fileName: String(file.name || "Bild")
+    };
+    setFlash(`Bild ausgewaehlt: ${file.name}`, "info");
+  } catch (error) {
+    clearAvatarDraft(draftKey);
+    fileInput.value = "";
+    setFlash(error.message, "danger");
+  }
+
+  render();
+}
+
+async function performAction(callback, successMessage = "", successTone = "success") {
+  let succeeded = false;
+
+  try {
+    const payload = await callback();
+    if (payload?.session || payload?.data) applyPayload(payload);
+    if (successMessage) setFlash(successMessage, successTone);
+    if (state.session?.role === "admin" && !state.vrchatOverview) {
+      void refreshVrchatOverview(false);
+    }
+    succeeded = true;
+  } catch (error) {
+    if (error.status === 401) {
+      state.session = null;
+      state.data = null;
+      setFlash("Bitte erneut anmelden.", "warning");
+    } else {
+      setFlash(error.message, "danger");
+    }
+  }
+
+  render();
+  return succeeded;
+}
+
+async function buildProfilePayload(form) {
+  const formData = new FormData(form);
+  const draftKey = getAvatarDraftKey(form);
+  const draft = getAvatarDraftInfo(draftKey);
+  const payload = {
+    vrchatName: formData.get("vrchatName"),
+    discordName: formData.get("discordName"),
+    bio: formData.get("bio"),
+    contactNote: formData.get("contactNote"),
+    creatorBlurb: formData.get("creatorBlurb"),
+    creatorLinks: formData.get("creatorLinks"),
+    creatorVisible: formData.get("creatorVisible") === "on"
+  };
+
+  if (draft?.dataUrl) {
+    payload.avatarUrl = draft.dataUrl;
+  } else {
+    const avatarData = await readImageFileInput(form.querySelector('input[name="avatarFile"]'));
+    if (avatarData) payload.avatarUrl = avatarData;
+  }
+
+  return { formData, payload, draftKey };
+}
+
+async function handleChange(event) {
+  const fileInput = event.target.closest('input[type="file"][name="avatarFile"]');
+  if (fileInput) {
+    await captureAvatarDraft(fileInput);
+    return;
+  }
+
+  const changeElement = event.target.closest("[data-change]");
+  if (!changeElement) return;
+
+  switch (changeElement.dataset.change) {
+    case "shift-preset":
+      applyShiftPreset(changeElement);
+      break;
+
+    default:
+      break;
+  }
+}
+
+function renderProfilePanel(managerView) {
+  const user = state.session;
+  const draftKey = "profile-update:";
+
+  return `
+    <section class="panel ${managerView ? "span-12" : "span-12"}">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Profil</p>
+          <h2>Dein Community-Profil</h2>
+        </div>
+      </div>
+
+      <div class="profile-panel">
+        <div class="profile-preview">
+          ${renderUserAvatar(user, "hero-avatar")}
+          <div>
+            <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+            <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
+            ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
+            ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
+            ${renderCreatorLinkList(user, true)}
+          </div>
+        </div>
+
+        <form class="stack-form" data-form="profile-update">
+          <div class="form-grid">
+            <div class="field">
+              <label for="profileVrchatName">VRChat-Name</label>
+              <input id="profileVrchatName" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}" required>
+            </div>
+            <div class="field">
+              <label for="profileDiscordName">Discord-Name</label>
+              <input id="profileDiscordName" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
+            </div>
+            <div class="field">
+              <label for="profileAvatarFile">Profilbild</label>
+              <input id="profileAvatarFile" name="avatarFile" type="file" accept="image/*">
+              ${renderAvatarDraftHint(draftKey, Boolean(user.avatarUrl))}
+            </div>
+            <div class="field">
+              <label for="profilePassword">Neues Passwort</label>
+              <input id="profilePassword" name="password" type="password" placeholder="Leer lassen = behalten">
+            </div>
+            <div class="field span-all">
+              <label for="profileBio">Kurzprofil</label>
+              <textarea id="profileBio" name="bio">${escapeHtml(user.bio || "")}</textarea>
+            </div>
+            <div class="field span-all">
+              <label for="profileContactNote">Kontakt / Hinweise</label>
+              <textarea id="profileContactNote" name="contactNote" placeholder="Discord-Server, kurze Erreichbarkeit oder Info">${escapeHtml(user.contactNote || "")}</textarea>
+            </div>
+            <div class="field">
+              <label for="profileCreatorBlurb">Creator-Text</label>
+              <input id="profileCreatorBlurb" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}" placeholder="z. B. Musik, Clips, Streams">
+            </div>
+            <div class="field">
+              <label for="profileCreatorVisible">Im Creator-Bereich zeigen</label>
+              <input id="profileCreatorVisible" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
+            </div>
+            <div class="field span-all">
+              <label for="profileCreatorLinks">Creator-Links</label>
+              <textarea id="profileCreatorLinks" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...&#10;Spotify | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
+            </div>
+          </div>
+          <button type="submit">Profil speichern</button>
+        </form>
+      </div>
+    </section>
+  `;
+}
+
+function getCommunityDirectory() {
+  const directory = state.data?.directory || state.data?.users || [];
+  return Array.isArray(directory) ? directory : [];
+}
+
+function getCreatorEntries() {
+  const baseCommunity = state.data?.community || state.publicData?.community || {};
+  const directCreators = Array.isArray(baseCommunity.creators) ? baseCommunity.creators : [];
+  if (directCreators.length) {
+    return directCreators
+      .slice()
+      .sort((left, right) => getPrimaryDisplayName(left).localeCompare(getPrimaryDisplayName(right), "de"));
+  }
+
+  return getCommunityDirectory()
+    .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
+    .slice()
+    .sort((left, right) => getPrimaryDisplayName(left).localeCompare(getPrimaryDisplayName(right), "de"));
+}
+
+function getCommunityData() {
+  const community = state.data?.community || state.publicData?.community || {};
+  const creators = getCreatorEntries();
+
+  return {
+    team: Array.isArray(community.team) ? community.team : [],
+    creators,
+    events: Array.isArray(community.events) ? community.events : [],
+    rules: Array.isArray(community.rules) ? community.rules : [],
+    faq: Array.isArray(community.faq) ? community.faq : [],
+    stats: {
+      ...(community.stats || {}),
+      creators: creators.length
+    }
+  };
+}
+
+function getChatFeed(mode = "community") {
+  if (mode === "staff") {
+    if ((state.data?.staffChatMessages || []).length) return state.data.staffChatMessages;
+    return (state.data?.chatMessages || []).filter((entry) => entry.channel === "staff");
+  }
+
+  if ((state.data?.communityChatMessages || []).length) return state.data.communityChatMessages;
+  return (state.data?.chatMessages || []).filter((entry) => entry.channel !== "staff");
+}
+
+function renderCreatorsPanel(managerView) {
+  const creators = getCreatorEntries();
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Creator</p>
+          <h2>Content Creator aus SONARA</h2>
+        </div>
+      </div>
+      ${managerView ? '<p class="helper-text">Creator pflegen ihre Links im Profil. Im Team-Bereich kannst du sie bei Bedarf mit bearbeiten.</p>' : ""}
+      <div class="team-grid">
+        ${creators.length ? creators.map((entry) => renderCreatorCard(entry)).join("") : renderEmptyState("Noch keine Creator", "Sobald Creator Profiltext oder Links hinterlegen, erscheinen sie hier.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderChatWorkspace(mode) {
+  const panels = [renderChatPanel("community"), renderDirectMessagesPanel()];
+  if (mode !== "member") panels.push(renderChatPanel("staff", true));
+  return panels.join("");
+}
+
+function renderChatPanel(mode = "community", compact = false) {
+  const staffMode = mode === "staff";
+  const availableShifts = staffMode ? getSortedShifts(state.data?.shifts || []) : [];
+  const messages = getChatFeed(mode);
+  const sectionSpan = compact ? "span-5" : staffMode ? "span-8" : "span-7";
+  const eyebrow = staffMode ? "Staff-Chat" : "Community-Chat";
+  const title = staffMode ? "Echtzeit-Chat fuer schnelle Staff-Absprachen" : "Echtzeit-Chat fuer die Community";
+  const copy = staffMode
+    ? "Neue Nachrichten erscheinen automatisch, ohne dass jemand neu laden muss."
+    : "Mitglieder koennen sich hier direkt im Portal austauschen, ohne auf Discord wechseln zu muessen.";
+  const placeholder = staffMode
+    ? "z. B. Wer kann heute spaeter uebernehmen?"
+    : "z. B. Wer ist heute Abend beim Event dabei?";
+  const emptyTitle = staffMode ? "Noch kein Staff-Chat" : "Noch kein Community-Chat";
+  const emptyText = staffMode
+    ? "Die erste Nachricht erscheint sofort fuer alle Staff-Mitglieder online."
+    : "Die erste Nachricht erscheint sofort fuer alle Mitglieder online.";
+
+  return `
+    <section class="panel ${sectionSpan}">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">${escapeHtml(eyebrow)}</p>
+          <h2>${escapeHtml(title)}</h2>
+          <p class="section-copy">${escapeHtml(copy)}</p>
+        </div>
+        <span class="pill ${state.ui.liveChatConnected ? "success" : "amber"}">${state.ui.liveChatConnected ? "Live verbunden" : "Verbindung wird aufgebaut"}</span>
+      </div>
+
+      <form class="stack-form" data-form="chat">
+        <input type="hidden" name="channel" value="${escapeHtml(mode)}">
+        <div class="form-grid">
+          ${
+            staffMode
+              ? `
+                <div class="field">
+                  <label for="chatShift-${mode}">Bezug zu einer Schicht</label>
+                  <select id="chatShift-${mode}" name="relatedShiftId">
+                    <option value="">Keine konkrete Schicht</option>
+                    ${availableShifts.map((shift) => renderShiftSelectOption(shift)).join("")}
+                  </select>
+                </div>
+              `
+              : ""
+          }
+          <div class="field ${staffMode ? "" : "span-all"}">
+            <label for="chatMessage-${mode}">${staffMode ? "Nachricht" : "Beitrag"}</label>
+            <textarea id="chatMessage-${mode}" name="content" placeholder="${escapeHtml(placeholder)}" required></textarea>
+          </div>
+        </div>
+        <button type="submit">${staffMode ? "Im Staff-Chat posten" : "In Community posten"}</button>
+      </form>
+
+      <div class="stack-list chat-list">
+        ${messages.length ? messages.map((message) => renderChatMessage(message)).join("") : renderEmptyState(emptyTitle, emptyText)}
+      </div>
+    </section>
+  `;
+}
+
+function renderDirectMessagesPanel() {
+  const recipients = getCommunityDirectory()
+    .filter((entry) => entry.id !== state.session?.id)
+    .slice()
+    .sort((left, right) => getPrimaryDisplayName(left).localeCompare(getPrimaryDisplayName(right), "de"));
+  const conversations = buildDirectMessageConversations();
+
+  return `
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Direktnachrichten</p>
+          <h2>Private Nachrichten</h2>
+        </div>
+      </div>
+
+      <form class="stack-form" data-form="direct-message">
+        <div class="field">
+          <label for="dmRecipient">An</label>
+          <select id="dmRecipient" name="recipientId" ${recipients.length ? "required" : "disabled"}>
+            <option value="">${recipients.length ? "Person auswaehlen" : "Noch keine Empfaenger verfuegbar"}</option>
+            ${recipients.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(getPrimaryDisplayName(entry))}${entry.discordName ? ` | ${escapeHtml(entry.discordName)}` : ""}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label for="dmContent">Nachricht</label>
+          <textarea id="dmContent" name="content" placeholder="Private Nachricht" ${recipients.length ? "required" : "disabled"}></textarea>
+        </div>
+        <button type="submit" ${recipients.length ? "" : "disabled"}>Nachricht senden</button>
+      </form>
+
+      <div class="dm-thread-list">
+        ${conversations.length ? conversations.map((entry) => renderDirectMessageCard(entry)).join("") : renderEmptyState("Noch keine Direktnachrichten", recipients.length ? "Sobald du jemandem schreibst, erscheint der Verlauf hier." : "Sobald die Benutzerliste geladen ist, kannst du hier Leute direkt anschreiben.")}
+      </div>
+    </section>
+  `;
+}
+
+function buildDirectMessageConversations() {
+  const messages = state.data?.directMessages || [];
+  const users = new Map(getCommunityDirectory().map((entry) => [entry.id, entry]));
+  const conversations = new Map();
+
+  for (const message of messages) {
+    const otherId = message.senderId === state.session?.id ? message.recipientId : message.senderId;
+    if (!otherId) continue;
+    if (!conversations.has(otherId)) {
+      conversations.set(otherId, {
+        otherUser: users.get(otherId) || {
+          id: otherId,
+          vrchatName: message.senderId === state.session?.id ? message.recipientName : message.senderName,
+          discordName: ""
+        },
+        messages: []
+      });
+    }
+    conversations.get(otherId).messages.push(message);
+  }
+
+  return Array.from(conversations.values())
+    .map((entry) => ({
+      ...entry,
+      messages: entry.messages.slice().sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt)),
+      lastAt: entry.messages.reduce((latest, message) => Math.max(latest, new Date(message.createdAt).getTime()), 0)
+    }))
+    .sort((left, right) => right.lastAt - left.lastAt);
+}
