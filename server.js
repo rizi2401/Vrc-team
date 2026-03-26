@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const STORE_PATH = process.env.STORE_PATH ? path.resolve(process.env.STORE_PATH) : path.join(ROOT, "data", "store.json");
 const DATA_DIR = path.dirname(STORE_PATH);
+const PORTAL_STORE_KEY = "primary";
 
 const COMMUNITY_EVENTS = [
   {
@@ -85,6 +86,11 @@ const streamClients = new Set();
 let discordSendChain = Promise.resolve();
 let discordLastDispatchAt = 0;
 const DISCORD_MIN_INTERVAL_MS = 3000;
+let PortalPoolCtor = null;
+let portalPool = null;
+let portalStoreCache = null;
+let portalStoreInitPromise = null;
+let portalStorePersistChain = Promise.resolve();
 const discordState = {
   lastAttemptAt: "",
   lastSuccessAt: "",
@@ -92,7 +98,7 @@ const discordState = {
   lastStatusCode: 0
 };
 
-ensureDataStore();
+portalStoreInitPromise = initializePortalStore();
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -119,6 +125,8 @@ server.listen(PORT, HOST, () => {
 });
 
 async function handleApi(req, res, url) {
+  await ensurePortalStoreReady();
+
   if (req.method === "GET" && url.pathname === "/api/stream") {
     const auth = requireAuth(req);
     if (!auth) {
@@ -160,7 +168,11 @@ async function handleApi(req, res, url) {
       discordName: normalized.discordName,
       avatarUrl: normalized.avatarUrl,
       bio: normalized.bio,
-      passwordHash: hashPassword(normalized.password)
+      contactNote: normalized.contactNote,
+      creatorBlurb: normalized.creatorBlurb,
+      creatorLinks: normalized.creatorLinks,
+      creatorVisible: normalized.creatorVisible,
+      passwordHash: normalized.passwordHash
     };
 
     nextStore.users.push(user);
@@ -780,7 +792,11 @@ async function handleApi(req, res, url) {
       discordName: normalized.discordName,
       avatarUrl: normalized.avatarUrl,
       bio: normalized.bio,
-      passwordHash: hashPassword(normalized.password)
+      contactNote: normalized.contactNote,
+      creatorBlurb: normalized.creatorBlurb,
+      creatorLinks: normalized.creatorLinks,
+      creatorVisible: normalized.creatorVisible,
+      passwordHash: normalized.passwordHash
     });
 
     const savedStore = writeStore(nextStore);
@@ -841,22 +857,116 @@ async function handleApi(req, res, url) {
   sendJson(res, 404, { error: "API-Route nicht gefunden." });
 }
 
-function ensureDataStore() {
+function ensureFileStoreExists() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
-  let store = {};
-  if (fs.existsSync(STORE_PATH)) {
-    try {
-      store = JSON.parse(fs.readFileSync(STORE_PATH, "utf8") || "{}");
-    } catch {
-      store = {};
-    }
+  if (!fs.existsSync(STORE_PATH)) {
+    fs.writeFileSync(STORE_PATH, JSON.stringify(normalizeStore(buildDefaultStore()), null, 2));
+  }
+}
+
+function readFileStore() {
+  ensureFileStoreExists();
+
+  try {
+    return JSON.parse(fs.readFileSync(STORE_PATH, "utf8") || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function getPortalStorePool() {
+  const connectionString = String(process.env.DATABASE_URL || "").trim();
+  if (!connectionString) return null;
+
+  if (!PortalPoolCtor) {
+    ({ Pool: PortalPoolCtor } = require("pg"));
   }
 
-  const normalized = normalizeStore(store);
-  fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
+  if (!portalPool) {
+    portalPool = new PortalPoolCtor({
+      connectionString,
+      ssl: connectionString.includes("render.com") ? { rejectUnauthorized: false } : undefined
+    });
+  }
+
+  return portalPool;
+}
+
+async function initializePortalStore() {
+  const db = getPortalStorePool();
+
+  if (!db) {
+    const normalized = normalizeStore(readFileStore());
+    fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
+    portalStoreCache = normalized;
+    return;
+  }
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS portal_state_store (
+      store_key TEXT PRIMARY KEY,
+      data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  const existing = await db.query(
+    `SELECT data FROM portal_state_store WHERE store_key = $1`,
+    [PORTAL_STORE_KEY]
+  );
+
+  if (existing.rows[0]?.data) {
+    portalStoreCache = normalizeStore(existing.rows[0].data);
+    return;
+  }
+
+  const fallback = normalizeStore(readFileStore());
+  await db.query(
+    `
+      INSERT INTO portal_state_store (store_key, data, updated_at)
+      VALUES ($1, $2::jsonb, NOW())
+      ON CONFLICT (store_key) DO NOTHING
+    `,
+    [PORTAL_STORE_KEY, JSON.stringify(fallback)]
+  );
+  portalStoreCache = fallback;
+}
+
+async function ensurePortalStoreReady() {
+  if (portalStoreCache) return;
+  if (!portalStoreInitPromise) {
+    portalStoreInitPromise = initializePortalStore();
+  }
+  await portalStoreInitPromise;
+}
+
+function persistPortalStore(normalized) {
+  const db = getPortalStorePool();
+
+  if (!db) {
+    fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
+    return;
+  }
+
+  portalStorePersistChain = portalStorePersistChain
+    .then(() =>
+      db.query(
+        `
+          INSERT INTO portal_state_store (store_key, data, updated_at)
+          VALUES ($1, $2::jsonb, NOW())
+          ON CONFLICT (store_key) DO UPDATE
+          SET data = EXCLUDED.data,
+              updated_at = NOW()
+        `,
+        [PORTAL_STORE_KEY, JSON.stringify(normalized)]
+      )
+    )
+    .catch((error) => {
+      console.error("Portal store persist failed:", error);
+    });
 }
 
 function buildDefaultStore() {
@@ -1216,13 +1326,19 @@ function normalizeTimeEntries(entries, users, shifts) {
 }
 
 function readStore() {
-  return JSON.parse(fs.readFileSync(STORE_PATH, "utf8"));
+  if (!portalStoreCache) {
+    const fallback = normalizeStore(readFileStore());
+    portalStoreCache = fallback;
+  }
+
+  return structuredClone(portalStoreCache);
 }
 
 function writeStore(store) {
   const normalized = normalizeStore(store);
-  fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
-  return normalized;
+  portalStoreCache = normalized;
+  persistPortalStore(normalized);
+  return structuredClone(normalized);
 }
 
 function requireAuth(req) {
