@@ -172,8 +172,31 @@ async function runVrchatSync() {
       body: "{}"
     });
     state.vrchatOverview = payload.overview;
-    setFlash("VRChat-Daten wurden synchronisiert.", "success");
+    setFlash(payload.message || "VRChat-Daten wurden synchronisiert.", payload.ok ? "success" : "info");
   } catch (error) {
+    setFlash(error.message, "danger");
+  } finally {
+    state.vrchatLoading = false;
+    render();
+  }
+}
+
+async function submitVrchatSecurityCode(code) {
+  state.vrchatLoading = true;
+  render();
+
+  try {
+    const payload = await api("/api/admin/vrchat/verify-code", {
+      method: "POST",
+      body: JSON.stringify({ code })
+    });
+    state.vrchatOverview = payload.overview;
+    setFlash(payload.message || "VRChat-Sicherheitscode wurde bestätigt.", "success");
+  } catch (error) {
+    try {
+      const payload = await api("/api/admin/vrchat/overview");
+      state.vrchatOverview = payload.overview;
+    } catch {}
     setFlash(error.message, "danger");
   } finally {
     state.vrchatLoading = false;
@@ -1477,6 +1500,11 @@ async function buildProfilePayload(form) {
     payload.blockReason = formData.get("blockReason");
   }
 
+  if (form.querySelector('[name="blocked"]')) {
+    payload.blocked = formData.get("blocked") === "on";
+    payload.blockReason = formData.get("blockReason");
+  }
+
   const avatarData = await readImageFileInput(form.querySelector('input[name="avatarFile"]'));
   if (avatarData) payload.avatarUrl = avatarData;
 
@@ -1638,6 +1666,12 @@ async function handleSubmit(event) {
           }),
         "Neue Info wurde veroeffentlicht."
       );
+      break;
+    }
+
+    case "vrchat-security-code": {
+      const formData = new FormData(form);
+      await submitVrchatSecurityCode(formData.get("code"));
       break;
     }
 
@@ -2277,6 +2311,9 @@ function renderDiscordPanel() {
 function renderVrchatAnalyticsPanel() {
   const overview = state.vrchatOverview;
   const missing = overview?.missing || [];
+  const pendingAuth = overview?.pendingAuth || null;
+  const needsEmailCode = pendingAuth?.type === "emailOtp";
+  const needsLoginPlace = pendingAuth?.type === "loginPlace";
 
   return `
     <section class="panel span-8">
@@ -2305,6 +2342,19 @@ function renderVrchatAnalyticsPanel() {
 
             ${missing.length ? `<div class="flash flash-warning"><span>Fehlende Environment-Variablen: ${escapeHtml(missing.join(", "))}</span></div>` : ""}
             ${overview.sessionSavedAt ? `<div class="flash flash-info"><span>VRChat-Session gespeichert: ${escapeHtml(formatDateTime(overview.sessionSavedAt))}</span></div>` : ""}
+            ${needsEmailCode ? `
+              <div class="flash flash-warning">
+                <span>${escapeHtml(pendingAuth.message || "VRChat hat einen Sicherheitscode per E-Mail geschickt.")}</span>
+              </div>
+              <form class="stack-form compact-form" data-form="vrchat-security-code">
+                <div class="field">
+                  <label for="vrchatSecurityCode">VRChat-Sicherheitscode</label>
+                  <input id="vrchatSecurityCode" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="Code aus der VRChat-E-Mail" required>
+                </div>
+                <button type="submit" class="small" ${state.vrchatLoading ? "disabled" : ""}>Code bestätigen</button>
+              </form>
+            ` : ""}
+            ${needsLoginPlace ? `<div class="flash flash-warning"><span>${escapeHtml(pendingAuth.message || "Bitte zuerst den VRChat-Login-Ort per E-Mail-Link bestätigen und danach den Sync erneut starten.")}</span></div>` : ""}
             ${overview.lastSync?.errorMessage ? `<div class="flash flash-danger"><span>${escapeHtml(overview.lastSync.errorMessage)}</span></div>` : ""}
 
             <div class="analytics-grid">

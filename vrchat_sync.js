@@ -30,7 +30,7 @@ async function syncVrchatAnalytics() {
     const existingSession = await loadVrchatSession(config.sessionKey);
     const client = new VrchatClient(config.username, config.password, existingSession?.cookies);
     await client.ensureAuthenticated();
-    await saveVrchatSession(config.sessionKey, client.exportCookies());
+    await saveVrchatSession(config.sessionKey, client.exportCookies(), {});
 
     const group = await client.resolveGroup(config.groupLookup);
     const groupDetails = await client.getGroup(group.id);
@@ -72,7 +72,7 @@ async function syncVrchatAnalytics() {
     await upsertGroupState(normalizedGroup);
     await insertInstanceSnapshots(normalizedGroup.groupId, normalizedInstances);
     await insertAuditEvents(normalizedGroup.groupId, normalizedAuditEvents);
-    await saveVrchatSession(config.sessionKey, client.exportCookies());
+    await saveVrchatSession(config.sessionKey, client.exportCookies(), {});
 
     const summary = {
       groupId: normalizedGroup.groupId,
@@ -89,6 +89,9 @@ async function syncVrchatAnalytics() {
       overview: await getAnalyticsOverview(config)
     };
   } catch (error) {
+    if (isPendingVrchatAuthError(error)) {
+      await saveVrchatSession(config.sessionKey, error.cookies || {}, error.pendingAuth || {});
+    }
     await finishSyncRun(runId, "failed", {}, error.message);
     return {
       ok: false,
@@ -100,6 +103,60 @@ async function syncVrchatAnalytics() {
 
 async function fetchVrchatOverview() {
   return getAnalyticsOverview(getVrchatConfig());
+}
+
+async function verifyVrchatSecurityCode(code) {
+  const config = getVrchatConfig();
+  if (config.missing.length) {
+    return {
+      ok: false,
+      message: "VRChat-Konfiguration ist unvollstaendig.",
+      overview: await getAnalyticsOverview(config)
+    };
+  }
+
+  await ensureAnalyticsSchema();
+  const existingSession = await loadVrchatSession(config.sessionKey);
+  const pendingAuth = existingSession?.authState || {};
+  const normalizedCode = String(code || "").trim();
+
+  if (!normalizedCode) {
+    return {
+      ok: false,
+      message: "Bitte einen VRChat-Sicherheitscode eingeben.",
+      overview: await getAnalyticsOverview(config)
+    };
+  }
+
+  if (pendingAuth?.type !== "emailOtp") {
+    return {
+      ok: false,
+      message: "Aktuell wartet kein E-Mail-Sicherheitscode auf Bestätigung.",
+      overview: await getAnalyticsOverview(config)
+    };
+  }
+
+  try {
+    const client = new VrchatClient(config.username, config.password, existingSession?.cookies);
+    await client.verifyEmailOtp(normalizedCode);
+    await client.getCurrentUser();
+    await saveVrchatSession(config.sessionKey, client.exportCookies(), {});
+
+    return {
+      ok: true,
+      message: "VRChat-Sicherheitscode wurde bestätigt.",
+      overview: await getAnalyticsOverview(config)
+    };
+  } catch (error) {
+    if (isPendingVrchatAuthError(error)) {
+      await saveVrchatSession(config.sessionKey, error.cookies || existingSession?.cookies || {}, error.pendingAuth || pendingAuth);
+    }
+    return {
+      ok: false,
+      message: error.message,
+      overview: await getAnalyticsOverview(config)
+    };
+  }
 }
 
 function getVrchatConfig() {
@@ -137,7 +194,8 @@ class VrchatClient {
   async ensureAuthenticated() {
     if (this.cookies.size) {
       try {
-        await this.getCurrentUser();
+        const currentUser = await this.getCurrentUser();
+        this.ensureFullyVerified(currentUser);
         return;
       } catch (error) {
         if (!isAuthenticationError(error)) {
@@ -148,19 +206,32 @@ class VrchatClient {
     }
 
     await this.login();
-    await this.getCurrentUser();
+    const currentUser = await this.getCurrentUser();
+    this.ensureFullyVerified(currentUser);
   }
 
   async login() {
-    await this.request("/auth/user", {
+    const result = await this.request("/auth/user", {
       headers: {
         Authorization: `Basic ${encodeCredentials(this.username, this.password)}`
       }
     });
+    this.ensureFullyVerified(result);
+    return result;
   }
 
   async getCurrentUser() {
     return this.request("/auth/user");
+  }
+
+  async verifyEmailOtp(code) {
+    return this.request("/auth/twofactorauth/emailotp/verify", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ code: String(code || "").trim() })
+    });
   }
 
   async resolveGroup(groupLookup) {
@@ -232,6 +303,20 @@ class VrchatClient {
       const error = new Error(message);
       error.statusCode = response.status;
       error.responseBody = payload;
+      error.cookies = this.exportCookies();
+      const pendingAuth = detectPendingAuthFromPayload(payload, message);
+      if (pendingAuth) {
+        error.pendingAuth = pendingAuth;
+      }
+      throw error;
+    }
+    const pendingAuth = detectPendingAuthFromPayload(payload, "");
+    if (pendingAuth) {
+      const error = new Error(pendingAuth.message);
+      error.statusCode = 401;
+      error.responseBody = payload;
+      error.cookies = this.exportCookies();
+      error.pendingAuth = pendingAuth;
       throw error;
     }
     return payload;
@@ -260,6 +345,18 @@ class VrchatClient {
 
   exportCookies() {
     return Object.fromEntries(this.cookies.entries());
+  }
+
+  ensureFullyVerified(payload) {
+    const pendingAuth = detectPendingAuthFromPayload(payload, "");
+    if (!pendingAuth) return;
+
+    const error = new Error(pendingAuth.message);
+    error.statusCode = 401;
+    error.responseBody = payload;
+    error.cookies = this.exportCookies();
+    error.pendingAuth = pendingAuth;
+    throw error;
   }
 }
 
@@ -323,12 +420,39 @@ function isAuthenticationError(error) {
     message.includes("missing credentials") ||
     message.includes("unauthorized") ||
     message.includes("login") ||
-    message.includes("auth")
+      message.includes("auth")
   );
+}
+
+function detectPendingAuthFromPayload(payload, fallbackMessage = "") {
+  const required = Array.isArray(payload?.requiresTwoFactorAuth) ? payload.requiresTwoFactorAuth.map((entry) => String(entry || "").toLowerCase()) : [];
+  if (required.includes("emailotp")) {
+    return {
+      type: "emailOtp",
+      message: "VRChat hat einen Sicherheitscode per E-Mail geschickt. Bitte gib ihn im Portal ein.",
+      source: "requiresTwoFactorAuth"
+    };
+  }
+
+  const message = String(fallbackMessage || payload?.error?.message || payload?.message || "").toLowerCase();
+  if (message.includes("too many places") || message.includes("verification link") || message.includes("verify login place")) {
+    return {
+      type: "loginPlace",
+      message: "VRChat verlangt zuerst die Bestätigung des Login-Orts per E-Mail-Link.",
+      source: "loginPlace"
+    };
+  }
+
+  return null;
+}
+
+function isPendingVrchatAuthError(error) {
+  return Boolean(error?.pendingAuth);
 }
 
 module.exports = {
   syncVrchatAnalytics,
   fetchVrchatOverview,
+  verifyVrchatSecurityCode,
   getVrchatConfig
 };

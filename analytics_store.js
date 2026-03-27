@@ -79,8 +79,14 @@ async function ensureAnalyticsSchema() {
     CREATE TABLE IF NOT EXISTS vrchat_session_store (
       session_key TEXT PRIMARY KEY,
       cookies JSONB NOT NULL DEFAULT '{}'::jsonb,
+      auth_state JSONB NOT NULL DEFAULT '{}'::jsonb,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  await db.query(`
+    ALTER TABLE vrchat_session_store
+    ADD COLUMN IF NOT EXISTS auth_state JSONB NOT NULL DEFAULT '{}'::jsonb
   `);
 
   schemaEnsured = true;
@@ -208,6 +214,7 @@ async function loadVrchatSession(sessionKey = "default") {
   const result = await db.query(
     `
       SELECT cookies, updated_at
+           , auth_state
       FROM vrchat_session_store
       WHERE session_key = $1
     `,
@@ -218,23 +225,25 @@ async function loadVrchatSession(sessionKey = "default") {
 
   return {
     cookies: result.rows[0].cookies || {},
+    authState: result.rows[0].auth_state || {},
     updatedAt: result.rows[0].updated_at
   };
 }
 
-async function saveVrchatSession(sessionKey = "default", cookies = {}) {
+async function saveVrchatSession(sessionKey = "default", cookies = {}, authState = {}) {
   const db = getPool();
   if (!db) return;
 
   await db.query(
     `
-      INSERT INTO vrchat_session_store (session_key, cookies, updated_at)
-      VALUES ($1, $2::jsonb, NOW())
+      INSERT INTO vrchat_session_store (session_key, cookies, auth_state, updated_at)
+      VALUES ($1, $2::jsonb, $3::jsonb, NOW())
       ON CONFLICT (session_key) DO UPDATE
       SET cookies = EXCLUDED.cookies,
+          auth_state = EXCLUDED.auth_state,
           updated_at = NOW()
     `,
-    [sessionKey, JSON.stringify(cookies || {})]
+    [sessionKey, JSON.stringify(cookies || {}), JSON.stringify(authState || {})]
   );
 }
 
@@ -281,7 +290,7 @@ async function getAnalyticsOverview(config = {}) {
     `),
     db.query(
       `
-        SELECT updated_at
+        SELECT updated_at, auth_state
         FROM vrchat_session_store
         WHERE session_key = $1
       `,
@@ -334,7 +343,8 @@ async function getAnalyticsOverview(config = {}) {
       peakPlayers: Number(row.peak_players || 0),
       samples: Number(row.samples || 0)
     })),
-    sessionSavedAt: sessionResult.rows[0]?.updated_at || null
+    sessionSavedAt: sessionResult.rows[0]?.updated_at || null,
+    pendingAuth: sessionResult.rows[0]?.auth_state || null
   };
 }
 

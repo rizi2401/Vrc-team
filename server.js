@@ -3,7 +3,7 @@ const https = require("node:https");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { fetchVrchatOverview, syncVrchatAnalytics } = require("./vrchat_sync");
+const { fetchVrchatOverview, syncVrchatAnalytics, verifyVrchatSecurityCode } = require("./vrchat_sync");
 
 const HOST = "0.0.0.0";
 const PORT = process.env.PORT || 3000;
@@ -269,6 +269,19 @@ async function handleApi(req, res, url) {
     const result = await syncVrchatAnalytics();
     if (result.ok) {
       broadcastEvent("portal", { type: "vrchat-sync" });
+      sendJson(res, 200, result);
+      return;
+    }
+    sendJson(res, 400, result);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/vrchat/verify-code") {
+    requireRole(auth.user, "admin");
+    const body = await readJson(req);
+    const result = await verifyVrchatSecurityCode(body.code);
+    if (result.ok) {
+      broadcastEvent("portal", { type: "vrchat-code-verified" });
       sendJson(res, 200, result);
       return;
     }
@@ -4649,13 +4662,14 @@ function validateChatPayload(body, user, store) {
 }
 
 function buildCommunityPayload(store) {
-  const team = store.users
+  const activeUsers = (store.users || []).filter((entry) => !entry.isBlocked);
+  const team = activeUsers
     .filter((entry) => entry.role !== "member")
     .slice()
     .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
     .map(sanitizeUser);
 
-  const creators = store.users
+  const creators = activeUsers
     .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
     .slice()
     .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
@@ -4664,13 +4678,13 @@ function buildCommunityPayload(store) {
   return {
     team,
     creators,
-    events: COMMUNITY_EVENTS,
+    events: (store.events || []).slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)),
     rules: COMMUNITY_RULES,
     faq: COMMUNITY_FAQ,
     stats: {
-      members: store.users.filter((entry) => entry.role === "member").length,
-      moderators: store.users.filter((entry) => entry.role === "moderator").length,
-      planners: store.users.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
+      members: activeUsers.filter((entry) => entry.role === "member").length,
+      moderators: activeUsers.filter((entry) => entry.role === "moderator").length,
+      planners: activeUsers.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
       news: store.announcements.length,
       creators: creators.length
     }
@@ -4688,11 +4702,17 @@ function projectDataForRole(user, store) {
     })
     .map((entry) => decorateAnnouncement(entry, store));
   const directory = store.users
+    .filter((entry) => !entry.isBlocked)
     .slice()
     .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
     .map(sanitizeUser);
   const communityChatMessages = getChatMessagesForUser(user, store, "community");
   const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+  const feedPosts = (store.feedPosts || []).map((entry) => decorateFeedPost(entry, store));
+  const managedUsers = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeManagedUser);
 
   const base = {
     community,
@@ -4705,7 +4725,8 @@ function projectDataForRole(user, store) {
     forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
     warnings: getWarningsForUser(user, store),
     notifications,
-    swapRequests: getSwapRequestsForUser(user, store)
+    swapRequests: getSwapRequestsForUser(user, store),
+    feedPosts
   };
 
   if (user.role === "member") {
@@ -4739,7 +4760,7 @@ function projectDataForRole(user, store) {
   return {
     ...base,
     settings: store.settings,
-    users: directory,
+    users: managedUsers,
     shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
     requests: store.requests
       .slice()
