@@ -2300,6 +2300,7 @@ function renderDiscordPanel() {
               ${renderStatCard("Letzter Versuch", status.lastAttemptAt ? formatDateTime(status.lastAttemptAt) : "-", status.lastStatusCode ? `HTTP ${status.lastStatusCode}` : "Noch kein Versand", "amber")}
               ${renderStatCard("Letzter Erfolg", status.lastSuccessAt ? formatDateTime(status.lastSuccessAt) : "-", status.lastSuccessAt ? "Discord hat die Nachricht angenommen" : "Noch kein erfolgreicher Versand", status.lastSuccessAt ? "success" : "sky")}
             </div>
+            ${status.blockedUntil ? `<div class="flash flash-warning"><span>${escapeHtml(`Discord-Sends pausieren aktuell bis ${formatDateTime(status.blockedUntil)}. Ein neuer Webhook hilft bei 1015 meistens nicht, weil die Sperre an der Server-IP haengt.`)}</span></div>` : ""}
             ${status.lastError ? `<div class="flash flash-danger"><span>${escapeHtml(status.lastError)}</span></div>` : ""}
             <p class="pill-note">Wenn die Testnachricht nicht ankommt, pruefe zuerst den Discord-Webhook und dann den letzten Fehler hier im Portal.</p>
           `

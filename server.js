@@ -87,7 +87,9 @@ const messageCooldownStore = new Map();
 const streamClients = new Set();
 let discordSendChain = Promise.resolve();
 let discordLastDispatchAt = 0;
-const DISCORD_MIN_INTERVAL_MS = 3000;
+const DISCORD_MIN_INTERVAL_MS = normalizePositiveInteger(process.env.DISCORD_MIN_INTERVAL_MS, 3000);
+const DISCORD_1015_COOLDOWN_MS = normalizePositiveInteger(process.env.DISCORD_1015_COOLDOWN_MS, 60 * 60 * 1000);
+const DISCORD_AUTO_NOTIFICATIONS_ENABLED = process.env.DISCORD_AUTO_NOTIFICATIONS_ENABLED !== "0";
 const MESSAGE_COOLDOWN_MS = 5000;
 const CHAT_TRIM_COUNTS = new Set([20, 30, 40, 50]);
 let PortalPoolCtor = null;
@@ -99,7 +101,8 @@ const discordState = {
   lastAttemptAt: "",
   lastSuccessAt: "",
   lastError: "",
-  lastStatusCode: 0
+  lastStatusCode: 0,
+  blockedUntil: ""
 };
 
 portalStoreInitPromise = initializePortalStore();
@@ -254,7 +257,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && url.pathname === "/api/admin/discord/test") {
     requireRole(auth.user, "admin");
-    const result = await notifyDiscord(buildDiscordTestMessage(auth.user));
+    const result = await notifyDiscord(buildDiscordTestMessage(auth.user), { kind: "manual" });
     if (!result.ok) {
       sendJson(res, 400, { error: result.message, status: getDiscordStatus() });
       return;
@@ -317,7 +320,7 @@ async function handleApi(req, res, url) {
     applyCatalogAdds(nextStore.settings, shift.catalogAdds);
 
     const savedStore = writeStore(nextStore);
-    void notifyDiscord(buildShiftDiscordMessage("created", savedStore.shifts[0], savedStore));
+    void notifyDiscord(buildShiftDiscordMessage("created", savedStore.shifts[0], savedStore), { kind: "auto" });
     broadcastEvent("portal", { type: "shift-created" });
     sendPortalData(res, 201, auth.user, savedStore);
     return;
@@ -356,7 +359,7 @@ async function handleApi(req, res, url) {
       }
 
       const savedStore = writeStore(nextStore);
-      void notifyDiscord(buildShiftDiscordMessage("updated", shift, savedStore, previousShift));
+      void notifyDiscord(buildShiftDiscordMessage("updated", shift, savedStore, previousShift), { kind: "auto" });
       broadcastEvent("portal", { type: "shift-updated" });
       sendPortalData(res, 200, auth.user, savedStore);
       return;
@@ -372,7 +375,7 @@ async function handleApi(req, res, url) {
       );
 
       const savedStore = writeStore(nextStore);
-      void notifyDiscord(buildShiftDiscordMessage("deleted", deletedShift, auth.store));
+      void notifyDiscord(buildShiftDiscordMessage("deleted", deletedShift, auth.store), { kind: "auto" });
       broadcastEvent("portal", { type: "shift-deleted" });
       sendPortalData(res, 200, auth.user, savedStore);
       return;
@@ -459,7 +462,7 @@ async function handleApi(req, res, url) {
     });
 
     const savedStore = writeStore(nextStore);
-    void notifyDiscord(buildAnnouncementDiscordMessage(savedStore.announcements[0], auth.user));
+    void notifyDiscord(buildAnnouncementDiscordMessage(savedStore.announcements[0], auth.user), { kind: "auto" });
     broadcastEvent("portal", { type: "announcement-created" });
     sendPortalData(res, 201, auth.user, savedStore);
     return;
@@ -3188,7 +3191,8 @@ function sendJson(res, statusCode, payload, headers = {}) {
   res.end(JSON.stringify(payload));
 }
 
-async function notifyDiscord(message) {
+async function notifyDiscord(message, options = {}) {
+  const kind = options.kind === "manual" ? "manual" : "auto";
   const webhookUrl = String(process.env.DISCORD_WEBHOOK_URL || "").trim();
   if (!webhookUrl || !message) {
     discordState.lastError = !webhookUrl ? "DISCORD_WEBHOOK_URL fehlt." : "Keine Discord-Nachricht uebergeben.";
@@ -3197,18 +3201,36 @@ async function notifyDiscord(message) {
     return { ok: false, message: discordState.lastError };
   }
 
+  discordState.lastAttemptAt = new Date().toISOString();
+
+  if (kind === "auto" && !DISCORD_AUTO_NOTIFICATIONS_ENABLED) {
+    discordState.lastError = "Automatische Discord-Benachrichtigungen sind deaktiviert.";
+    discordState.lastStatusCode = 0;
+    return { ok: false, skipped: true, message: discordState.lastError };
+  }
+
+  const cooldownState = getDiscord1015Cooldown();
+  if (cooldownState.active) {
+    discordState.lastError = buildDiscordBlockedUntilMessage(discordState.blockedUntil);
+    discordState.lastStatusCode = 1015;
+    return { ok: false, skipped: true, message: discordState.lastError };
+  }
+
   discordSendChain = discordSendChain.catch(() => null).then(async () => {
     try {
-      discordState.lastAttemptAt = new Date().toISOString();
       await waitForDiscordSlot();
       const result = await postJson(webhookUrl, message);
       discordLastDispatchAt = Date.now();
       discordState.lastSuccessAt = new Date().toISOString();
       discordState.lastError = "";
       discordState.lastStatusCode = result.statusCode || 204;
+      discordState.blockedUntil = "";
       return { ok: true };
     } catch (error) {
       discordLastDispatchAt = Date.now();
+      if (isDiscord1015Error(error)) {
+        discordState.blockedUntil = new Date(Date.now() + DISCORD_1015_COOLDOWN_MS).toISOString();
+      }
       discordState.lastError = humanizeDiscordError(error);
       discordState.lastStatusCode = Number(error.statusCode || 0);
       console.error("Discord webhook failed:", error.message);
@@ -3357,7 +3379,7 @@ async function waitForDiscordSlot() {
 function humanizeDiscordError(error) {
   const rawMessage = String(error?.message || "").trim();
   if (rawMessage.includes("1015")) {
-    return "Discord blockiert die Server-IP gerade wegen zu vieler Anfragen (Cloudflare 1015). Bitte 10 bis 15 Minuten warten und danach nur eine Testnachricht senden.";
+    return buildDiscordBlockedUntilMessage(discordState.blockedUntil);
   }
 
   if (rawMessage.includes("429")) {
@@ -3373,13 +3395,54 @@ function clipText(value, maxLength) {
   return `${text.slice(0, maxLength - 1)}…`;
 }
 
+function isDiscord1015Error(error) {
+  const rawMessage = String(error?.message || "").trim();
+  return rawMessage.includes("1015") || Number(error?.statusCode || 0) === 1015;
+}
+
+function getDiscord1015Cooldown() {
+  const blockedUntilMs = Date.parse(discordState.blockedUntil || "");
+  return {
+    active: Number.isFinite(blockedUntilMs) && blockedUntilMs > Date.now(),
+    blockedUntilMs
+  };
+}
+
+function buildDiscordBlockedUntilMessage(blockedUntil) {
+  const formattedUntil = blockedUntil ? formatStatusDateTime(blockedUntil) : "";
+  return formattedUntil
+    ? `Discord blockiert die aktuelle Server-IP gerade wegen zu vieler Anfragen (Cloudflare 1015). Neue Versuche pausieren bis ${formattedUntil}. Ein neuer Webhook hilft dabei meistens nicht, weil die Sperre an der IP haengt und nicht am Webhook selbst.`
+    : "Discord blockiert die aktuelle Server-IP gerade wegen zu vieler Anfragen (Cloudflare 1015). Ein neuer Webhook hilft dabei meistens nicht, weil die Sperre an der IP haengt und nicht am Webhook selbst.";
+}
+
+function formatStatusDateTime(value) {
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return String(value || "");
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(parsed));
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const numeric = Number.parseInt(String(value || ""), 10);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+}
+
 function getDiscordStatus() {
+  const cooldownState = getDiscord1015Cooldown();
   return {
     configured: Boolean(String(process.env.DISCORD_WEBHOOK_URL || "").trim()),
+    autoNotificationsEnabled: DISCORD_AUTO_NOTIFICATIONS_ENABLED,
     lastAttemptAt: discordState.lastAttemptAt,
     lastSuccessAt: discordState.lastSuccessAt,
     lastError: discordState.lastError,
-    lastStatusCode: discordState.lastStatusCode
+    lastStatusCode: discordState.lastStatusCode,
+    blockedUntil: discordState.blockedUntil,
+    cooldownActive: cooldownState.active
   };
 }
 
