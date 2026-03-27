@@ -1393,3 +1393,170 @@ code {
 .profile-preview .creator-link-list {
   margin-top: 10px;
 }
+
+@media (max-width: 820px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  .app-shell,
+  .panel,
+  .sonara-header,
+  .warning-modal,
+  .request-card,
+  .team-user-card,
+  .auth-card,
+  .chat-card,
+  .dm-thread-card,
+  .forum-thread-card,
+  .profile-head,
+  .profile-preview {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .site-header,
+  .auth-layout,
+  .dashboard-grid,
+  .public-grid,
+  .community-overview-grid,
+  .community-stat-grid,
+  .event-grid,
+  .team-grid,
+  .feature-grid,
+  .stats-strip,
+  .planner-layout,
+  .attendance-admin-grid,
+  .analytics-grid,
+  .wide-team-grid,
+  .card-list,
+  .guide-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .section-head,
+  .toolbar,
+  .toolbar-user,
+  .toolbar-actions,
+  .card-actions,
+  .inline-form,
+  .status-row,
+  .shift-meta,
+  .chat-head-tools,
+  .chat-meta,
+  .reaction-row,
+  .demo-item,
+  .roster-row,
+  .profile-head,
+  .profile-preview {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .form-grid,
+  .team-user-card .form-grid,
+  .forum-thread-card .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .tab-bar {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
+  }
+
+  .tab-chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .profile-head > div,
+  .profile-preview > div,
+  .chat-card p,
+  .request-card p,
+  .team-user-card p,
+  .dm-thread-card p,
+  .forum-thread-card p,
+  .helper-text,
+  .timeline-meta,
+  .section-copy,
+  .feature-card p,
+  .auth-card p {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .chat-tools,
+  .chat-head-tools,
+  .toolbar-actions,
+  .card-actions,
+  .inline-form,
+  .trim-actions {
+    width: 100%;
+  }
+
+  .trim-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trim-actions button,
+  .toolbar-actions button,
+  .card-actions button,
+  .inline-form button,
+  .stack-form > button:not(.small) {
+    width: 100%;
+  }
+
+  .chat-list {
+    max-height: 360px;
+  }
+
+  .sonara-art {
+    width: min(100%, 280px);
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell {
+    padding: 10px;
+  }
+
+  .panel,
+  .sonara-header,
+  .warning-modal,
+  .request-card,
+  .team-user-card,
+  .auth-card {
+    padding: 14px !important;
+    border-radius: 20px;
+  }
+
+  h1 {
+    font-size: clamp(1.9rem, 8vw, 2.45rem);
+    max-width: none;
+  }
+
+  h2 {
+    font-size: 1.18rem;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    max-width: 100%;
+    min-height: 46px;
+  }
+
+  button.small {
+    min-height: 40px;
+  }
+
+  textarea {
+    min-height: 96px;
+  }
+}

@@ -11,6 +11,7 @@ const ROOT = __dirname;
 const STORE_PATH = process.env.STORE_PATH ? path.resolve(process.env.STORE_PATH) : path.join(ROOT, "data", "store.json");
 const DATA_DIR = path.dirname(STORE_PATH);
 const PORTAL_STORE_KEY = "primary";
+const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 const COMMUNITY_EVENTS = [
   {
@@ -82,10 +83,13 @@ const staticFiles = {
 };
 
 const sessionStore = new Map();
+const messageCooldownStore = new Map();
 const streamClients = new Set();
 let discordSendChain = Promise.resolve();
 let discordLastDispatchAt = 0;
 const DISCORD_MIN_INTERVAL_MS = 3000;
+const MESSAGE_COOLDOWN_MS = 5000;
+const CHAT_TRIM_COUNTS = new Set([20, 30, 40, 50]);
 let PortalPoolCtor = null;
 let portalPool = null;
 let portalStoreCache = null;
@@ -145,6 +149,11 @@ async function handleApi(req, res, url) {
 
     if (!user || !verifyPassword(String(body.password || ""), user.passwordHash)) {
       sendJson(res, 401, { error: "VRChat-Name, Discord-Name oder Passwort ist falsch." });
+      return;
+    }
+
+    if (user.isBlocked) {
+      sendJson(res, 403, { error: buildBlockedLoginMessage(user) });
       return;
     }
 
@@ -382,7 +391,6 @@ async function handleApi(req, res, url) {
 
   const requestMatch = url.pathname.match(/^\/api\/requests\/([^/]+)$/);
   if (requestMatch && req.method === "PATCH") {
-    requireRole(auth.user, "planner");
     const requestId = decodeURIComponent(requestMatch[1]);
     const nextStore = structuredClone(auth.store);
     const request = nextStore.requests.find((entry) => entry.id === requestId);
@@ -393,8 +401,27 @@ async function handleApi(req, res, url) {
     }
 
     const body = await readJson(req);
-    request.status = validateRequestStatus(body.status);
-    request.adminNote = String(body.adminNote || "").trim();
+    if (["planner", "admin"].includes(auth.user.role)) {
+      request.status = validateRequestStatus(body.status);
+      request.adminNote = String(body.adminNote || "").trim();
+      request.adminRespondedAt = new Date().toISOString();
+      request.memberDecision = "pending";
+      request.memberDecisionAt = "";
+    } else {
+      if (request.userId !== auth.user.id) {
+        sendJson(res, 403, { error: "Du kannst nur auf deine eigenen Rueckmeldungen antworten." });
+        return;
+      }
+
+      const action = String(body.action || "").trim();
+      if (!["accepted", "declined"].includes(action)) {
+        sendJson(res, 400, { error: "Ungueltige Rueckmeldung auf die Leitungsantwort." });
+        return;
+      }
+
+      request.memberDecision = action;
+      request.memberDecisionAt = new Date().toISOString();
+    }
 
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "request-updated" });
@@ -441,6 +468,7 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/chat") {
     const body = await readJson(req);
     const normalized = validateChatPayload(body, auth.user, auth.store);
+    enforceMessageCooldown(auth.user.id, `chat:${normalized.channel}`);
     const nextStore = structuredClone(auth.store);
 
     nextStore.chatMessages.unshift({
@@ -459,9 +487,30 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/chat/trim") {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const channel = validateChatTrimChannel(body.channel);
+    const count = validateTrimCount(body.count);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.chatMessages = removeNewestMatchingEntries(
+      nextStore.chatMessages,
+      count,
+      (entry) => entry.channel === channel
+    );
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("chat", { ok: true, type: "trim", channel });
+    broadcastEvent("portal", { type: "chat-trim", channel });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/direct-messages") {
     const body = await readJson(req);
     const normalized = validateDirectMessagePayload(body, auth.user, auth.store);
+    enforceMessageCooldown(auth.user.id, "direct-message");
     const nextStore = structuredClone(auth.store);
 
     nextStore.directMessages.unshift({
@@ -475,6 +524,20 @@ async function handleApi(req, res, url) {
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "direct-message" });
     sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/direct-messages/trim") {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const count = validateTrimCount(body.count);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.directMessages = removeNewestMatchingEntries(nextStore.directMessages, count, () => true);
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "direct-message-trim" });
+    sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
 
@@ -782,6 +845,7 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     const normalized = validateAdminUserPayload(body, auth.store);
     const nextStore = structuredClone(auth.store);
+    const blockedState = normalizeBlockedPayload(body, false, "");
 
     nextStore.users.push({
       id: crypto.randomUUID(),
@@ -796,7 +860,11 @@ async function handleApi(req, res, url) {
       creatorBlurb: normalized.creatorBlurb,
       creatorLinks: normalized.creatorLinks,
       creatorVisible: normalized.creatorVisible,
-      passwordHash: normalized.passwordHash
+      passwordHash: normalized.passwordHash,
+      isBlocked: blockedState.isBlocked,
+      blockReason: blockedState.blockReason,
+      blockedAt: blockedState.isBlocked ? new Date().toISOString() : "",
+      blockedBy: blockedState.isBlocked ? auth.user.id : ""
     });
 
     const savedStore = writeStore(nextStore);
@@ -819,13 +887,16 @@ async function handleApi(req, res, url) {
 
     if (req.method === "PATCH") {
       const body = await readJson(req);
+      const nextRole = body.role ? validateRole(body.role) : target.role;
+      const blockedState = normalizeBlockedPayload(body, Boolean(target.isBlocked), target.blockReason || "");
+
+      ensureAdminAccessStillExists(nextStore.users, target, nextRole, blockedState.isBlocked, auth.user.id);
       if (body.role) {
-        const nextRole = validateRole(body.role);
-        ensureAdminStillExists(nextStore.users, target, nextRole);
         target.role = nextRole;
       }
 
       applyUserIdentityUpdates(nextStore.users, target, body, true);
+      applyUserBlockState(target, blockedState, auth.user.id);
 
       if (body.password) {
         const password = String(body.password || "").trim();
@@ -852,6 +923,108 @@ async function handleApi(req, res, url) {
       sendPortalData(res, 200, auth.user, savedStore);
       return;
     }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/events") {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const normalized = validateEventPayload(body, auth.user);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.events = Array.isArray(nextStore.events) ? nextStore.events : [];
+    nextStore.events.unshift({
+      id: crypto.randomUUID(),
+      ...normalized,
+      createdAt: new Date().toISOString(),
+      createdBy: auth.user.id
+    });
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "event-created" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  const eventMatch = url.pathname.match(/^\/api\/events\/([^/]+)$/);
+  if (eventMatch && req.method === "DELETE") {
+    requireRole(auth.user, "planner");
+    const eventId = decodeURIComponent(eventMatch[1]);
+    const nextStore = structuredClone(auth.store);
+    nextStore.events = (nextStore.events || []).filter((entry) => entry.id !== eventId);
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "event-deleted" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/feed-posts") {
+    const body = await readJson(req);
+    const normalized = validateFeedPostPayload(body);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.feedPosts = Array.isArray(nextStore.feedPosts) ? nextStore.feedPosts : [];
+    nextStore.feedPosts.unshift({
+      id: crypto.randomUUID(),
+      authorId: auth.user.id,
+      content: normalized.content,
+      imageUrl: normalized.imageUrl,
+      createdAt: new Date().toISOString(),
+      reactions: buildEmptyFeedReactions()
+    });
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "feed-post" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  const feedReactionMatch = url.pathname.match(/^\/api\/feed-posts\/([^/]+)\/reactions$/);
+  if (feedReactionMatch && req.method === "PATCH") {
+    const postId = decodeURIComponent(feedReactionMatch[1]);
+    const body = await readJson(req);
+    const emoji = validateFeedReaction(body.emoji);
+    const nextStore = structuredClone(auth.store);
+    const post = (nextStore.feedPosts || []).find((entry) => entry.id === postId);
+
+    if (!post) {
+      sendJson(res, 404, { error: "Feed-Beitrag nicht gefunden." });
+      return;
+    }
+
+    post.reactions = normalizeFeedReactionMap(post.reactions);
+    const bucket = Array.isArray(post.reactions[emoji]) ? post.reactions[emoji] : [];
+    post.reactions[emoji] = bucket.includes(auth.user.id)
+      ? bucket.filter((userId) => userId !== auth.user.id)
+      : [...bucket, auth.user.id];
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "feed-reaction" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  const feedPostMatch = url.pathname.match(/^\/api\/feed-posts\/([^/]+)$/);
+  if (feedPostMatch && req.method === "DELETE") {
+    const postId = decodeURIComponent(feedPostMatch[1]);
+    const nextStore = structuredClone(auth.store);
+    const post = (nextStore.feedPosts || []).find((entry) => entry.id === postId);
+
+    if (!post) {
+      sendJson(res, 404, { error: "Feed-Beitrag nicht gefunden." });
+      return;
+    }
+
+    const canDelete = post.authorId === auth.user.id || ["planner", "admin"].includes(auth.user.role);
+    if (!canDelete) {
+      sendJson(res, 403, { error: "Du darfst diesen Beitrag nicht loeschen." });
+      return;
+    }
+
+    nextStore.feedPosts = nextStore.feedPosts.filter((entry) => entry.id !== postId);
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "feed-deleted" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
   }
 
   sendJson(res, 404, { error: "API-Route nicht gefunden." });
@@ -1343,13 +1516,21 @@ function writeStore(store) {
 
 function requireAuth(req) {
   const sessionId = getSessionId(req);
-  if (!sessionId || !sessionStore.has(sessionId)) return null;
+  if (!sessionId) return null;
+
+  const store = readStore();
+  const signedSession = parseSignedSession(sessionId);
+  if (signedSession) {
+    const user = store.users.find((entry) => entry.id === signedSession.userId);
+    return user && !user.isBlocked ? { user, store } : null;
+  }
+
+  if (!sessionStore.has(sessionId)) return null;
 
   const session = sessionStore.get(sessionId);
-  const store = readStore();
   const user = store.users.find((entry) => entry.id === session.userId);
 
-  if (!user) {
+  if (!user || user.isBlocked) {
     sessionStore.delete(sessionId);
     return null;
   }
@@ -1435,6 +1616,659 @@ function projectDataForRole(user, store) {
       .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
       .map((entry) => decorateTimeEntry(entry, store))
   };
+}
+
+function normalizeUsers(users, legacyModeratorNames) {
+  const normalized = [];
+  const usedUsernames = new Set();
+
+  for (const entry of users) {
+    const username = normalizeUsername(entry.username);
+    const fallbackDisplayName = String(entry.displayName || "").trim();
+    const vrchatName = String(entry.vrchatName || fallbackDisplayName).trim();
+    const displayName = vrchatName || fallbackDisplayName;
+    const discordName = String(entry.discordName || username).trim();
+    const avatarUrl = normalizeOptionalUrl(entry.avatarUrl);
+    const bio = String(entry.bio || "").trim().slice(0, 600);
+    const contactNote = String(entry.contactNote || "").trim().slice(0, 600);
+    const creatorBlurb = String(entry.creatorBlurb || "").trim().slice(0, 300);
+    const creatorLinks = normalizeCreatorLinks(entry.creatorLinks);
+    const creatorVisible = Boolean(entry.creatorVisible && (creatorLinks.length || creatorBlurb));
+    const isBlocked = Boolean(entry.isBlocked);
+    const blockReason = String(entry.blockReason || "").trim().slice(0, 500);
+    const blockedAt = isIsoDate(entry.blockedAt) ? entry.blockedAt : "";
+    const blockedBy = String(entry.blockedBy || "").trim();
+    const passwordHash = String(entry.passwordHash || "").trim();
+    const normalizedRole = entry.role === "viewer" ? "member" : entry.role;
+    const role = ["member", "moderator", "planner", "admin"].includes(normalizedRole) ? normalizedRole : "member";
+
+    if (!username || !displayName || !vrchatName || !discordName || !passwordHash || usedUsernames.has(username)) continue;
+
+    usedUsernames.add(username);
+    normalized.push({
+      id: String(entry.id || crypto.randomUUID()),
+      username,
+      displayName,
+      role,
+      vrchatName,
+      discordName,
+      avatarUrl,
+      bio,
+      contactNote,
+      creatorBlurb,
+      creatorLinks,
+      creatorVisible,
+      isBlocked,
+      blockReason,
+      blockedAt,
+      blockedBy,
+      passwordHash
+    });
+  }
+
+  if (!normalized.some((entry) => entry.role === "admin")) {
+    normalized.unshift(buildSeedUser("admin", "System Admin", "admin", "admin123!"));
+  }
+
+  for (const name of uniqueStrings(legacyModeratorNames)) {
+    if (normalized.some((entry) => entry.displayName.toLowerCase() === name.toLowerCase())) continue;
+
+    const username = createUniqueUsername(name, normalized.map((entry) => entry.username));
+    normalized.push({
+      id: crypto.randomUUID(),
+      username,
+      displayName: name,
+      role: "moderator",
+      vrchatName: name,
+      discordName: username,
+      avatarUrl: "",
+      bio: "",
+      contactNote: "",
+      creatorBlurb: "",
+      creatorLinks: [],
+      creatorVisible: false,
+      isBlocked: false,
+      blockReason: "",
+      blockedAt: "",
+      blockedBy: "",
+      passwordHash: hashPassword("mod123!")
+    });
+  }
+
+  return normalized;
+}
+
+function sanitizeUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    role: user.role,
+    vrchatName: user.vrchatName || "",
+    discordName: user.discordName || "",
+    avatarUrl: user.avatarUrl || "",
+    bio: user.bio || "",
+    contactNote: user.contactNote || "",
+    creatorBlurb: user.creatorBlurb || "",
+    creatorLinks: Array.isArray(user.creatorLinks) ? user.creatorLinks : [],
+    creatorVisible: Boolean(user.creatorVisible)
+  };
+}
+
+function sanitizeManagedUser(user) {
+  return {
+    ...sanitizeUser(user),
+    isBlocked: Boolean(user.isBlocked),
+    blockReason: user.blockReason || "",
+    blockedAt: user.blockedAt || "",
+    blockedBy: user.blockedBy || ""
+  };
+}
+
+function buildCommunityPayload(store) {
+  const activeUsers = (store.users || []).filter((entry) => !entry.isBlocked);
+  const team = activeUsers
+    .filter((entry) => entry.role !== "member")
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  const creators = activeUsers
+    .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  return {
+    team,
+    creators,
+    events: (store.events || []).slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)),
+    rules: COMMUNITY_RULES,
+    faq: COMMUNITY_FAQ,
+    stats: {
+      members: activeUsers.filter((entry) => entry.role === "member").length,
+      moderators: activeUsers.filter((entry) => entry.role === "moderator").length,
+      planners: activeUsers.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
+      news: store.announcements.length,
+      creators: creators.length
+    }
+  };
+}
+
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .filter((entry) => !entry.isBlocked)
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+  const managedUsers = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeManagedUser);
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+  const feedPosts = (store.feedPosts || []).map((entry) => decorateFeedPost(entry, store));
+
+  const base = {
+    community,
+    announcements,
+    directory,
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store),
+    feedPosts
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: managedUsers,
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
+function normalizeBlockedPayload(body, fallbackBlocked = false, fallbackReason = "") {
+  const source = body || {};
+  const hasBlockedFlag = Object.prototype.hasOwnProperty.call(source, "blocked") || Object.prototype.hasOwnProperty.call(source, "isBlocked");
+  const hasReason = Object.prototype.hasOwnProperty.call(source, "blockReason");
+  const isBlocked = hasBlockedFlag ? normalizeBooleanInput(source.blocked ?? source.isBlocked) : Boolean(fallbackBlocked);
+  const blockReason = hasReason ? String(source.blockReason || "").trim().slice(0, 500) : String(fallbackReason || "").trim().slice(0, 500);
+
+  if (isBlocked && !blockReason) {
+    const error = new Error("Bitte einen Sperrgrund angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    isBlocked,
+    blockReason: isBlocked ? blockReason : ""
+  };
+}
+
+function applyUserBlockState(target, blockedState, actingUserId) {
+  if (blockedState.isBlocked) {
+    target.isBlocked = true;
+    target.blockReason = blockedState.blockReason;
+    target.blockedAt = target.blockedAt || new Date().toISOString();
+    target.blockedBy = actingUserId || target.blockedBy || "";
+    return;
+  }
+
+  target.isBlocked = false;
+  target.blockReason = "";
+  target.blockedAt = "";
+  target.blockedBy = "";
+}
+
+function normalizeBooleanInput(value) {
+  if (typeof value === "boolean") return value;
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["1", "true", "on", "yes", "ja"].includes(normalized);
+}
+
+function buildBlockedLoginMessage(user) {
+  const reason = String(user.blockReason || "").trim();
+  return reason ? `Dein Account ist derzeit gesperrt. Grund: ${reason}` : "Dein Account ist derzeit gesperrt.";
+}
+
+function ensureAdminAccessStillExists(users, target, nextRole, nextBlocked, actingUserId) {
+  if (target.id === actingUserId && nextBlocked) {
+    const error = new Error("Du kannst deinen eigenen Account nicht sperren.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const remainingAdmins = users.filter((entry) => {
+    const role = entry.id === target.id ? nextRole : entry.role;
+    const isBlocked = entry.id === target.id ? nextBlocked : Boolean(entry.isBlocked);
+    return role === "admin" && !isBlocked;
+  });
+
+  if (!remainingAdmins.length) {
+    const error = new Error("Mindestens ein aktiver Admin muss erhalten bleiben.");
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function buildDefaultEvents() {
+  return COMMUNITY_EVENTS.map((entry) => ({
+    id: String(entry.id || crypto.randomUUID()),
+    title: String(entry.title || "").trim(),
+    dateLabel: String(entry.dateLabel || "").trim(),
+    world: String(entry.world || "").trim(),
+    host: String(entry.host || "").trim(),
+    summary: String(entry.summary || "").trim(),
+    createdAt: new Date().toISOString(),
+    createdBy: ""
+  }));
+}
+
+function normalizeEvents(events) {
+  return (Array.isArray(events) ? events : [])
+    .map((entry) => ({
+      id: String(entry.id || crypto.randomUUID()),
+      title: String(entry.title || "").trim(),
+      dateLabel: String(entry.dateLabel || "").trim(),
+      world: String(entry.world || "").trim(),
+      host: String(entry.host || "").trim(),
+      summary: String(entry.summary || "").trim(),
+      createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
+      createdBy: String(entry.createdBy || "").trim()
+    }))
+    .filter((entry) => entry.title && entry.dateLabel && entry.world && entry.summary);
+}
+
+function buildEmptyFeedReactions() {
+  return {
+    like: [],
+    heart: [],
+    fire: [],
+    star: [],
+    laugh: []
+  };
+}
+
+function normalizeFeedReactionMap(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const normalized = buildEmptyFeedReactions();
+  for (const key of Object.keys(normalized)) {
+    normalized[key] = uniqueStrings(Array.isArray(source[key]) ? source[key] : []);
+  }
+  return normalized;
+}
+
+function normalizeFeedPosts(entries, users) {
+  const validUserIds = new Set(users.map((entry) => entry.id));
+
+  return (Array.isArray(entries) ? entries : [])
+    .map((entry) => ({
+      id: String(entry.id || crypto.randomUUID()),
+      authorId: String(entry.authorId || "").trim(),
+      content: String(entry.content || "").trim().slice(0, 1200),
+      imageUrl: normalizeOptionalUrl(entry.imageUrl),
+      createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
+      reactions: normalizeFeedReactionMap(entry.reactions)
+    }))
+    .filter((entry) => validUserIds.has(entry.authorId) && (entry.content || entry.imageUrl))
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+}
+
+function normalizeRequests(requests, users) {
+  const validUserIds = new Set(users.map((entry) => entry.id));
+  const validDecisionStates = new Set(["", "pending", "accepted", "declined"]);
+
+  return (Array.isArray(requests) ? requests : [])
+    .map((entry) => ({
+      id: String(entry.id || crypto.randomUUID()),
+      userId: String(entry.userId || "").trim(),
+      type: String(entry.type || "Notiz").trim() || "Notiz",
+      date: String(entry.date || "").trim(),
+      content: String(entry.content || "").trim(),
+      status: validateRequestStatus(entry.status),
+      adminNote: String(entry.adminNote || "").trim(),
+      rating: normalizeRating(entry.rating),
+      createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
+      adminRespondedAt: isIsoDate(entry.adminRespondedAt) ? entry.adminRespondedAt : "",
+      memberDecision: validDecisionStates.has(String(entry.memberDecision || "").trim()) ? String(entry.memberDecision || "").trim() : "",
+      memberDecisionAt: isIsoDate(entry.memberDecisionAt) ? entry.memberDecisionAt : ""
+    }))
+    .filter((entry) => validUserIds.has(entry.userId) && entry.content);
+}
+
+function normalizeStore(store) {
+  const defaults = buildDefaultStore();
+  const slots = normalizeSlots(store?.slots, defaults.slots);
+  const users = normalizeUsers(store?.users || [], slots.map((entry) => entry.name));
+  const settings = normalizeSettings(store?.settings || {}, slots);
+  const rawShifts = Array.isArray(store?.shifts) ? store.shifts : migrateLegacyPlanning(store || defaults, users, settings);
+  const shifts = normalizeShifts(rawShifts, users);
+  const events = normalizeEvents(Array.isArray(store?.events) ? store.events : buildDefaultEvents());
+
+  return {
+    slots,
+    users,
+    settings,
+    shifts,
+    events,
+    requests: normalizeRequests(store?.requests, users),
+    announcements: Array.isArray(store?.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
+    chatMessages: Array.isArray(store?.chatMessages) ? normalizeChatMessages(store.chatMessages, users, shifts) : [],
+    timeEntries: Array.isArray(store?.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : [],
+    swapRequests: Array.isArray(store?.swapRequests) ? normalizeSwapRequests(store.swapRequests, users, shifts) : [],
+    discordStatus: normalizeDiscordStatus(store?.discordStatus),
+    vrchatAnalytics: normalizeVrchatAnalytics(store?.vrchatAnalytics),
+    directMessages: Array.isArray(store?.directMessages) ? normalizeDirectMessages(store.directMessages, users) : [],
+    forumThreads: Array.isArray(store?.forumThreads) ? normalizeForumThreads(store.forumThreads, users) : [],
+    warnings: Array.isArray(store?.warnings) ? normalizeWarnings(store.warnings, users) : [],
+    feedPosts: normalizeFeedPosts(store?.feedPosts, users)
+  };
+}
+
+function decorateRequest(entry, store) {
+  return {
+    ...entry,
+    userName: findUserName(store.users, entry.userId),
+    memberDecisionLabel:
+      {
+        pending: "Antwort offen",
+        accepted: "Angenommen",
+        declined: "Abgelehnt"
+      }[entry.memberDecision] || ""
+  };
+}
+
+function decorateFeedPost(entry, store) {
+  return {
+    ...entry,
+    authorName: findUserName(store.users, entry.authorId),
+    authorAvatarUrl: store.users.find((user) => user.id === entry.authorId)?.avatarUrl || "",
+    reactions: normalizeFeedReactionMap(entry.reactions)
+  };
+}
+
+function validateEventPayload(body, user) {
+  const title = String(body.title || "").trim();
+  const dateLabel = String(body.dateLabel || "").trim();
+  const world = String(body.world || "").trim();
+  const host = String(body.host || "").trim() || findUserName([{ id: user.id, vrchatName: user.vrchatName, displayName: user.displayName }], user.id);
+  const summary = String(body.summary || "").trim();
+
+  if (!title || !dateLabel || !world || !summary) {
+    const error = new Error("Bitte Titel, Zeitpunkt, Welt und Kurzbeschreibung angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return { title, dateLabel, world, host, summary };
+}
+
+function validateFeedPostPayload(body) {
+  const content = String(body.content || "").trim().slice(0, 1200);
+  const imageUrl = normalizeOptionalUrl(body.imageUrl);
+
+  if (!content && !imageUrl) {
+    const error = new Error("Bitte Text oder Bild fuer den Feed-Beitrag angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (body.imageUrl && !imageUrl) {
+    const error = new Error("Das Feed-Bild ist nicht gueltig.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return { content, imageUrl };
+}
+
+function validateFeedReaction(value) {
+  const emoji = String(value || "").trim();
+  if (!["like", "heart", "fire", "star", "laugh"].includes(emoji)) {
+    const error = new Error("Ungueltige Reaktion.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return emoji;
+}
+
+function buildCommunityPayload(store) {
+  const team = store.users
+    .filter((entry) => entry.role !== "member")
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  const creators = store.users
+    .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  return {
+    team,
+    creators,
+    events: (store.events || []).slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)),
+    rules: COMMUNITY_RULES,
+    faq: COMMUNITY_FAQ,
+    stats: {
+      members: store.users.filter((entry) => entry.role === "member").length,
+      moderators: store.users.filter((entry) => entry.role === "moderator").length,
+      planners: store.users.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
+      news: store.announcements.length,
+      creators: creators.length
+    }
+  };
+}
+
+function buildNotifications(user, store) {
+  const requestNotifications = (store.requests || [])
+    .filter((entry) => entry.userId === user.id && entry.memberDecision === "pending" && entry.adminRespondedAt)
+    .map((entry) => ({
+      id: `request-response-${entry.id}`,
+      title: "Antwort auf deinen Wunsch",
+      body: entry.adminNote || `Status: ${validateRequestStatus(entry.status)}`,
+      tone: "amber",
+      createdAt: entry.adminRespondedAt,
+      category: "feedback"
+    }));
+
+  const base =
+    user.role === "member"
+      ? buildCommunityNotifications(store)
+      : user.role === "moderator"
+        ? buildViewerNotifications(user, store)
+        : buildManagerNotifications(store);
+
+  const warningNotifications = (store.warnings || [])
+    .filter((entry) => entry.status === "active" && entry.userId === user.id && !entry.acknowledgedAt)
+    .map((entry) => ({
+      id: `warning-${entry.id}`,
+      title: "Wichtige Verwarnung",
+      body: entry.reason,
+      tone: "rose",
+      createdAt: entry.createdAt,
+      category: "warnung"
+    }));
+
+  return [...warningNotifications, ...requestNotifications, ...base]
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+    .slice(0, 8);
+}
+
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+  const feedPosts = (store.feedPosts || []).map((entry) => decorateFeedPost(entry, store));
+
+  const base = {
+    community,
+    announcements,
+    directory,
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store),
+    feedPosts
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: directory,
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
+function enforceMessageCooldown(userId, scope) {
+  const key = `${scope}:${userId}`;
+  const now = Date.now();
+  const lastSentAt = Number(messageCooldownStore.get(key) || 0);
+  const remainingMs = MESSAGE_COOLDOWN_MS - (now - lastSentAt);
+
+  if (remainingMs > 0) {
+    const error = new Error(`Bitte warte noch ${Math.ceil(remainingMs / 1000)} Sekunden, bevor du erneut schreibst.`);
+    error.statusCode = 429;
+    throw error;
+  }
+
+  messageCooldownStore.set(key, now);
+}
+
+function validateTrimCount(value) {
+  const count = Number(value || 0);
+  if (!CHAT_TRIM_COUNTS.has(count)) {
+    const error = new Error("Es koennen nur 20, 30, 40 oder 50 Nachrichten entfernt werden.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return count;
+}
+
+function validateChatTrimChannel(value) {
+  const channel = String(value || "").trim();
+  if (!["community", "staff"].includes(channel)) {
+    const error = new Error("Ungueltiger Chat-Kanal.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return channel;
+}
+
+function removeNewestMatchingEntries(entries, count, predicate) {
+  let removed = 0;
+
+  return (entries || []).filter((entry) => {
+    if (removed < count && predicate(entry)) {
+      removed += 1;
+      return false;
+    }
+    return true;
+  });
 }
 
 function decorateShift(shift, store) {
@@ -1730,8 +2564,8 @@ function compareShifts(left, right) {
 }
 
 function createSession(userId) {
-  const sessionId = crypto.randomBytes(24).toString("hex");
-  sessionStore.set(sessionId, { userId, createdAt: Date.now() });
+  const sessionId = createSignedSessionToken(userId);
+  sessionStore.set(sessionId, { userId, createdAt: Date.now(), expiresAt: Date.now() + SESSION_COOKIE_MAX_AGE_SECONDS * 1000 });
   return sessionId;
 }
 
@@ -2238,8 +3072,41 @@ function getSessionId(req) {
 function createSessionCookie(value, expire = false) {
   const parts = [`sid=${encodeURIComponent(value)}`, "Path=/", "HttpOnly", "SameSite=Strict"];
   if (process.env.COOKIE_SECURE === "1") parts.push("Secure");
-  parts.push(expire ? "Max-Age=0" : "Max-Age=604800");
+  parts.push(expire ? "Max-Age=0" : `Max-Age=${SESSION_COOKIE_MAX_AGE_SECONDS}`);
   return parts.join("; ");
+}
+
+function getSessionSecret() {
+  return String(process.env.SESSION_SECRET || "sonara-portal-session-secret").trim();
+}
+
+function signSessionPayload(payload) {
+  return crypto.createHmac("sha256", getSessionSecret()).update(payload).digest("base64url");
+}
+
+function createSignedSessionToken(userId) {
+  const expiresAt = Date.now() + SESSION_COOKIE_MAX_AGE_SECONDS * 1000;
+  const payload = `${userId}.${expiresAt}`;
+  return `${payload}.${signSessionPayload(payload)}`;
+}
+
+function parseSignedSession(token) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3) return null;
+
+  const [userId, expiresAtText, signature] = parts;
+  const expiresAt = Number(expiresAtText);
+  if (!userId || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+
+  const payload = `${userId}.${expiresAtText}`;
+  const expected = signSessionPayload(payload);
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  } catch {
+    return null;
+  }
+
+  return { userId, expiresAt };
 }
 
 function openEventStream(req, res) {
@@ -2783,6 +3650,110 @@ function validateChatPayload(body, user, store) {
   return { content, relatedShiftId, channel };
 }
 
+function buildCommunityPayload(store) {
+  const team = store.users
+    .filter((entry) => entry.role !== "member")
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  const creators = store.users
+    .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  return {
+    team,
+    creators,
+    events: COMMUNITY_EVENTS,
+    rules: COMMUNITY_RULES,
+    faq: COMMUNITY_FAQ,
+    stats: {
+      members: store.users.filter((entry) => entry.role === "member").length,
+      moderators: store.users.filter((entry) => entry.role === "moderator").length,
+      planners: store.users.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
+      news: store.announcements.length,
+      creators: creators.length
+    }
+  };
+}
+
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+
+  const base = {
+    community,
+    announcements,
+    directory,
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store)
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: directory,
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
 function projectDataForRole(user, store) {
   const community = buildCommunityPayload(store);
   const notifications = buildNotifications(user, store);
@@ -2905,8 +3876,10 @@ function normalizeExternalLink(value) {
   const normalized = String(value || "").trim();
   if (!normalized) return "";
 
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(normalized) ? normalized : `https://${normalized}`;
+
   try {
-    const url = new URL(normalized);
+    const url = new URL(candidate);
     if (!["http:", "https:"].includes(url.protocol)) return "";
     return url.toString();
   } catch {
@@ -3672,4 +4645,108 @@ function validateChatPayload(body, user, store) {
   }
 
   return { content, relatedShiftId, channel };
+}
+
+function buildCommunityPayload(store) {
+  const team = store.users
+    .filter((entry) => entry.role !== "member")
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  const creators = store.users
+    .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  return {
+    team,
+    creators,
+    events: COMMUNITY_EVENTS,
+    rules: COMMUNITY_RULES,
+    faq: COMMUNITY_FAQ,
+    stats: {
+      members: store.users.filter((entry) => entry.role === "member").length,
+      moderators: store.users.filter((entry) => entry.role === "moderator").length,
+      planners: store.users.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
+      news: store.announcements.length,
+      creators: creators.length
+    }
+  };
+}
+
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+
+  const base = {
+    community,
+    announcements,
+    directory,
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store)
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: directory,
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
 }

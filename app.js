@@ -27,6 +27,7 @@ const SHIFT_WINDOW_PRESETS = [
   { value: "02:00|06:00", label: "Zwischenschicht 02:00 - 06:00" },
   { value: "06:00|10:00", label: "Zwischenschicht 06:00 - 10:00" }
 ];
+const CHAT_TRIM_OPTIONS = [20, 30, 40, 50];
 const SONARA_ART_PATH = "/sonara-crest.png";
 
 const state = {
@@ -1471,6 +1472,11 @@ async function buildProfilePayload(form) {
     creatorVisible: formData.get("creatorVisible") === "on"
   };
 
+  if (form.querySelector('[name="blocked"]')) {
+    payload.blocked = formData.get("blocked") === "on";
+    payload.blockReason = formData.get("blockReason");
+  }
+
   const avatarData = await readImageFileInput(form.querySelector('input[name="avatarFile"]'));
   if (avatarData) payload.avatarUrl = avatarData;
 
@@ -1603,6 +1609,20 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "request-decision": {
+      const requestId = form.dataset.requestId;
+      const action = String(event.submitter?.value || "");
+      await performAction(
+        () =>
+          api(`/api/requests/${encodeURIComponent(requestId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ action })
+          }),
+        action === "accepted" ? "Du hast die Antwort bestaetigt." : "Du hast die Antwort abgelehnt."
+      );
+      break;
+    }
+
     case "announcement": {
       const formData = new FormData(form);
       await performAction(
@@ -1617,6 +1637,41 @@ async function handleSubmit(event) {
             })
           }),
         "Neue Info wurde veroeffentlicht."
+      );
+      break;
+    }
+
+    case "event-create": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/events", {
+            method: "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              dateLabel: formData.get("dateLabel"),
+              world: formData.get("world"),
+              host: formData.get("host"),
+              summary: formData.get("summary")
+            })
+          }),
+        "Event wurde gespeichert."
+      );
+      break;
+    }
+
+    case "event-delete": {
+      const eventId = form.dataset.eventId;
+      if (!window.confirm("Dieses Event wirklich entfernen?")) {
+        return;
+      }
+      await performAction(
+        () =>
+          api(`/api/events/${encodeURIComponent(eventId)}`, {
+            method: "DELETE"
+          }),
+        "Event wurde entfernt.",
+        "warning"
       );
       break;
     }
@@ -1653,6 +1708,27 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "chat-trim": {
+      const channel = String(form.dataset.channel || "community");
+      const count = Number(event.submitter?.value || 0);
+      if (!CHAT_TRIM_OPTIONS.includes(count)) return;
+
+      const label = channel === "staff" ? "Staff-Chat" : "Community-Chat";
+      if (!window.confirm(`Die letzten ${count} Nachrichten im ${label} wirklich entfernen?`)) {
+        return;
+      }
+
+      await performAction(
+        () =>
+          api("/api/chat/trim", {
+            method: "POST",
+            body: JSON.stringify({ channel, count })
+          }),
+        `Die letzten ${count} Nachrichten wurden aus dem ${label} entfernt.`
+      );
+      break;
+    }
+
     case "direct-message": {
       const formData = new FormData(form);
       await performAction(
@@ -1665,6 +1741,72 @@ async function handleSubmit(event) {
             })
           }),
         "Direktnachricht wurde gesendet."
+      );
+      break;
+    }
+
+    case "feed-post": {
+      const formData = new FormData(form);
+      const imageUrl = await readImageFileInput(form.querySelector('input[name="imageFile"]'));
+      await performAction(
+        () =>
+          api("/api/feed-posts", {
+            method: "POST",
+            body: JSON.stringify({
+              content: formData.get("content"),
+              imageUrl: imageUrl || ""
+            })
+          }),
+        "Beitrag wurde im Feed veroeffentlicht."
+      );
+      break;
+    }
+
+    case "feed-reaction": {
+      const postId = form.dataset.postId;
+      const emoji = form.dataset.emoji;
+      await performAction(
+        () =>
+          api(`/api/feed-posts/${encodeURIComponent(postId)}/reactions`, {
+            method: "PATCH",
+            body: JSON.stringify({ emoji })
+          }),
+        "Reaktion wurde aktualisiert."
+      );
+      break;
+    }
+
+    case "feed-delete": {
+      const postId = form.dataset.postId;
+      if (!window.confirm("Diesen Feed-Beitrag wirklich loeschen?")) {
+        return;
+      }
+      await performAction(
+        () =>
+          api(`/api/feed-posts/${encodeURIComponent(postId)}`, {
+            method: "DELETE"
+          }),
+        "Feed-Beitrag wurde geloescht.",
+        "warning"
+      );
+      break;
+    }
+
+    case "direct-message-trim": {
+      const count = Number(event.submitter?.value || 0);
+      if (!CHAT_TRIM_OPTIONS.includes(count)) return;
+
+      if (!window.confirm(`Die letzten ${count} Direktnachrichten wirklich entfernen?`)) {
+        return;
+      }
+
+      await performAction(
+        () =>
+          api("/api/direct-messages/trim", {
+            method: "POST",
+            body: JSON.stringify({ count })
+          }),
+        `Die letzten ${count} Direktnachrichten wurden entfernt.`
       );
       break;
     }
@@ -3311,7 +3453,10 @@ function renderTeamPanelV2() {
             return `
               <article class="request-card team-user-card">
                 <div class="status-row">
-                  <span class="pill ${user.role === "admin" ? "amber" : user.role === "planner" ? "sky" : user.role === "moderator" ? "teal" : "neutral"}">${escapeHtml(ROLE_LABELS[user.role])}</span>
+                  <div class="chip-list">
+                    <span class="pill ${user.role === "admin" ? "amber" : user.role === "planner" ? "sky" : user.role === "moderator" ? "teal" : "neutral"}">${escapeHtml(ROLE_LABELS[user.role])}</span>
+                    ${user.isBlocked ? '<span class="pill rose">Gesperrt</span>' : '<span class="pill success">Aktiv</span>'}
+                  </div>
                   <span class="timeline-meta">${escapeHtml(String(shiftCount))} Schichten | ${escapeHtml(String(requestCount))} offen</span>
                 </div>
                 <div class="profile-head">
@@ -3319,6 +3464,7 @@ function renderTeamPanelV2() {
                   <div>
                     <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
                     <p class="timeline-meta">Discord: ${escapeHtml(user.discordName || "-")}</p>
+                    ${user.isBlocked ? `<p class="helper-text"><strong>Gesperrt:</strong> ${escapeHtml(user.blockReason || "Kein Grund angegeben.")}</p>` : ""}
                     ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
                     ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
                     ${renderCreatorLinkList(user, true)}
@@ -3351,6 +3497,10 @@ function renderTeamPanelV2() {
                       <label for="creatorVisible-${escapeHtml(user.id)}">Im Creator-Bereich zeigen</label>
                       <input id="creatorVisible-${escapeHtml(user.id)}" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
                     </div>
+                    <div class="field">
+                      <label for="blocked-${escapeHtml(user.id)}">Account sperren</label>
+                      <input id="blocked-${escapeHtml(user.id)}" name="blocked" type="checkbox" ${user.isBlocked ? "checked" : ""}>
+                    </div>
                     <div class="field span-all">
                       <label for="bio-${escapeHtml(user.id)}">Kurzprofil</label>
                       <textarea id="bio-${escapeHtml(user.id)}" name="bio">${escapeHtml(user.bio || "")}</textarea>
@@ -3362,6 +3512,10 @@ function renderTeamPanelV2() {
                     <div class="field">
                       <label for="creatorBlurb-${escapeHtml(user.id)}">Creator-Text</label>
                       <input id="creatorBlurb-${escapeHtml(user.id)}" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}">
+                    </div>
+                    <div class="field">
+                      <label for="blockReason-${escapeHtml(user.id)}">Sperrgrund</label>
+                      <input id="blockReason-${escapeHtml(user.id)}" name="blockReason" type="text" value="${escapeHtml(user.blockReason || "")}" placeholder="z. B. Missbrauch oder Regelverstoss">
                     </div>
                     <div class="field span-all">
                       <label for="creatorLinks-${escapeHtml(user.id)}">Creator-Links</label>
@@ -5437,8 +5591,8 @@ function renderChatPanel(mode = "community", compact = false) {
   const eyebrow = staffMode ? "Staff-Chat" : "Community-Chat";
   const title = staffMode ? "Echtzeit-Chat fuer schnelle Staff-Absprachen" : "Echtzeit-Chat fuer die Community";
   const copy = staffMode
-    ? "Neue Nachrichten erscheinen automatisch, ohne dass jemand neu laden muss."
-    : "Mitglieder koennen sich hier direkt im Portal austauschen, ohne auf Discord wechseln zu muessen.";
+    ? "Neue Nachrichten erscheinen automatisch, ohne dass jemand neu laden muss. 5 Sekunden Cooldown verhindern Spam."
+    : "Mitglieder koennen sich hier direkt im Portal austauschen, ohne auf Discord wechseln zu muessen. 5 Sekunden Cooldown verhindern Spam.";
   const placeholder = staffMode
     ? "z. B. Wer kann heute spaeter uebernehmen?"
     : "z. B. Wer ist heute Abend beim Event dabei?";
@@ -5446,6 +5600,16 @@ function renderChatPanel(mode = "community", compact = false) {
   const emptyText = staffMode
     ? "Die erste Nachricht erscheint sofort fuer alle Staff-Mitglieder online."
     : "Die erste Nachricht erscheint sofort fuer alle Mitglieder online.";
+  const managerTools = canManagePortal()
+    ? `
+      <form class="chat-tools" data-form="chat-trim" data-channel="${escapeHtml(mode)}">
+        <span class="helper-text">Verlauf kuerzen</span>
+        <div class="trim-actions">
+          ${CHAT_TRIM_OPTIONS.map((count) => `<button type="submit" class="ghost small" value="${count}">${count}</button>`).join("")}
+        </div>
+      </form>
+    `
+    : "";
 
   return `
     <section class="panel ${sectionSpan}">
@@ -5455,7 +5619,10 @@ function renderChatPanel(mode = "community", compact = false) {
           <h2>${escapeHtml(title)}</h2>
           <p class="section-copy">${escapeHtml(copy)}</p>
         </div>
-        <span class="pill ${state.ui.liveChatConnected ? "success" : "amber"}">${state.ui.liveChatConnected ? "Live verbunden" : "Verbindung wird aufgebaut"}</span>
+        <div class="chat-head-tools">
+          ${managerTools}
+          <span class="pill ${state.ui.liveChatConnected ? "success" : "amber"}">${state.ui.liveChatConnected ? "Live verbunden" : "Verbindung wird aufgebaut"}</span>
+        </div>
       </div>
 
       <form class="stack-form" data-form="chat">
@@ -5495,6 +5662,16 @@ function renderDirectMessagesPanel() {
     .slice()
     .sort((left, right) => getPrimaryDisplayName(left).localeCompare(getPrimaryDisplayName(right), "de"));
   const conversations = buildDirectMessageConversations();
+  const trimControls = canManagePortal()
+    ? `
+      <form class="chat-tools" data-form="direct-message-trim">
+        <span class="helper-text">Verlauf kuerzen</span>
+        <div class="trim-actions">
+          ${CHAT_TRIM_OPTIONS.map((count) => `<button type="submit" class="ghost small" value="${count}">${count}</button>`).join("")}
+        </div>
+      </form>
+    `
+    : "";
 
   return `
     <section class="panel span-5">
@@ -5503,6 +5680,7 @@ function renderDirectMessagesPanel() {
           <p class="eyebrow">Direktnachrichten</p>
           <h2>Private Nachrichten</h2>
         </div>
+        ${trimControls}
       </div>
 
       <form class="stack-form" data-form="direct-message">
@@ -5555,4 +5733,412 @@ function buildDirectMessageConversations() {
       lastAt: entry.messages.reduce((latest, message) => Math.max(latest, new Date(message.createdAt).getTime()), 0)
     }))
     .sort((left, right) => right.lastAt - left.lastAt);
+}
+
+function getCreatorPlatformMeta(entry) {
+  const rawUrl = String(entry?.url || "").trim();
+  const rawLabel = String(entry?.label || "").trim();
+  let host = "";
+
+  try {
+    host = new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {}
+
+  const haystack = `${rawLabel} ${host} ${rawUrl}`.toLowerCase();
+
+  if (haystack.includes("discord")) return { name: "Discord", badge: "DC" };
+  if (haystack.includes("tiktok")) return { name: "TikTok", badge: "TT" };
+  if (haystack.includes("spotify")) return { name: "Spotify", badge: "SP" };
+  if (haystack.includes("youtube") || haystack.includes("youtu.be")) return { name: "YouTube", badge: "YT" };
+  if (haystack.includes("twitch")) return { name: "Twitch", badge: "TW" };
+  if (haystack.includes("instagram")) return { name: "Instagram", badge: "IG" };
+  if (haystack.includes("twitter") || haystack.includes("x.com")) return { name: "X", badge: "X" };
+  if (haystack.includes("soundcloud")) return { name: "SoundCloud", badge: "SC" };
+  if (haystack.includes("patreon")) return { name: "Patreon", badge: "PT" };
+  if (haystack.includes("vrchat")) return { name: "VRChat", badge: "VR" };
+  return { name: rawLabel || "Website", badge: "WB" };
+}
+
+function renderCreatorLinkList(user, compact = false) {
+  const links = user.creatorLinks || [];
+  if (!links.length) return compact ? "" : '<p class="helper-text">Noch keine Creator-Links.</p>';
+
+  return `
+    <div class="chip-list creator-link-list">
+      ${links
+        .map((entry) => {
+          const platform = getCreatorPlatformMeta(entry);
+          return `
+            <a class="pill ${compact ? "neutral" : "sky"} creator-link-pill" href="${escapeHtml(entry.url)}" target="_blank" rel="noreferrer">
+              <span class="creator-link-badge" aria-hidden="true">${escapeHtml(platform.badge)}</span>
+              <span>${escapeHtml(entry.label || platform.name)}</span>
+            </a>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderMemberRequestCard(entry) {
+  const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "in_planung" ? "amber" : "rose";
+  const decisionTone = entry.memberDecision === "accepted" ? "success" : entry.memberDecision === "declined" ? "rose" : "amber";
+
+  return `
+    <article class="request-card">
+      <div class="status-row">
+        <div class="chip-list">
+          <span class="pill ${statusTone}">${escapeHtml(getStatusLabel(entry.status))}</span>
+          <span class="pill neutral">${escapeHtml(entry.type)}</span>
+          ${renderRatingPill(entry.rating)}
+          ${entry.memberDecisionLabel ? `<span class="pill ${decisionTone}">${escapeHtml(entry.memberDecisionLabel)}</span>` : ""}
+        </div>
+      </div>
+      <p>${escapeHtml(entry.content)}</p>
+      <p class="timeline-meta">${escapeHtml(entry.date ? formatDate(entry.date) : "Ohne fixes Datum")} | ${escapeHtml(formatDateTime(entry.createdAt))}</p>
+      ${entry.adminNote ? `<p class="helper-text">Leitungsnotiz: ${escapeHtml(entry.adminNote)}</p>` : ""}
+      ${
+        entry.memberDecision === "pending"
+          ? `
+            <form class="card-actions" data-form="request-decision" data-request-id="${escapeHtml(entry.id)}">
+              <button type="submit" class="small" value="accepted">Passt fuer mich</button>
+              <button type="submit" class="ghost small" value="declined">So nicht moeglich</button>
+            </form>
+          `
+          : ""
+      }
+    </article>
+  `;
+}
+
+function renderAdminRequestCard(entry) {
+  const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "in_planung" ? "amber" : "rose";
+  const decisionTone = entry.memberDecision === "accepted" ? "success" : entry.memberDecision === "declined" ? "rose" : "amber";
+
+  return `
+    <article class="request-card">
+      <div class="status-row">
+        <div class="chip-list">
+          <span class="pill ${statusTone}">${escapeHtml(getStatusLabel(entry.status))}</span>
+          <span class="pill neutral">${escapeHtml(entry.type)}</span>
+          ${renderRatingPill(entry.rating)}
+          ${entry.memberDecisionLabel ? `<span class="pill ${decisionTone}">${escapeHtml(entry.memberDecisionLabel)}</span>` : ""}
+        </div>
+      </div>
+      <div>
+        <h3>${escapeHtml(entry.userName)}</h3>
+        <p class="timeline-meta">${escapeHtml(entry.date ? formatDate(entry.date) : "Ohne fixes Datum")} | ${escapeHtml(formatDateTime(entry.createdAt))}</p>
+      </div>
+      <p>${escapeHtml(entry.content)}</p>
+      ${entry.memberDecisionAt ? `<p class="helper-text">Antwort vom Mitglied: ${escapeHtml(entry.memberDecisionLabel || "-")} am ${escapeHtml(formatDateTime(entry.memberDecisionAt))}</p>` : ""}
+
+      <form data-form="request-admin" data-request-id="${escapeHtml(entry.id)}">
+        <div class="field">
+          <label for="status-${escapeHtml(entry.id)}">Status</label>
+          <select id="status-${escapeHtml(entry.id)}" name="status">
+            ${buildStatusOptions(entry.status)}
+          </select>
+        </div>
+        <div class="field">
+          <label for="adminNote-${escapeHtml(entry.id)}">Notiz fuer den Moderator</label>
+          <textarea id="adminNote-${escapeHtml(entry.id)}" name="adminNote" placeholder="Kurze Rueckmeldung oder Bestaetigung">${escapeHtml(entry.adminNote || "")}</textarea>
+        </div>
+        <button type="submit" class="ghost small">Rueckmeldung speichern</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderEventsPanel() {
+  const events = getCommunityData().events || [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Eventplan</p>
+          <h2>Kommende SONARA-Events</h2>
+          <p class="section-copy">Welten, Hosts und Zeiten bleiben fuer Mitglieder und Staff an einem Ort sichtbar.</p>
+        </div>
+      </div>
+
+      ${
+        canManagePortal()
+          ? `
+            <form class="stack-form event-editor" data-form="event-create">
+              <div class="form-grid">
+                <div class="field">
+                  <label for="eventTitle">Titel</label>
+                  <input id="eventTitle" name="title" type="text" required>
+                </div>
+                <div class="field">
+                  <label for="eventDateLabel">Zeitpunkt</label>
+                  <input id="eventDateLabel" name="dateLabel" type="text" placeholder="Freitag · 20:00 Uhr" required>
+                </div>
+                <div class="field">
+                  <label for="eventWorld">Welt</label>
+                  <input id="eventWorld" name="world" type="text" required>
+                </div>
+                <div class="field">
+                  <label for="eventHost">Host</label>
+                  <input id="eventHost" name="host" type="text" placeholder="Optional">
+                </div>
+                <div class="field span-all">
+                  <label for="eventSummary">Kurzbeschreibung</label>
+                  <textarea id="eventSummary" name="summary" required></textarea>
+                </div>
+              </div>
+              <button type="submit">Event speichern</button>
+            </form>
+          `
+          : ""
+      }
+
+      <div class="event-grid">
+        ${events.length ? events.map((event) => renderEventCard(event)).join("") : renderEmptyState("Noch keine Events", "Sobald neue Termine feststehen, erscheinen sie hier.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderEventCard(event) {
+  return `
+    <article class="mini-card event-card">
+      <div class="status-row">
+        <span class="pill amber">Event</span>
+        <span class="timeline-meta">${escapeHtml(event.dateLabel || "-")}</span>
+      </div>
+      <div>
+        <h3>${escapeHtml(event.title)}</h3>
+        <p class="timeline-meta">${escapeHtml(event.world)} | Host: ${escapeHtml(event.host)}</p>
+      </div>
+      <p>${escapeHtml(event.summary)}</p>
+      ${
+        canManagePortal()
+          ? `
+            <form class="card-actions" data-form="event-delete" data-event-id="${escapeHtml(event.id)}">
+              <button type="submit" class="danger small">Event loeschen</button>
+            </form>
+          `
+          : ""
+      }
+    </article>
+  `;
+}
+
+function renderFeedReactionButton(post, emoji, icon) {
+  const reacted = (post.reactions?.[emoji] || []).includes(state.session?.id);
+  const count = (post.reactions?.[emoji] || []).length;
+  return `
+    <form data-form="feed-reaction" data-post-id="${escapeHtml(post.id)}" data-emoji="${escapeHtml(emoji)}">
+      <button type="submit" class="${reacted ? "" : "ghost"} small reaction-button">
+        <span>${escapeHtml(icon)}</span>
+        <span>${escapeHtml(String(count))}</span>
+      </button>
+    </form>
+  `;
+}
+
+function renderFeedPostCard(post) {
+  const canDelete = post.authorId === state.session?.id || canManagePortal();
+  return `
+    <article class="request-card feed-post-card">
+      <div class="profile-head">
+        ${post.authorAvatarUrl ? `<div class="avatar profile-avatar"><img src="${escapeHtml(post.authorAvatarUrl)}" alt="${escapeHtml(post.authorName)}" class="avatar-image"></div>` : renderUserAvatar({ vrchatName: post.authorName }, "profile-avatar")}
+        <div>
+          <h3>${escapeHtml(post.authorName)}</h3>
+          <p class="timeline-meta">${escapeHtml(formatDateTime(post.createdAt))}</p>
+        </div>
+      </div>
+      ${post.content ? `<p>${escapeHtml(post.content)}</p>` : ""}
+      ${post.imageUrl ? `<img src="${escapeHtml(post.imageUrl)}" alt="Feed Bild von ${escapeHtml(post.authorName)}" class="feed-image">` : ""}
+      <div class="card-actions reaction-row">
+        ${renderFeedReactionButton(post, "like", "👍")}
+        ${renderFeedReactionButton(post, "heart", "❤️")}
+        ${renderFeedReactionButton(post, "fire", "🔥")}
+        ${renderFeedReactionButton(post, "star", "⭐")}
+        ${renderFeedReactionButton(post, "laugh", "😂")}
+        ${
+          canDelete
+            ? `
+              <form data-form="feed-delete" data-post-id="${escapeHtml(post.id)}">
+                <button type="submit" class="danger small">Loeschen</button>
+              </form>
+            `
+            : ""
+        }
+      </div>
+    </article>
+  `;
+}
+
+function renderFeedPanel() {
+  const posts = state.data?.feedPosts || [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Community Feed</p>
+          <h2>Bilder, Momente und Reaktionen</h2>
+          <p class="section-copy">Mitglieder koennen hier Bilder oder kurze Posts teilen, durchscrollen und direkt reagieren.</p>
+        </div>
+      </div>
+
+      <form class="stack-form" data-form="feed-post">
+        <div class="form-grid">
+          <div class="field span-all">
+            <label for="feedContent">Beitrag</label>
+            <textarea id="feedContent" name="content" placeholder="Was moechtest du mit der Community teilen?"></textarea>
+          </div>
+          <div class="field">
+            <label for="feedImageFile">Bild</label>
+            <input id="feedImageFile" name="imageFile" type="file" accept="image/*">
+          </div>
+        </div>
+        <button type="submit">Im Feed posten</button>
+      </form>
+
+      <div class="stack-list feed-list">
+        ${posts.length ? posts.map((post) => renderFeedPostCard(post)).join("") : renderEmptyState("Noch kein Feed", "Sobald Mitglieder etwas posten, erscheint es hier.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderDashboardTabs(activeTab) {
+  const common = [
+    { id: "overview", label: "Dashboard" },
+    { id: "feed", label: "Feed" },
+    { id: "community", label: "Community" },
+    { id: "events", label: "Events" },
+    { id: "news", label: "News" },
+    { id: "creators", label: "Creator" },
+    { id: "forum", label: "Forum" },
+    { id: "chat", label: "Chat" },
+    { id: "profile", label: "Profil" }
+  ];
+
+  let tabs = common;
+  if (canManagePortal()) {
+    tabs = [...common, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }, { id: "settings", label: "Einstellungen" }];
+  } else if (canAccessStaffArea()) {
+    tabs = [...common, { id: "schedule", label: "Meine Schichten" }, { id: "feedback", label: "Feedback" }, { id: "time", label: "Zeiten" }];
+  } else {
+    tabs = [...common, { id: "feedback", label: "Feedback" }];
+  }
+
+  return `
+    <nav class="panel tab-bar" aria-label="Hauptbereiche">
+      ${tabs
+        .map(
+          (tab) => `
+            <button type="button" class="tab-chip ${tab.id === activeTab ? "active" : ""}" data-action="set-tab" data-tab="${tab.id}">
+              ${escapeHtml(tab.label)}
+            </button>
+          `
+        )
+        .join("")}
+    </nav>
+  `;
+}
+
+function renderManagerDashboard(activeTab) {
+  switch (activeTab) {
+    case "feed":
+      return renderFeedPanel();
+    case "community":
+      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "events":
+      return renderEventsPanel();
+    case "news":
+      return renderNewsPanel(true);
+    case "creators":
+      return renderCreatorsPanel(true);
+    case "forum":
+      return renderForumPanel(true);
+    case "feedback":
+      return renderFeedbackAdminPanel();
+    case "planning":
+      return [renderPlannerPanel(), renderSwapPanel(true), renderRequestAdminPanel()].join("");
+    case "team":
+      return [renderWarningAdminPanel(), renderTeamPanelV2()].join("");
+    case "chat":
+      return renderChatWorkspace("manager");
+    case "time":
+      return renderAttendancePanel(true);
+    case "profile":
+      return renderProfilePanel(true);
+    case "settings":
+      return [renderSettingsPanel(), renderDiscordPanel(), renderVrchatAnalyticsPanel()].join("");
+    case "overview":
+    default:
+      return [renderNotificationsPanel(), renderFeedPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
+  }
+}
+
+function renderModeratorDashboard(activeTab) {
+  switch (activeTab) {
+    case "feed":
+      return renderFeedPanel();
+    case "community":
+      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "events":
+      return renderEventsPanel();
+    case "news":
+      return renderNewsPanel(false);
+    case "creators":
+      return renderCreatorsPanel(false);
+    case "forum":
+      return renderForumPanel(false);
+    case "schedule":
+      return [renderMySchedulePanel(), renderSwapPanel(false)].join("");
+    case "feedback":
+      return renderFeedbackMemberPanel();
+    case "chat":
+      return renderChatWorkspace("staff");
+    case "time":
+      return renderAttendancePanel(false);
+    case "profile":
+      return renderProfilePanel(false);
+    case "overview":
+    default:
+      return [renderNotificationsPanel(), renderFeedPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
+  }
+}
+
+function renderMemberDashboard(activeTab) {
+  switch (activeTab) {
+    case "feed":
+      return renderFeedPanel();
+    case "community":
+      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "events":
+      return renderEventsPanel();
+    case "news":
+      return renderNewsPanel(false);
+    case "creators":
+      return renderCreatorsPanel(false);
+    case "forum":
+      return renderForumPanel(false);
+    case "feedback":
+      return renderFeedbackMemberPanel();
+    case "chat":
+      return renderChatWorkspace("member");
+    case "profile":
+      return renderProfilePanel(false);
+    case "overview":
+    default:
+      return [renderNotificationsPanel(), renderFeedPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderCommunityOverviewPanel()].join("");
+  }
+}
+
+function normalizeActiveTab(tab) {
+  const allowed = canManagePortal()
+    ? ["overview", "feed", "community", "events", "news", "creators", "forum", "feedback", "planning", "team", "chat", "time", "profile", "settings"]
+    : canAccessStaffArea()
+      ? ["overview", "feed", "community", "events", "news", "creators", "forum", "schedule", "feedback", "chat", "time", "profile"]
+      : ["overview", "feed", "community", "events", "news", "creators", "forum", "feedback", "chat", "profile"];
+
+  return allowed.includes(tab) ? tab : "overview";
 }
