@@ -3651,13 +3651,14 @@ function validateChatPayload(body, user, store) {
 }
 
 function buildCommunityPayload(store) {
-  const team = store.users
+  const activeUsers = (store.users || []).filter((entry) => !entry.isBlocked);
+  const team = activeUsers
     .filter((entry) => entry.role !== "member")
     .slice()
     .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
     .map(sanitizeUser);
 
-  const creators = store.users
+  const creators = activeUsers
     .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
     .slice()
     .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
@@ -3666,13 +3667,13 @@ function buildCommunityPayload(store) {
   return {
     team,
     creators,
-    events: COMMUNITY_EVENTS,
+    events: (store.events || []).slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)),
     rules: COMMUNITY_RULES,
     faq: COMMUNITY_FAQ,
     stats: {
-      members: store.users.filter((entry) => entry.role === "member").length,
-      moderators: store.users.filter((entry) => entry.role === "moderator").length,
-      planners: store.users.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
+      members: activeUsers.filter((entry) => entry.role === "member").length,
+      moderators: activeUsers.filter((entry) => entry.role === "moderator").length,
+      planners: activeUsers.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
       news: store.announcements.length,
       creators: creators.length
     }

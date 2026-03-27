@@ -1676,6 +1676,42 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "event-create": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/events", {
+            method: "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              dateLabel: formData.get("dateLabel"),
+              world: formData.get("world"),
+              host: formData.get("host"),
+              summary: formData.get("summary")
+            })
+          }),
+        "Event wurde gespeichert."
+      );
+      break;
+    }
+
+    case "event-delete": {
+      const eventId = form.dataset.eventId;
+      if (!window.confirm("Dieses Event wirklich entfernen?")) {
+        return;
+      }
+
+      await performAction(
+        () =>
+          api(`/api/events/${encodeURIComponent(eventId)}`, {
+            method: "DELETE"
+          }),
+        "Event wurde entfernt.",
+        "warning"
+      );
+      break;
+    }
+
     case "catalog": {
       const formData = new FormData(form);
       const key = form.dataset.key;
