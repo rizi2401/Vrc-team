@@ -43,7 +43,9 @@ const state = {
     flash: null,
     activeTab: "",
     liveChatConnected: false,
-    notificationPermission: "default"
+    notificationPermission: "default",
+    tabBarScrollLeft: 0,
+    tabViewportScrollY: null
   }
 };
 
@@ -237,9 +239,45 @@ function renderSonaraHero({ eyebrow, title, intro, chips = [] }) {
 
 function render() {
   root.innerHTML = state.session ? renderDashboard() : renderPublicPortal();
+  restoreTabBarState();
   syncChatStream();
   syncNotificationPermission();
   emitBrowserNotifications();
+}
+
+function restoreTabBarState() {
+  const tabBar = root.querySelector(".tab-bar");
+  if (!tabBar) return;
+
+  tabBar.scrollLeft = Number(state.ui.tabBarScrollLeft || 0);
+  tabBar.addEventListener(
+    "scroll",
+    () => {
+      state.ui.tabBarScrollLeft = tabBar.scrollLeft;
+    },
+    { passive: true }
+  );
+
+  const activeChip = tabBar.querySelector(".tab-chip.active");
+  if (activeChip) {
+    activeChip.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  if (typeof state.ui.tabViewportScrollY === "number") {
+    const restoreY = state.ui.tabViewportScrollY;
+    state.ui.tabViewportScrollY = null;
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: restoreY, behavior: "auto" });
+    });
+  }
+}
+
+function rememberTabBarState(sourceElement = null) {
+  const tabBar = sourceElement?.closest?.(".tab-bar") || root.querySelector(".tab-bar");
+  if (!tabBar) return;
+
+  state.ui.tabBarScrollLeft = tabBar.scrollLeft;
+  state.ui.tabViewportScrollY = window.scrollY;
 }
 
 async function performAction(callback, successMessage = "", successTone = "success") {
@@ -3082,6 +3120,7 @@ async function handleClick(event) {
       break;
 
     case "set-tab":
+      rememberTabBarState(actionElement);
       state.ui.activeTab = normalizeActiveTab(actionElement.dataset.tab || "");
       render();
       break;

@@ -1,17 +1,34 @@
 {
+  "slots": [],
   "users": [
     {
       "id": "79d4d417-c38b-4479-afdf-5f3093523d65",
       "username": "admin",
       "displayName": "System Admin",
       "role": "admin",
+      "vrchatName": "System Admin",
+      "discordName": "admin",
+      "avatarUrl": "",
+      "bio": "",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
       "passwordHash": "ee0e53f6ceb47dcef6f9fe5cb345261d:4eac92098e4ac33a67ec191e90c62f9b657c3cf112caa4d95c37e8cd5248f98c786af4cd9b756930f7653bcdacf17195310c23e798a5585d776d1119a2ce9594"
     },
     {
       "id": "ba196651-1980-4724-99ee-105d220fecf2",
       "username": "kian",
       "displayName": "Kian",
-      "role": "viewer",
+      "role": "member",
+      "vrchatName": "Kian",
+      "discordName": "kian",
+      "avatarUrl": "",
+      "bio": "",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
       "passwordHash": "bca7771658e6e5e407617e6c68597837:11f0f1a7bb5c60ad868f299fff0015d53caa3c701298765c115e9ce0354e2cb443ca1b5323a4b9175701fef4482ddf01349a5acb6736d6dadd9ee14162d85af8"
     }
   ],
@@ -40,5 +57,16 @@
   "requests": [],
   "announcements": [],
   "chatMessages": [],
-  "timeEntries": []
+  "timeEntries": [],
+  "swapRequests": [],
+  "discordStatus": {
+    "lastAttemptAt": "",
+    "lastSuccessAt": "",
+    "lastError": "",
+    "lastStatusCode": 0
+  },
+  "vrchatAnalytics": {},
+  "directMessages": [],
+  "forumThreads": [],
+  "warnings": []
 }
