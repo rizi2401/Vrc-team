@@ -3686,14 +3686,6 @@ function renderTeamPanelV2() {
                   <textarea id="newContactNote" name="contactNote" placeholder="Discord-Server, Kontaktinfo oder kurze Hinweise"></textarea>
                 </div>
                 <div class="field">
-                  <label for="newWeeklyHoursCapacity">Stunden pro Woche</label>
-                  <input id="newWeeklyHoursCapacity" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" placeholder="z. B. 12">
-                </div>
-                <div class="field">
-                  <label for="newWeeklyDaysCapacity">Tage pro Woche</label>
-                  <input id="newWeeklyDaysCapacity" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" placeholder="z. B. 3">
-                </div>
-                <div class="field">
                   <label for="newCreatorBlurb">Creator-Text</label>
                   <input id="newCreatorBlurb" name="creatorBlurb" type="text" placeholder="Kurztext fuer Creator-Bereich">
                 </div>
@@ -3731,7 +3723,7 @@ function renderTeamPanelV2() {
                     ${user.isBlocked ? `<p class="helper-text"><strong>Gesperrt:</strong> ${escapeHtml(user.blockReason || "Kein Grund angegeben.")}</p>` : ""}
                     ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
                     ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
-                    ${(Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
+                    ${user.role === "moderator" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
                     ${renderCreatorLinkList(user, true)}
                   </div>
                 </div>
@@ -3774,14 +3766,20 @@ function renderTeamPanelV2() {
                       <label for="contact-${escapeHtml(user.id)}">Kontakt / Hinweise</label>
                       <textarea id="contact-${escapeHtml(user.id)}" name="contactNote">${escapeHtml(user.contactNote || "")}</textarea>
                     </div>
-                    <div class="field">
-                      <label for="weeklyHours-${escapeHtml(user.id)}">Stunden pro Woche</label>
-                      <input id="weeklyHours-${escapeHtml(user.id)}" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}">
-                    </div>
-                    <div class="field">
-                      <label for="weeklyDays-${escapeHtml(user.id)}">Tage pro Woche</label>
-                      <input id="weeklyDays-${escapeHtml(user.id)}" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
-                    </div>
+                    ${
+                      user.role === "moderator"
+                        ? `
+                          <div class="field">
+                            <label for="weeklyHours-${escapeHtml(user.id)}">Stunden pro Woche</label>
+                            <input id="weeklyHours-${escapeHtml(user.id)}" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}">
+                          </div>
+                          <div class="field">
+                            <label for="weeklyDays-${escapeHtml(user.id)}">Tage pro Woche</label>
+                            <input id="weeklyDays-${escapeHtml(user.id)}" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
+                          </div>
+                        `
+                        : ""
+                    }
                     <div class="field">
                       <label for="creatorBlurb-${escapeHtml(user.id)}">Creator-Text</label>
                       <input id="creatorBlurb-${escapeHtml(user.id)}" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}">
@@ -4107,7 +4105,7 @@ function buildShiftCalendarDays(shifts) {
 }
 
 function buildCapacityRows() {
-  const users = (state.data?.users || []).filter((entry) => entry.role !== "member");
+  const users = (state.data?.users || []).filter((entry) => entry.role === "moderator");
   const week = getCurrentWeekRange();
 
   return users
@@ -5920,6 +5918,7 @@ async function handleChange(event) {
 function renderProfilePanel(managerView) {
   const user = state.session;
   const draftKey = "profile-update:";
+  const showAvailabilityFields = user.role === "moderator";
 
   return `
     <section class="panel ${managerView ? "span-12" : "span-12"}">
@@ -5938,6 +5937,7 @@ function renderProfilePanel(managerView) {
             <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
             ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
             ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
+            ${showAvailabilityFields && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
             ${renderCreatorLinkList(user, true)}
           </div>
         </div>
@@ -5969,6 +5969,20 @@ function renderProfilePanel(managerView) {
               <label for="profileContactNote">Kontakt / Hinweise</label>
               <textarea id="profileContactNote" name="contactNote" placeholder="Discord-Server, kurze Erreichbarkeit oder Info">${escapeHtml(user.contactNote || "")}</textarea>
             </div>
+            ${
+              showAvailabilityFields
+                ? `
+                  <div class="field">
+                    <label for="profileWeeklyHoursCapacity">Verfuegbare Stunden pro Woche</label>
+                    <input id="profileWeeklyHoursCapacity" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}" placeholder="z. B. 12">
+                  </div>
+                  <div class="field">
+                    <label for="profileWeeklyDaysCapacity">Verfuegbare Tage pro Woche</label>
+                    <input id="profileWeeklyDaysCapacity" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}" placeholder="z. B. 3">
+                  </div>
+                `
+                : ""
+            }
             <div class="field">
               <label for="profileCreatorBlurb">Creator-Text</label>
               <input id="profileCreatorBlurb" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}" placeholder="z. B. Musik, Clips, Streams">
@@ -6528,6 +6542,8 @@ function renderManagerDashboard(activeTab) {
       return renderFeedPanel();
     case "community":
       return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "calendar":
+      return renderShiftCalendarPanel();
     case "events":
       return renderEventsPanel();
     case "news":
@@ -6540,6 +6556,8 @@ function renderManagerDashboard(activeTab) {
       return renderFeedbackAdminPanel();
     case "planning":
       return [renderPlannerPanel(), renderSwapPanel(true), renderRequestAdminPanel()].join("");
+    case "capacity":
+      return renderCapacityPanel();
     case "team":
       return [renderWarningAdminPanel(), renderTeamPanelV2()].join("");
     case "chat":
@@ -6562,6 +6580,8 @@ function renderModeratorDashboard(activeTab) {
       return renderFeedPanel();
     case "community":
       return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "calendar":
+      return renderShiftCalendarPanel();
     case "events":
       return renderEventsPanel();
     case "news":
@@ -6592,6 +6612,8 @@ function renderMemberDashboard(activeTab) {
       return renderFeedPanel();
     case "community":
       return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "calendar":
+      return renderShiftCalendarPanel();
     case "events":
       return renderEventsPanel();
     case "news":
