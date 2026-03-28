@@ -1560,3 +1560,88 @@ code {
     min-height: 96px;
   }
 }
+
+.checkbox-field {
+  justify-content: flex-end;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-weight: 600;
+  color: var(--text-strong, #273240);
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  accent-color: #b77921;
+}
+
+.calendar-days {
+  display: grid;
+  gap: 1rem;
+}
+
+.calendar-day,
+.calendar-slot,
+.calendar-member {
+  border: 1px solid rgba(126, 103, 70, 0.24);
+  background: rgba(255, 250, 242, 0.82);
+  border-radius: 22px;
+}
+
+.calendar-day {
+  padding: 1rem 1.05rem;
+}
+
+.calendar-day-head,
+.calendar-slot-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.calendar-day-head {
+  margin-bottom: 0.9rem;
+}
+
+.calendar-slots {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.calendar-slot {
+  padding: 1rem;
+}
+
+.calendar-slot h3,
+.calendar-member h4 {
+  margin: 0;
+}
+
+.calendar-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.9rem;
+}
+
+.calendar-member {
+  padding: 0.9rem;
+}
+
+.calendar-member.lead {
+  border-color: rgba(188, 101, 45, 0.48);
+  box-shadow: 0 18px 36px rgba(188, 101, 45, 0.12);
+  background: linear-gradient(180deg, rgba(255, 245, 230, 0.95), rgba(255, 250, 242, 0.88));
+}
+
+.calendar-member p {
+  margin: 0.35rem 0 0;
+}

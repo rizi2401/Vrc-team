@@ -628,6 +628,8 @@ function renderManagerDashboard(activeTab) {
   switch (activeTab) {
     case "community":
       return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "calendar":
+      return renderShiftCalendarPanel();
     case "events":
       return renderEventsPanel();
     case "planning":
@@ -662,6 +664,8 @@ function renderModeratorDashboard(activeTab) {
   switch (activeTab) {
     case "community":
       return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "calendar":
+      return renderShiftCalendarPanel();
     case "events":
       return renderEventsPanel();
     case "schedule":
@@ -692,6 +696,8 @@ function renderMemberDashboard(activeTab) {
   switch (activeTab) {
     case "community":
       return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+    case "calendar":
+      return renderShiftCalendarPanel();
     case "events":
       return renderEventsPanel();
     case "news":
@@ -905,6 +911,13 @@ function renderPlannerPanel() {
               <label for="shiftTask">Aufgabe</label>
               <input id="shiftTask" name="task" list="taskOptions" value="${escapeHtml(editingShift?.task || state.data.settings.tasks?.[0] || "")}" placeholder="z. B. Patrouille" required>
             </div>
+            <div class="field checkbox-field">
+              <label class="checkbox-row" for="shiftIsLead">
+                <input id="shiftIsLead" name="isLead" type="checkbox" ${editingShift?.isLead ? "checked" : ""}>
+                <span>Leitung in dieser Instanz</span>
+              </label>
+              <p class="helper-text">Wird im Kalender besonders hervorgehoben.</p>
+            </div>
             <div class="field">
               <label for="shiftNotes">Interne Notiz</label>
               <textarea id="shiftNotes" name="notes" placeholder="Briefing, Besonderheiten oder Ansprechpartner">${escapeHtml(editingShift?.notes || "")}</textarea>
@@ -931,6 +944,9 @@ function renderPlannerPanel() {
           <p>
             Die Kernschichten laufen ab 12 Uhr im 4-Stunden-Takt. Fuer Abloesen und Verstaerkung stehen Zwischenschichten bereit,
             und Beginn sowie Ende lassen sich jederzeit frei anpassen.
+          </p>
+          <p>
+            Wenn die Datenbank-Verbindung aktiv ist, bleiben Schichten, Kataloge und Kalender auch nach GitHub-Updates und neuen Deploys erhalten.
           </p>
 
           <div class="inline-stats">
@@ -960,6 +976,7 @@ function renderShiftCard(shift, options = {}) {
     <article class="mini-card ${status}">
       <div class="status-row">
         <span class="pill ${todayShift ? "teal" : "neutral"}">${escapeHtml(formatDate(shift.date))}</span>
+        ${shift.isLead ? '<span class="pill rose">Leitung</span>' : ""}
         <span class="pill ${statusTone}">${escapeHtml(statusLabel)}</span>
       </div>
       <div>
@@ -981,6 +998,152 @@ function renderShiftCard(shift, options = {}) {
             </div>
           `
           : renderShiftActionRow(shift, openEntry)
+      }
+    </article>
+  `;
+}
+
+function renderShiftCalendarPanel() {
+  const shifts = getSortedShifts(state.data?.calendarShifts || state.data?.shifts || []);
+  const days = buildShiftCalendarDays(shifts);
+  const leadCount = shifts.filter((entry) => entry.isLead).length;
+  const worldCount = new Set(shifts.map((entry) => entry.world).filter(Boolean)).size;
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Kalender</p>
+          <h2>Wer wann mit wem Schicht hat</h2>
+          <p class="section-copy">Gruppiert nach Tag, Uhrzeit und Welt. Leitungen sind sofort sichtbar.</p>
+        </div>
+      </div>
+
+      <div class="stats-strip compact-stats">
+        ${renderStatCard("Schichten", shifts.length, "Aktuell sichtbare Eintraege", "amber")}
+        ${renderStatCard("Kalendertage", days.length, "Tage mit geplanter Besetzung", "sky")}
+        ${renderStatCard("Leitungen", leadCount, "Markierte Instanz-Leitungen", "rose")}
+        ${renderStatCard("Welten", worldCount, "Einsatzorte im Plan", "teal")}
+      </div>
+
+      <div class="calendar-days">
+        ${
+          days.length
+            ? days.map((day) => renderShiftCalendarDay(day)).join("")
+            : renderEmptyState("Noch keine Schichten im Kalender", "Sobald Schichten geplant sind, erscheinen sie hier gruppiert.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderShiftCalendarDay(day) {
+  return `
+    <article class="calendar-day">
+      <div class="calendar-day-head">
+        <div>
+          <p class="eyebrow">Kalendertag</p>
+          <h3>${escapeHtml(formatDate(day.date))}</h3>
+        </div>
+        <span class="pill neutral">${escapeHtml(String(day.slots.length))} Gruppen</span>
+      </div>
+      <div class="calendar-slots">
+        ${day.slots.map((slot) => renderShiftCalendarSlot(slot)).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderShiftCalendarSlot(slot) {
+  const leaders = slot.members.filter((entry) => entry.isLead);
+  const leaderText = leaders.length ? leaders.map((entry) => entry.memberName).join(", ") : "Noch keine Leitung gesetzt";
+
+  return `
+    <section class="calendar-slot">
+      <div class="calendar-slot-head">
+        <div>
+          <div class="status-row">
+            <span class="pill teal">${escapeHtml(slot.windowLabel)}</span>
+            <span class="pill amber">${escapeHtml(slot.world)}</span>
+            <span class="pill ${leaders.length ? "rose" : "neutral"}">${escapeHtml(leaders.length ? `Leitung: ${leaderText}` : leaderText)}</span>
+          </div>
+          <h3>${escapeHtml(slot.shiftTypes.join(" · "))}</h3>
+        </div>
+        <p class="pill-note">${escapeHtml(String(slot.members.length))} Personen in dieser Gruppe</p>
+      </div>
+      <div class="calendar-members">
+        ${slot.members.map((entry) => renderShiftCalendarMember(entry)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderShiftCalendarMember(entry) {
+  return `
+    <article class="calendar-member ${entry.isLead ? "lead" : ""}">
+      <div class="status-row">
+        <h4>${escapeHtml(entry.memberName || "Unbekannt")}</h4>
+        <span class="pill ${entry.isLead ? "rose" : "neutral"}">${entry.isLead ? "Leitung" : "Team"}</span>
+      </div>
+      <p>${escapeHtml(entry.task || "Ohne Aufgabe")}</p>
+      <p class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.memberRole] || "Team")}</p>
+    </article>
+  `;
+}
+
+function renderCapacityPanel() {
+  const rows = buildCapacityRows();
+  const totalWorkedHours = rows.reduce((sum, entry) => sum + entry.workedHours, 0);
+  const totalPlannedHours = rows.reduce((sum, entry) => sum + entry.plannedHours, 0);
+  const totalCapacityHours = rows.reduce((sum, entry) => sum + entry.capacityHours, 0);
+  const openHours = rows.reduce((sum, entry) => sum + Math.max(0, entry.capacityHours - entry.plannedHours), 0);
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Auslastung</p>
+          <h2>Stunden und Verfuegbarkeit im Blick</h2>
+          <p class="section-copy">Hier siehst du, wer diese Woche schon gearbeitet hat, was geplant ist und wie viel jede Person laut Profil noch abdecken kann.</p>
+        </div>
+      </div>
+
+      <div class="stats-strip compact-stats">
+        ${renderStatCard("Geleistet", formatHoursValue(totalWorkedHours), "Bisher erfasste Stunden diese Woche", "teal")}
+        ${renderStatCard("Geplant", formatHoursValue(totalPlannedHours), "Eingetragene Schichtstunden diese Woche", "amber")}
+        ${renderStatCard("Kapazitaet", totalCapacityHours ? formatHoursValue(totalCapacityHours) : "-", totalCapacityHours ? "Gemeldete Wochenstunden aus Profilen" : "Noch keine Profilangaben", "sky")}
+        ${renderStatCard("Noch offen", totalCapacityHours ? formatHoursValue(openHours) : "-", totalCapacityHours ? "Noch nicht verplante gemeldete Stunden" : "Keine Kapazitaet hinterlegt", "rose")}
+      </div>
+
+      <div class="calendar-members">
+        ${
+          rows.length
+            ? rows.map((entry) => renderCapacityCard(entry)).join("")
+            : renderEmptyState("Noch keine Staff-Daten", "Sobald Moderatoren oder Leitung angelegt sind, erscheint die Wochenuebersicht hier.")
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderCapacityCard(entry) {
+  const plannedDelta = entry.capacityHours > 0 ? entry.capacityHours - entry.plannedHours : null;
+  const dayDelta = entry.capacityDays > 0 ? entry.capacityDays - entry.plannedDays : null;
+
+  return `
+    <article class="calendar-member ${entry.statusTone === "rose" ? "lead" : ""}">
+      <div class="status-row">
+        <h4>${escapeHtml(getPrimaryDisplayName(entry.user))}</h4>
+        <span class="pill ${entry.statusTone}">${escapeHtml(entry.statusLabel)}</span>
+      </div>
+      <p class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</p>
+      <p><strong>Geleistet:</strong> ${escapeHtml(formatHoursValue(entry.workedHours))} an ${escapeHtml(formatCapacityDays(entry.workedDays))}</p>
+      <p><strong>Geplant:</strong> ${escapeHtml(formatHoursValue(entry.plannedHours))} an ${escapeHtml(formatCapacityDays(entry.plannedDays))}</p>
+      <p><strong>Verfuegbar:</strong> ${escapeHtml(formatCapacityHours(entry.capacityHours))} / ${escapeHtml(formatCapacityDays(entry.capacityDays))}</p>
+      ${
+        plannedDelta === null && dayDelta === null
+          ? '<p class="helper-text">Diese Person hat noch keine Wochen-Kapazitaet im Profil hinterlegt.</p>'
+          : `<p class="helper-text">${escapeHtml(buildCapacityDeltaText(plannedDelta, dayDelta))}</p>`
       }
     </article>
   `;
@@ -1490,6 +1653,8 @@ async function buildProfilePayload(form) {
     discordName: formData.get("discordName"),
     bio: formData.get("bio"),
     contactNote: formData.get("contactNote"),
+    weeklyHoursCapacity: formData.get("weeklyHoursCapacity"),
+    weeklyDaysCapacity: formData.get("weeklyDaysCapacity"),
     creatorBlurb: formData.get("creatorBlurb"),
     creatorLinks: formData.get("creatorLinks"),
     creatorVisible: formData.get("creatorVisible") === "on"
@@ -1573,7 +1738,8 @@ async function handleSubmit(event) {
         shiftType: String(formData.get("shiftType") || "").trim(),
         world: String(formData.get("world") || "").trim(),
         task: String(formData.get("task") || "").trim(),
-        notes: formData.get("notes")
+        notes: formData.get("notes"),
+        isLead: formData.get("isLead") === "on"
       };
       const catalogAdds = collectCatalogAddsForShift(payload, state.data.settings);
       if (catalogAdds.shiftTypes.length || catalogAdds.worlds.length || catalogAdds.tasks.length) {
@@ -3122,7 +3288,10 @@ function normalizeActiveTab(tab) {
 }
 
 function renderWarningOverlay() {
-  const warnings = (state.data?.warnings || []).filter((entry) => entry.status === "active" && !entry.acknowledgedAt);
+  const currentUserId = state.session?.id || "";
+  const warnings = (state.data?.warnings || []).filter(
+    (entry) => entry.status === "active" && !entry.acknowledgedAt && entry.userId === currentUserId
+  );
   if (!warnings.length) return "";
 
   return `
@@ -3140,7 +3309,7 @@ function renderWarningOverlay() {
 
 function renderWarningAdminPanel() {
   if (!canManagePortal()) return "";
-  const warnings = (state.data?.warnings || []).filter((entry) => entry.status === "active").slice(0, 8);
+  const warnings = (state.data?.managedWarnings || []).filter((entry) => entry.status === "active").slice(0, 8);
 
   return `
     <section class="panel span-12">
@@ -3517,6 +3686,14 @@ function renderTeamPanelV2() {
                   <textarea id="newContactNote" name="contactNote" placeholder="Discord-Server, Kontaktinfo oder kurze Hinweise"></textarea>
                 </div>
                 <div class="field">
+                  <label for="newWeeklyHoursCapacity">Stunden pro Woche</label>
+                  <input id="newWeeklyHoursCapacity" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" placeholder="z. B. 12">
+                </div>
+                <div class="field">
+                  <label for="newWeeklyDaysCapacity">Tage pro Woche</label>
+                  <input id="newWeeklyDaysCapacity" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" placeholder="z. B. 3">
+                </div>
+                <div class="field">
                   <label for="newCreatorBlurb">Creator-Text</label>
                   <input id="newCreatorBlurb" name="creatorBlurb" type="text" placeholder="Kurztext fuer Creator-Bereich">
                 </div>
@@ -3554,6 +3731,7 @@ function renderTeamPanelV2() {
                     ${user.isBlocked ? `<p class="helper-text"><strong>Gesperrt:</strong> ${escapeHtml(user.blockReason || "Kein Grund angegeben.")}</p>` : ""}
                     ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
                     ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
+                    ${(Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
                     ${renderCreatorLinkList(user, true)}
                   </div>
                 </div>
@@ -3595,6 +3773,14 @@ function renderTeamPanelV2() {
                     <div class="field span-all">
                       <label for="contact-${escapeHtml(user.id)}">Kontakt / Hinweise</label>
                       <textarea id="contact-${escapeHtml(user.id)}" name="contactNote">${escapeHtml(user.contactNote || "")}</textarea>
+                    </div>
+                    <div class="field">
+                      <label for="weeklyHours-${escapeHtml(user.id)}">Stunden pro Woche</label>
+                      <input id="weeklyHours-${escapeHtml(user.id)}" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}">
+                    </div>
+                    <div class="field">
+                      <label for="weeklyDays-${escapeHtml(user.id)}">Tage pro Woche</label>
+                      <input id="weeklyDays-${escapeHtml(user.id)}" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
                     </div>
                     <div class="field">
                       <label for="creatorBlurb-${escapeHtml(user.id)}">Creator-Text</label>
@@ -3661,6 +3847,7 @@ function renderProfilePanel(managerView) {
             <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
             ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
             ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
+            ${(Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
             ${renderCreatorLinkList(user, true)}
           </div>
         </div>
@@ -3690,6 +3877,14 @@ function renderProfilePanel(managerView) {
             <div class="field span-all">
               <label for="profileContactNote">Kontakt / Hinweise</label>
               <textarea id="profileContactNote" name="contactNote" placeholder="Discord-Server, kurze Erreichbarkeit oder Info">${escapeHtml(user.contactNote || "")}</textarea>
+            </div>
+            <div class="field">
+              <label for="profileWeeklyHoursCapacity">Verfuegbare Stunden pro Woche</label>
+              <input id="profileWeeklyHoursCapacity" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}" placeholder="z. B. 12">
+            </div>
+            <div class="field">
+              <label for="profileWeeklyDaysCapacity">Verfuegbare Tage pro Woche</label>
+              <input id="profileWeeklyDaysCapacity" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}" placeholder="z. B. 3">
             </div>
             <div class="field">
               <label for="profileCreatorBlurb">Creator-Text</label>
@@ -3867,6 +4062,200 @@ function getSortedShifts(shifts) {
       if (left.shiftType !== right.shiftType) return left.shiftType.localeCompare(right.shiftType, "de");
       return left.world.localeCompare(right.world, "de");
     });
+}
+
+function buildShiftCalendarDays(shifts) {
+  const groupedByDate = new Map();
+
+  for (const shift of shifts) {
+    const dateKey = String(shift.date || "");
+    const slotKey = [dateKey, shift.startTime || "", shift.endTime || "", shift.world || ""].join("|");
+    if (!groupedByDate.has(dateKey)) groupedByDate.set(dateKey, new Map());
+
+    const slotMap = groupedByDate.get(dateKey);
+    if (!slotMap.has(slotKey)) {
+      slotMap.set(slotKey, {
+        key: slotKey,
+        date: dateKey,
+        world: shift.world || "Ohne Welt",
+        startTime: shift.startTime || "",
+        endTime: shift.endTime || "",
+        windowLabel: formatShiftWindow(shift),
+        shiftTypes: [],
+        members: []
+      });
+    }
+
+    const slot = slotMap.get(slotKey);
+    if (!slot.shiftTypes.includes(shift.shiftType)) slot.shiftTypes.push(shift.shiftType);
+    slot.members.push(shift);
+  }
+
+  return Array.from(groupedByDate.entries())
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .map(([date, slotMap]) => ({
+      date,
+      slots: Array.from(slotMap.values())
+        .sort((left, right) => compareTimeValues(left.startTime || "", right.startTime || "") || left.world.localeCompare(right.world, "de"))
+        .map((slot) => ({
+          ...slot,
+          members: slot.members
+            .slice()
+            .sort((left, right) => Number(Boolean(right.isLead)) - Number(Boolean(left.isLead)) || (left.memberName || "").localeCompare(right.memberName || "", "de"))
+        }))
+    }));
+}
+
+function buildCapacityRows() {
+  const users = (state.data?.users || []).filter((entry) => entry.role !== "member");
+  const week = getCurrentWeekRange();
+
+  return users
+    .map((user) => {
+      const workedHours = calculateWorkedHoursForWeek(user.id, week);
+      const workedDays = calculateWorkedDaysForWeek(user.id, week);
+      const plannedHours = calculatePlannedHoursForWeek(user.id, week);
+      const plannedDays = calculatePlannedDaysForWeek(user.id, week);
+      const capacityHours = Number(user.weeklyHoursCapacity || 0);
+      const capacityDays = Number(user.weeklyDaysCapacity || 0);
+      const overHours = capacityHours > 0 && plannedHours > capacityHours;
+      const overDays = capacityDays > 0 && plannedDays > capacityDays;
+      const fullyPlanned =
+        (capacityHours > 0 && plannedHours >= capacityHours) ||
+        (capacityDays > 0 && plannedDays >= capacityDays);
+
+      let statusLabel = "Noch offen";
+      let statusTone = "amber";
+      if (!capacityHours && !capacityDays) {
+        statusLabel = "Keine Angabe";
+        statusTone = "neutral";
+      } else if (overHours || overDays) {
+        statusLabel = "Ueberplant";
+        statusTone = "rose";
+      } else if (fullyPlanned) {
+        statusLabel = "Gedeckt";
+        statusTone = "success";
+      }
+
+      return {
+        user,
+        workedHours,
+        workedDays,
+        plannedHours,
+        plannedDays,
+        capacityHours,
+        capacityDays,
+        statusLabel,
+        statusTone
+      };
+    })
+    .sort((left, right) => left.user.vrchatName.localeCompare(right.user.vrchatName, "de"));
+}
+
+function getCurrentWeekRange(referenceDate = new Date()) {
+  const start = new Date(referenceDate);
+  start.setHours(0, 0, 0, 0);
+  const weekday = start.getDay();
+  const deltaToMonday = weekday === 0 ? -6 : 1 - weekday;
+  start.setDate(start.getDate() + deltaToMonday);
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+
+  return {
+    start,
+    end,
+    startKey: getLocalDateKey(start),
+    endKey: getLocalDateKey(end)
+  };
+}
+
+function calculateWorkedHoursForWeek(userId, week) {
+  return (state.data?.timeEntries || [])
+    .filter((entry) => entry.userId === userId)
+    .reduce((sum, entry) => sum + calculateEntryOverlapHours(entry, week), 0);
+}
+
+function calculateWorkedDaysForWeek(userId, week) {
+  const days = new Set();
+  for (const entry of state.data?.timeEntries || []) {
+    if (entry.userId !== userId) continue;
+    const overlap = getEntryOverlapWindow(entry, week);
+    if (!overlap) continue;
+    days.add(getLocalDateKey(overlap.start));
+  }
+  return days.size;
+}
+
+function calculatePlannedHoursForWeek(userId, week) {
+  return getSortedShifts(state.data?.shifts || [])
+    .filter((entry) => entry.memberId === userId && entry.date >= week.startKey && entry.date < week.endKey)
+    .reduce((sum, entry) => sum + getShiftDurationHours(entry), 0);
+}
+
+function calculatePlannedDaysForWeek(userId, week) {
+  return new Set(
+    getSortedShifts(state.data?.shifts || [])
+      .filter((entry) => entry.memberId === userId && entry.date >= week.startKey && entry.date < week.endKey)
+      .map((entry) => entry.date)
+  ).size;
+}
+
+function calculateEntryOverlapHours(entry, week) {
+  const overlap = getEntryOverlapWindow(entry, week);
+  if (!overlap) return 0;
+  return (overlap.end - overlap.start) / 3600000;
+}
+
+function getEntryOverlapWindow(entry, week) {
+  const entryStart = new Date(entry.checkInAt);
+  const entryEnd = entry.checkOutAt ? new Date(entry.checkOutAt) : new Date();
+  const overlapStart = entryStart > week.start ? entryStart : week.start;
+  const overlapEnd = entryEnd < week.end ? entryEnd : week.end;
+  if (!(overlapEnd > overlapStart)) return null;
+  return { start: overlapStart, end: overlapEnd };
+}
+
+function getShiftDurationHours(shift) {
+  const start = timeValueToMinutes(shift.startTime || "");
+  const end = timeValueToMinutes(shift.endTime || "");
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start === Number.MAX_SAFE_INTEGER || end === Number.MAX_SAFE_INTEGER) return 0;
+  const durationMinutes = end >= start ? end - start : 1440 - start + end;
+  return durationMinutes / 60;
+}
+
+function formatHoursValue(value) {
+  const numeric = Number(value || 0);
+  const rounded = Math.round(numeric * 10) / 10;
+  const hasDecimal = Math.abs(rounded % 1) > 0.001;
+  return `${hasDecimal ? rounded.toFixed(1) : Math.round(rounded)} Std.`;
+}
+
+function formatCapacityHours(value) {
+  const numeric = Number(value || 0);
+  return numeric > 0 ? formatHoursValue(numeric) : "Keine Angabe";
+}
+
+function formatCapacityDays(value) {
+  const numeric = Number(value || 0);
+  return numeric > 0 ? `${numeric} Tage` : "Keine Angabe";
+}
+
+function buildCapacityDeltaText(plannedDelta, dayDelta) {
+  const parts = [];
+  if (plannedDelta !== null) {
+    if (plannedDelta > 0) parts.push(`${formatHoursValue(plannedDelta)} noch frei`);
+    else if (plannedDelta < 0) parts.push(`${formatHoursValue(Math.abs(plannedDelta))} ueberplant`);
+    else parts.push("Stunden genau gedeckt");
+  }
+
+  if (dayDelta !== null) {
+    if (dayDelta > 0) parts.push(`${dayDelta} Tage noch frei`);
+    else if (dayDelta < 0) parts.push(`${Math.abs(dayDelta)} Tage ueberplant`);
+    else parts.push("Tage genau gedeckt");
+  }
+
+  return parts.join(" · ");
 }
 
 function getOpenEntryForViewer() {
@@ -5283,7 +5672,7 @@ function renderDashboardTabs(activeTab) {
 
   let tabs = common;
   if (canManagePortal()) {
-    tabs = [...common, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }, { id: "settings", label: "Einstellungen" }];
+    tabs = [...common, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "capacity", label: "Auslastung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }, { id: "settings", label: "Einstellungen" }];
   } else if (canAccessStaffArea()) {
     tabs = [...common, { id: "schedule", label: "Meine Schichten" }, { id: "feedback", label: "Feedback" }, { id: "time", label: "Zeiten" }];
   } else {
@@ -5321,6 +5710,8 @@ function renderManagerDashboard(activeTab) {
       return renderFeedbackAdminPanel();
     case "planning":
       return [renderPlannerPanel(), renderSwapPanel(true), renderRequestAdminPanel()].join("");
+    case "capacity":
+      return renderCapacityPanel();
     case "team":
       return [renderWarningAdminPanel(), renderTeamPanelV2()].join("");
     case "chat":
@@ -6098,6 +6489,7 @@ function renderDashboardTabs(activeTab) {
     { id: "overview", label: "Dashboard" },
     { id: "feed", label: "Feed" },
     { id: "community", label: "Community" },
+    { id: "calendar", label: "Kalender" },
     { id: "events", label: "Events" },
     { id: "news", label: "News" },
     { id: "creators", label: "Creator" },
@@ -6222,10 +6614,10 @@ function renderMemberDashboard(activeTab) {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "feed", "community", "events", "news", "creators", "forum", "feedback", "planning", "team", "chat", "time", "profile", "settings"]
+    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "forum", "feedback", "planning", "capacity", "team", "chat", "time", "profile", "settings"]
     : canAccessStaffArea()
-      ? ["overview", "feed", "community", "events", "news", "creators", "forum", "schedule", "feedback", "chat", "time", "profile"]
-      : ["overview", "feed", "community", "events", "news", "creators", "forum", "feedback", "chat", "profile"];
+      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "forum", "schedule", "feedback", "chat", "time", "profile"]
+      : ["overview", "feed", "community", "calendar", "events", "news", "creators", "forum", "feedback", "chat", "profile"];
 
   return allowed.includes(tab) ? tab : "overview";
 }

@@ -352,6 +352,7 @@ async function handleApi(req, res, url) {
       shift.world = normalized.world;
       shift.task = normalized.task;
       shift.notes = normalized.notes;
+      shift.isLead = normalized.isLead;
       applyCatalogAdds(nextStore.settings, normalized.catalogAdds);
 
       if (memberChanged) {
@@ -1180,11 +1181,11 @@ function buildDefaultStore() {
       tasks: ["Begruessung", "Patrouille", "Support", "Event-Leitung", "Koordination"]
     },
     shifts: [
-      buildShift(addDays(today, 0), "12:00", "16:00", "Kernschicht", "Community Hub", "Begruessung", userByName.get("Aiko"), "Neue User zuerst einsammeln."),
+      buildShift(addDays(today, 0), "12:00", "16:00", "Kernschicht", "Community Hub", "Begruessung", userByName.get("Aiko"), "Neue User zuerst einsammeln.", true),
       buildShift(addDays(today, 0), "14:00", "18:00", "Zwischenschicht", "Sunset Lounge", "Patrouille", userByName.get("Mika"), "Fokus auf Stoerungen in Public Bereichen."),
-      buildShift(addDays(today, 1), "20:00", "00:00", "Event", "Event Arena", "Event-Leitung", userByName.get("Ren"), "Team 15 Minuten frueher briefen."),
+      buildShift(addDays(today, 1), "20:00", "00:00", "Event", "Event Arena", "Event-Leitung", userByName.get("Ren"), "Team 15 Minuten frueher briefen.", true),
       buildShift(addDays(today, 2), "16:00", "20:00", "Kernschicht", "Support Room", "Support", userByName.get("Sora"), "Meldungen sammeln und weiterreichen."),
-      buildShift(addDays(today, 3), "18:00", "22:00", "Uebergang", "Community Hub", "Koordination", userByName.get("Aiko"), "Kurzes Debriefing im Anschluss.")
+      buildShift(addDays(today, 3), "18:00", "22:00", "Uebergang", "Community Hub", "Koordination", userByName.get("Aiko"), "Kurzes Debriefing im Anschluss.", true)
     ],
     requests: [
       {
@@ -1236,7 +1237,18 @@ function buildDefaultStore() {
   };
 }
 
-function buildSeedUser(username, displayName, role, password, vrchatName = "", discordName = "", avatarUrl = "", bio = "") {
+function buildSeedUser(
+  username,
+  displayName,
+  role,
+  password,
+  vrchatName = "",
+  discordName = "",
+  avatarUrl = "",
+  bio = "",
+  weeklyHoursCapacity = 0,
+  weeklyDaysCapacity = 0
+) {
   return {
     id: crypto.randomUUID(),
     username,
@@ -1246,11 +1258,13 @@ function buildSeedUser(username, displayName, role, password, vrchatName = "", d
     discordName,
     avatarUrl,
     bio,
+    weeklyHoursCapacity: normalizeWeeklyHoursCapacity(weeklyHoursCapacity),
+    weeklyDaysCapacity: normalizeWeeklyDaysCapacity(weeklyDaysCapacity),
     passwordHash: hashPassword(password)
   };
 }
 
-function buildShift(date, startTime, endTime, shiftType, world, task, memberId, notes = "") {
+function buildShift(date, startTime, endTime, shiftType, world, task, memberId, notes = "", isLead = false) {
   return {
     id: crypto.randomUUID(),
     date,
@@ -1260,7 +1274,8 @@ function buildShift(date, startTime, endTime, shiftType, world, task, memberId, 
     world,
     task,
     memberId,
-    notes
+    notes,
+    isLead: Boolean(isLead)
   };
 }
 
@@ -1386,17 +1401,21 @@ function normalizeShifts(shifts, users) {
   const validUserIds = new Set(users.map((entry) => entry.id));
 
   return shifts
-    .map((entry) => ({
-      id: String(entry.id || crypto.randomUUID()),
-      date: String(entry.date || "").trim(),
-      startTime: normalizeTimeValue(entry.startTime) || suggestLegacyShiftStart(entry.shiftType),
-      endTime: normalizeTimeValue(entry.endTime) || addHoursToTime(normalizeTimeValue(entry.startTime) || suggestLegacyShiftStart(entry.shiftType), 4),
-      shiftType: String(entry.shiftType || "").trim(),
-      world: String(entry.world || "").trim(),
-      task: String(entry.task || "").trim(),
-      memberId: String(entry.memberId || "").trim(),
-      notes: String(entry.notes || "").trim()
-    }))
+    .map((entry) => {
+      const task = String(entry.task || "").trim();
+      return {
+        id: String(entry.id || crypto.randomUUID()),
+        date: String(entry.date || "").trim(),
+        startTime: normalizeTimeValue(entry.startTime) || suggestLegacyShiftStart(entry.shiftType),
+        endTime: normalizeTimeValue(entry.endTime) || addHoursToTime(normalizeTimeValue(entry.startTime) || suggestLegacyShiftStart(entry.shiftType), 4),
+        shiftType: String(entry.shiftType || "").trim(),
+        world: String(entry.world || "").trim(),
+        task,
+        memberId: String(entry.memberId || "").trim(),
+        notes: String(entry.notes || "").trim(),
+        isLead: entry?.isLead === undefined ? /leitung/i.test(task) : normalizeBooleanInput(entry.isLead)
+      };
+    })
     .filter(
       (entry) =>
         isDateKey(entry.date) &&
@@ -1440,7 +1459,8 @@ function migrateLegacyPlanning(store, users, settings) {
           world,
           task: slot?.name || slot?.task || settings.tasks[0],
           memberId,
-          notes: slot?.task || ""
+          notes: slot?.task || "",
+          isLead: /leitung/i.test(String(slot?.name || slot?.task || ""))
         });
       }
     }
@@ -1734,10 +1754,20 @@ function sanitizeUser(user) {
 function sanitizeManagedUser(user) {
   return {
     ...sanitizeUser(user),
+    weeklyHoursCapacity: normalizeWeeklyHoursCapacity(user.weeklyHoursCapacity),
+    weeklyDaysCapacity: normalizeWeeklyDaysCapacity(user.weeklyDaysCapacity),
     isBlocked: Boolean(user.isBlocked),
     blockReason: user.blockReason || "",
     blockedAt: user.blockedAt || "",
     blockedBy: user.blockedBy || ""
+  };
+}
+
+function sanitizeSessionUser(user) {
+  return {
+    ...sanitizeUser(user),
+    weeklyHoursCapacity: normalizeWeeklyHoursCapacity(user.weeklyHoursCapacity),
+    weeklyDaysCapacity: normalizeWeeklyDaysCapacity(user.weeklyDaysCapacity)
   };
 }
 
@@ -1798,6 +1828,7 @@ function projectDataForRole(user, store) {
     community,
     announcements,
     directory,
+    calendarShifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateCalendarShift(entry, store)),
     communityChatMessages,
     staffChatMessages,
     chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
@@ -2295,6 +2326,24 @@ function decorateShift(shift, store) {
   };
 }
 
+function decorateCalendarShift(shift, store) {
+  const user = (store.users || []).find((entry) => entry.id === shift.memberId);
+  return {
+    id: shift.id,
+    date: shift.date,
+    startTime: shift.startTime,
+    endTime: shift.endTime,
+    shiftType: shift.shiftType,
+    world: shift.world,
+    task: shift.task,
+    memberId: shift.memberId,
+    memberName: findUserName(store.users, shift.memberId),
+    memberRole: user?.role || "",
+    isLead: Boolean(shift.isLead),
+    windowLabel: formatShiftWindow(shift.startTime, shift.endTime)
+  };
+}
+
 function decorateRequest(entry, store) {
   return {
     ...entry,
@@ -2383,7 +2432,7 @@ function sendPortalData(res, statusCode, user, store, headers = {}) {
     res,
     statusCode,
     {
-      session: sanitizeUser(user),
+      session: sanitizeSessionUser(user),
       data: projectDataForRole(user, store)
     },
     headers
@@ -2628,6 +2677,7 @@ function validateShiftPayload(body, store) {
   const world = String(body.world || "").trim();
   const task = String(body.task || "").trim();
   const notes = String(body.notes || "").trim();
+  const isLead = normalizeBooleanInput(body.isLead);
   const catalogAdds = normalizeCatalogAdds(body.catalogAdds || {}, store.settings);
 
   if (!isDateKey(date) || !isTimeValue(startTime) || !isTimeValue(endTime) || !memberId || !shiftType || !world || !task) {
@@ -2642,7 +2692,7 @@ function validateShiftPayload(body, store) {
     throw error;
   }
 
-  return { date, startTime, endTime, memberId, shiftType, world, task, notes, catalogAdds };
+  return { date, startTime, endTime, memberId, shiftType, world, task, notes, isLead, catalogAdds };
 }
 
 function validateRequestPayload(body) {
@@ -3427,6 +3477,18 @@ function formatStatusDateTime(value) {
   }).format(new Date(parsed));
 }
 
+function normalizeWeeklyHoursCapacity(value) {
+  const numeric = Number.parseFloat(String(value ?? "").replace(",", "."));
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(168, Math.round(numeric * 10) / 10));
+}
+
+function normalizeWeeklyDaysCapacity(value) {
+  const numeric = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(7, numeric));
+}
+
 function normalizePositiveInteger(value, fallback) {
   const numeric = Number.parseInt(String(value || ""), 10);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
@@ -4033,6 +4095,8 @@ function normalizeUsers(users, legacyModeratorNames) {
     const creatorBlurb = String(entry.creatorBlurb || "").trim().slice(0, 300);
     const creatorLinks = normalizeCreatorLinks(entry.creatorLinks);
     const creatorVisible = Boolean(entry.creatorVisible && (creatorLinks.length || creatorBlurb));
+    const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(entry.weeklyHoursCapacity);
+    const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(entry.weeklyDaysCapacity);
     const passwordHash = String(entry.passwordHash || "").trim();
     const normalizedRole = entry.role === "viewer" ? "member" : entry.role;
     const role = ["member", "moderator", "planner", "admin"].includes(normalizedRole) ? normalizedRole : "member";
@@ -4053,6 +4117,8 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorBlurb,
       creatorLinks,
       creatorVisible,
+      weeklyHoursCapacity,
+      weeklyDaysCapacity,
       passwordHash
     });
   }
@@ -4078,6 +4144,8 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorBlurb: "",
       creatorLinks: [],
       creatorVisible: false,
+      weeklyHoursCapacity: 0,
+      weeklyDaysCapacity: 0,
       passwordHash: hashPassword("mod123!")
     });
   }
@@ -4141,6 +4209,8 @@ function validateRegistrationPayload(body, store) {
   const creatorBlurb = String(body.creatorBlurb || "").trim().slice(0, 300);
   const creatorLinks = normalizeCreatorLinks(body.creatorLinks);
   const creatorVisible = Boolean(body.creatorVisible && (creatorLinks.length || creatorBlurb));
+  const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(body.weeklyHoursCapacity);
+  const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(body.weeklyDaysCapacity);
 
   if (!password || !vrchatName || !discordName) {
     const error = new Error("Bitte VRChat-Name, Discord-Name und Passwort ausfuellen.");
@@ -4167,7 +4237,9 @@ function validateRegistrationPayload(body, store) {
     contactNote,
     creatorBlurb,
     creatorLinks,
-    creatorVisible
+    creatorVisible,
+    weeklyHoursCapacity,
+    weeklyDaysCapacity
   };
 }
 
@@ -4179,6 +4251,10 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   const nextContactNote = body.contactNote !== undefined ? String(body.contactNote || "").trim().slice(0, 600) : target.contactNote || "";
   const nextCreatorBlurb = body.creatorBlurb !== undefined ? String(body.creatorBlurb || "").trim().slice(0, 300) : target.creatorBlurb || "";
   const nextCreatorLinks = body.creatorLinks !== undefined ? normalizeCreatorLinks(body.creatorLinks) : Array.isArray(target.creatorLinks) ? target.creatorLinks : [];
+  const nextWeeklyHoursCapacity =
+    body.weeklyHoursCapacity !== undefined ? normalizeWeeklyHoursCapacity(body.weeklyHoursCapacity) : normalizeWeeklyHoursCapacity(target.weeklyHoursCapacity);
+  const nextWeeklyDaysCapacity =
+    body.weeklyDaysCapacity !== undefined ? normalizeWeeklyDaysCapacity(body.weeklyDaysCapacity) : normalizeWeeklyDaysCapacity(target.weeklyDaysCapacity);
   const nextCreatorVisible =
     body.creatorVisible !== undefined
       ? Boolean(body.creatorVisible && (nextCreatorLinks.length || nextCreatorBlurb))
@@ -4222,6 +4298,8 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   target.creatorBlurb = nextCreatorBlurb;
   target.creatorLinks = nextCreatorLinks;
   target.creatorVisible = nextCreatorVisible;
+  target.weeklyHoursCapacity = nextWeeklyHoursCapacity;
+  target.weeklyDaysCapacity = nextWeeklyDaysCapacity;
 }
 
 function normalizeStore(store) {
@@ -4231,12 +4309,14 @@ function normalizeStore(store) {
   const settings = normalizeSettings(store?.settings || {}, slots);
   const rawShifts = Array.isArray(store?.shifts) ? store.shifts : migrateLegacyPlanning(store || defaults, users, settings);
   const shifts = normalizeShifts(rawShifts, users);
+  const events = normalizeEvents(Array.isArray(store?.events) ? store.events : buildDefaultEvents());
 
   return {
     slots,
     users,
     settings,
     shifts,
+    events,
     requests: Array.isArray(store?.requests) ? normalizeRequests(store.requests, users) : [],
     announcements: Array.isArray(store?.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
     chatMessages: Array.isArray(store?.chatMessages) ? normalizeChatMessages(store.chatMessages, users, shifts) : [],
@@ -4246,7 +4326,8 @@ function normalizeStore(store) {
     vrchatAnalytics: normalizeVrchatAnalytics(store?.vrchatAnalytics),
     directMessages: Array.isArray(store?.directMessages) ? normalizeDirectMessages(store.directMessages, users) : [],
     forumThreads: Array.isArray(store?.forumThreads) ? normalizeForumThreads(store.forumThreads, users) : [],
-    warnings: Array.isArray(store?.warnings) ? normalizeWarnings(store.warnings, users) : []
+    warnings: Array.isArray(store?.warnings) ? normalizeWarnings(store.warnings, users) : [],
+    feedPosts: normalizeFeedPosts(store?.feedPosts, users)
   };
 }
 
@@ -4446,10 +4527,14 @@ function getDirectMessagesForUser(user, store) {
 
 function getWarningsForUser(user, store) {
   const warnings = (store.warnings || []).slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
-  if (user.role === "planner" || user.role === "admin") {
-    return warnings.map((entry) => decorateWarning(entry, store));
-  }
   return warnings.filter((entry) => entry.userId === user.id).map((entry) => decorateWarning(entry, store));
+}
+
+function getManagedWarnings(store) {
+  return (store.warnings || [])
+    .slice()
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+    .map((entry) => decorateWarning(entry, store));
 }
 
 function projectDataForRole(user, store) {
@@ -4787,6 +4872,7 @@ function projectDataForRole(user, store) {
     directMessages: getDirectMessagesForUser(user, store),
     forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
     warnings: getWarningsForUser(user, store),
+    managedWarnings: user.role === "planner" || user.role === "admin" ? getManagedWarnings(store) : [],
     notifications,
     swapRequests: getSwapRequestsForUser(user, store),
     feedPosts
