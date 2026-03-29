@@ -1929,6 +1929,27 @@ code {
   margin-bottom: 1rem;
 }
 
+.shift-reminder-banner {
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.shift-reminder-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 280px;
+}
+
+.shift-reminder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
 @media (max-width: 1280px) {
   .calendar-week-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));

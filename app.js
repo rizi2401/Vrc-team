@@ -1054,7 +1054,7 @@ function renderPlannerPanel() {
               </div>
               <div class="field">
                 <label for="bulkDateEnd">Bis</label>
-                <input id="bulkDateEnd" name="dateEnd" type="date" value="${escapeHtml(getNextPlannerDateKey(plannerFormValues.date || getLocalDateKey()))}" required>
+                <input id="bulkDateEnd" name="dateEnd" type="date" value="${escapeHtml(addDaysToDateKey(plannerFormValues.date || getLocalDateKey(), 6))}" required>
               </div>
               <div class="field">
                 <label for="bulkStartTime">Beginn</label>
@@ -1156,6 +1156,15 @@ function getNextPlannerDateKey(dateKey) {
 
   const [year, month, day] = normalized.split("-").map(Number);
   const nextDate = new Date(year, month - 1, day + 1, 12, 0, 0);
+  return getLocalDateKey(nextDate);
+}
+
+function addDaysToDateKey(dateKey, amount) {
+  const normalized = String(dateKey || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return getLocalDateKey();
+
+  const [year, month, day] = normalized.split("-").map(Number);
+  const nextDate = new Date(year, month - 1, day + Number(amount || 0), 12, 0, 0);
   return getLocalDateKey(nextDate);
 }
 
@@ -5276,16 +5285,14 @@ async function handleSubmit(event) {
         }
       }
 
-      await performAction(async () => {
-        let lastPayload = null;
-        for (const entry of entries) {
-          lastPayload = await api("/api/shifts", {
+      await performAction(
+        () =>
+          api("/api/shifts/bulk", {
             method: "POST",
-            body: JSON.stringify(entry)
-          });
-        }
-        return lastPayload;
-      }, `${entries.length} Schichten wurden gesammelt angelegt.`);
+            body: JSON.stringify({ entries })
+          }),
+        `${entries.length} Schichten wurden gesammelt angelegt.`
+      );
       rememberPlannerDraft(
         {
           ...entries[0],
@@ -7505,4 +7512,313 @@ function buildEventWeekdayOptions(selectedValue = "") {
   ]
     .map((entry) => `<option value="${entry.value}" ${String(selectedValue) === entry.value ? "selected" : ""}>${escapeHtml(entry.label)}</option>`)
     .join("");
+}
+
+function getShiftDateTime(dateKey, timeValue, fallbackTime = "00:00") {
+  const normalizedDate = String(dateKey || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) return null;
+
+  const normalizedTime = normalizeTimeValue(timeValue) || normalizeTimeValue(fallbackTime) || "00:00";
+  const [year, month, day] = normalizedDate.split("-").map(Number);
+  const [hours, minutes] = normalizedTime.split(":").map(Number);
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+}
+
+function getShiftEndDateTime(shift) {
+  const startAt = getShiftDateTime(shift?.date, shift?.startTime || "00:00");
+  const endAt = getShiftDateTime(shift?.date, shift?.endTime || shift?.startTime || "00:00");
+  if (!startAt || !endAt) return null;
+
+  if (endAt <= startAt) {
+    return new Date(endAt.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  return endAt;
+}
+
+function formatMinutesLabel(totalMinutes) {
+  const rounded = Math.max(0, Math.round(Number(totalMinutes || 0)));
+  if (rounded < 60) return `${rounded} Minuten`;
+  const hours = Math.floor(rounded / 60);
+  const minutes = rounded % 60;
+  return minutes ? `${hours} Std. ${minutes} Min.` : `${hours} Std.`;
+}
+
+function getShiftReminderState() {
+  if (!state.session || !canAccessStaffArea()) return null;
+
+  const now = new Date();
+  const shifts = getSortedShifts((state.data?.shifts || []).filter((entry) => entry.memberId === state.session.id));
+  const activeEntry = getOpenEntryForViewer();
+
+  if (activeEntry) {
+    const activeShift =
+      (state.data?.shifts || []).find((entry) => entry.id === activeEntry.shiftId) ||
+      activeEntry.shift ||
+      null;
+
+    if (activeShift) {
+      const endAt = getShiftEndDateTime(activeShift);
+      if (endAt) {
+        const minutesUntilEnd = Math.round((endAt.getTime() - now.getTime()) / 60000);
+        if (minutesUntilEnd <= 0) {
+          return {
+            kind: "check-out-overdue",
+            shiftId: activeShift.id,
+            tone: "danger",
+            title: "Schicht ist vorbei",
+            body: `${formatShiftWindow(activeShift)} · ${activeShift.world}. Bitte jetzt ausstempeln, damit deine Zeit sauber erfasst wird.`,
+            actionLabel: "Jetzt ausstempeln",
+            action: "check-out",
+            notificationKey: `check-out-overdue-${activeShift.id}`,
+            repeatMinutes: 5
+          };
+        }
+
+        if (minutesUntilEnd <= 10) {
+          return {
+            kind: "check-out-soon",
+            shiftId: activeShift.id,
+            tone: "warning",
+            title: "Schicht endet bald",
+            body: `${formatShiftWindow(activeShift)} · ${activeShift.world}. In ${formatMinutesLabel(minutesUntilEnd)} bitte ausstempeln.`,
+            actionLabel: "Zum Ausstempeln",
+            action: "check-out",
+            notificationKey: `check-out-soon-${activeShift.id}`,
+            repeatMinutes: 10
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  const candidates = shifts
+    .map((shift) => {
+      const startAt = getShiftDateTime(shift.date, shift.startTime || "00:00");
+      const endAt = getShiftEndDateTime(shift);
+      const latestEntry = getLatestEntryForShift(shift.id);
+      return {
+        shift,
+        startAt,
+        endAt,
+        latestEntry,
+        minutesUntilStart: startAt ? Math.round((startAt.getTime() - now.getTime()) / 60000) : Number.MAX_SAFE_INTEGER,
+        minutesSinceStart: startAt ? Math.round((now.getTime() - startAt.getTime()) / 60000) : Number.MAX_SAFE_INTEGER
+      };
+    })
+    .filter((entry) => {
+      if (!entry.startAt || !entry.endAt) return false;
+      if (entry.latestEntry?.checkOutAt) return false;
+      return entry.minutesUntilStart <= 60 && entry.minutesSinceStart <= 180;
+    })
+    .sort((left, right) => left.startAt.getTime() - right.startAt.getTime());
+
+  const overdue = candidates.find((entry) => entry.minutesSinceStart >= 0);
+  if (overdue) {
+    return {
+      kind: "check-in-overdue",
+      shiftId: overdue.shift.id,
+      tone: "danger",
+      title: "Du bist noch nicht eingestempelt",
+      body: `${formatDate(overdue.shift.date)} · ${formatShiftWindow(overdue.shift)} · ${overdue.shift.world}. Bitte jetzt einstempeln.`,
+      actionLabel: "Jetzt einstempeln",
+      action: "check-in",
+      notificationKey: `check-in-overdue-${overdue.shift.id}`,
+      repeatMinutes: 5
+    };
+  }
+
+  const upcoming = candidates[0];
+  if (upcoming) {
+    return {
+      kind: "check-in-soon",
+      shiftId: upcoming.shift.id,
+      tone: "warning",
+      title: "Deine Schicht startet bald",
+      body: `${formatDate(upcoming.shift.date)} · ${formatShiftWindow(upcoming.shift)} · ${upcoming.shift.world}. Bitte kurz vor Start einstempeln.`,
+      actionLabel: "Zum Einstempeln",
+      action: "check-in",
+      notificationKey: `check-in-soon-${upcoming.shift.id}`,
+      repeatMinutes: upcoming.minutesUntilStart <= 15 ? 10 : 20
+    };
+  }
+
+  return null;
+}
+
+function shouldEmitShiftReminderNotification(reminder) {
+  if (typeof window === "undefined" || !window.localStorage || !state.session || !reminder?.notificationKey) return false;
+
+  const storageKey = `shift-reminder:${state.session.id}:${reminder.notificationKey}`;
+  const lastSentAt = Number(window.localStorage.getItem(storageKey) || 0);
+  const intervalMs = Math.max(1, Number(reminder.repeatMinutes || 10)) * 60 * 1000;
+  const now = Date.now();
+
+  if (now - lastSentAt < intervalMs) {
+    return false;
+  }
+
+  window.localStorage.setItem(storageKey, String(now));
+  return true;
+}
+
+function renderShiftReminderBanner() {
+  const reminder = getShiftReminderState();
+  if (!reminder) return "";
+
+  const browserSupport = typeof window !== "undefined" && "Notification" in window;
+  const flashClass =
+    reminder.tone === "danger"
+      ? "flash-danger"
+      : reminder.tone === "warning"
+        ? "flash-warning"
+        : "flash-info";
+
+  return `
+    <section class="flash ${flashClass} shift-reminder-banner">
+      <div class="shift-reminder-copy">
+        <strong>${escapeHtml(reminder.title)}</strong>
+        <span>${escapeHtml(reminder.body)}</span>
+      </div>
+      <div class="shift-reminder-actions">
+        <button type="button" class="small" data-action="${escapeHtml(reminder.action)}" data-shift-id="${escapeHtml(reminder.shiftId)}">${escapeHtml(reminder.actionLabel)}</button>
+        <button type="button" class="ghost small" data-action="set-tab" data-tab="time">Zeiten oeffnen</button>
+        ${
+          browserSupport && state.ui.notificationPermission !== "granted"
+            ? '<button type="button" class="ghost small" data-action="enable-browser-notifications">Browser-Popups aktivieren</button>'
+            : ""
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderNotificationsPanel() {
+  const notifications = state.data?.notifications || [];
+  const browserSupport = typeof window !== "undefined" && "Notification" in window;
+  const reminder = getShiftReminderState();
+  const manager = canManagePortal();
+  const staff = canAccessStaffArea();
+  const title = manager
+    ? "Automatische Hinweise fuer Leitung und Planung"
+    : staff
+      ? "Automatische Hinweise fuer Schichten und Staff-News"
+      : "Das Wichtigste aus Community, News und Events";
+  const copy = manager
+    ? "Offene Rueckmeldungen, heutige Einsaetze und laufende Schichten werden hier automatisch zusammengefasst."
+    : staff
+      ? "Schicht-Erinnerungen, Staff-News und naechste Einsaetze werden hier automatisch gebuendelt."
+      : "Angeheftete News und kommende Events werden hier automatisch fuer dich gesammelt.";
+  const emptyBody = manager
+    ? "Sobald neue Rueckmeldungen oder Einsaetze anstehen, erscheinen sie hier."
+    : staff
+      ? "Sobald neue Staff-Hinweise oder Schichten anstehen, erscheinen sie hier."
+      : "Sobald es neue News oder Events gibt, erscheinen sie hier.";
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Benachrichtigungen</p>
+          <h2>${escapeHtml(title)}</h2>
+          <p class="section-copy">${escapeHtml(copy)}</p>
+        </div>
+        ${
+          browserSupport
+            ? `
+              <button
+                type="button"
+                class="ghost small"
+                data-action="enable-browser-notifications"
+                ${state.ui.notificationPermission === "granted" ? "disabled" : ""}
+              >
+                ${
+                  state.ui.notificationPermission === "granted"
+                    ? "Browser-Popups aktiv"
+                    : "Browser-Popups aktivieren"
+                }
+              </button>
+            `
+            : '<span class="pill neutral">Browser-Popups nicht verfuegbar</span>'
+        }
+      </div>
+
+      ${reminder ? renderShiftReminderBanner() : ""}
+
+      <div class="card-list notification-list">
+        ${
+          notifications.length
+            ? notifications.map((entry) => renderNotificationCard(entry)).join("")
+            : renderEmptyState("Keine neuen Hinweise", emptyBody)
+        }
+      </div>
+    </section>
+  `;
+}
+
+function emitBrowserNotifications() {
+  if (!state.session || state.ui.notificationPermission !== "granted") return;
+
+  const notifications = state.data?.notifications || [];
+  const latest = notifications[0];
+  if (latest) {
+    const key = `seen-notification-${state.session.id}`;
+    const seenId = window.localStorage.getItem(key);
+    if (seenId !== latest.id) {
+      window.localStorage.setItem(key, latest.id);
+      new Notification(latest.title, {
+        body: latest.body
+      });
+    }
+  }
+
+  const reminder = getShiftReminderState();
+  if (reminder && shouldEmitShiftReminderNotification(reminder)) {
+    new Notification(reminder.title, {
+      body: reminder.body
+    });
+  }
+}
+
+function renderDashboard() {
+  const user = state.session;
+  const manager = canManagePortal();
+  const staff = canAccessStaffArea();
+  const activeTab = normalizeActiveTab(state.ui.activeTab);
+
+  return `
+    ${renderWarningOverlay()}
+    <div class="app-shell">
+      ${renderSonaraHero({
+        eyebrow: manager ? "Leitung" : staff ? "Staff Portal" : "Mitgliederbereich",
+        title: `Willkommen ${getPrimaryDisplayName(user)}`,
+        intro: manager ? "Community, Team und Staff laufen hier zusammen." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
+        chips: [ROLE_LABELS[user.role] || user.role, user.vrchatName || "", user.discordName || ""].filter(Boolean)
+      })}
+      <div class="dashboard-shell">
+        ${renderFlash()}
+        ${renderShiftReminderBanner()}
+        <section class="panel toolbar">
+          <div class="toolbar-user">
+            ${renderUserAvatar(user, "toolbar-avatar")}
+            <div>
+              <p class="eyebrow">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</p>
+              <h2>${escapeHtml(getPrimaryDisplayName(user))}</h2>
+            </div>
+          </div>
+          <div class="toolbar-actions">
+            ${canManageUsers() ? '<button type="button" class="ghost small" data-action="reset-demo">Demo wiederherstellen</button>' : ""}
+            <button type="button" class="ghost small" data-action="logout">Abmelden</button>
+          </div>
+        </section>
+        ${renderStatsStrip()}
+        ${renderDashboardTabs(activeTab)}
+        <div class="dashboard-grid focused-grid">
+          ${manager ? renderManagerDashboard(activeTab) : staff ? renderModeratorDashboard(activeTab) : renderMemberDashboard(activeTab)}
+        </div>
+      </div>
+    </div>
+  `;
 }
