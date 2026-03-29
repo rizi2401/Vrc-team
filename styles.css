@@ -1689,10 +1689,31 @@ code {
 .planner-sidebar h3,
 .planner-group h3 {
   margin: 0;
+  color: #1f2937;
 }
 
 .planner-inline-stats {
   margin-top: 0.75rem;
+}
+
+.planner-person-card .timeline-meta,
+.planner-group .timeline-meta,
+.planner-sidebar .timeline-meta,
+.planner-person-card .helper-text,
+.planner-group .helper-text {
+  color: #4b5563;
+}
+
+.planner-person-card .eyebrow,
+.planner-group .eyebrow,
+.planner-sidebar .eyebrow {
+  color: #8a4b1a;
+}
+
+.planner-inline-stats span {
+  background: rgba(25, 37, 58, 0.9);
+  color: #f4efe5;
+  border-color: rgba(25, 37, 58, 0.18);
 }
 
 .planner-jump-button {
