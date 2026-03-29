@@ -4862,8 +4862,8 @@ function getEntryOverlapWindow(entry, week) {
 }
 
 function getShiftDurationHours(shift) {
-  const start = timeValueToMinutes(shift.startTime || "");
-  const end = timeValueToMinutes(shift.endTime || "");
+  const start = timeToMinutes(shift.startTime || "");
+  const end = timeToMinutes(shift.endTime || "");
   if (!Number.isFinite(start) || !Number.isFinite(end) || start === Number.MAX_SAFE_INTEGER || end === Number.MAX_SAFE_INTEGER) return 0;
   const durationMinutes = end >= start ? end - start : 1440 - start + end;
   return durationMinutes / 60;
