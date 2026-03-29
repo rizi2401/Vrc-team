@@ -184,6 +184,10 @@ async function handleApi(req, res, url) {
       creatorBlurb: normalized.creatorBlurb,
       creatorLinks: normalized.creatorLinks,
       creatorVisible: normalized.creatorVisible,
+      weeklyHoursCapacity: normalized.weeklyHoursCapacity,
+      weeklyDaysCapacity: normalized.weeklyDaysCapacity,
+      availabilitySchedule: normalized.availabilitySchedule,
+      availabilityUpdatedAt: normalized.availabilityUpdatedAt,
       passwordHash: normalized.passwordHash
     };
 
@@ -877,6 +881,10 @@ async function handleApi(req, res, url) {
       creatorBlurb: normalized.creatorBlurb,
       creatorLinks: normalized.creatorLinks,
       creatorVisible: normalized.creatorVisible,
+      weeklyHoursCapacity: normalized.weeklyHoursCapacity,
+      weeklyDaysCapacity: normalized.weeklyDaysCapacity,
+      availabilitySchedule: normalized.availabilitySchedule,
+      availabilityUpdatedAt: normalized.availabilityUpdatedAt,
       passwordHash: normalized.passwordHash,
       isBlocked: blockedState.isBlocked,
       blockReason: blockedState.blockReason,
@@ -1654,6 +1662,36 @@ function projectDataForRole(user, store) {
   };
 }
 
+function buildCommunityPayload(store) {
+  const activeUsers = (store.users || []).filter((entry) => !entry.isBlocked);
+  const team = activeUsers
+    .filter((entry) => entry.role !== "member")
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  const creators = activeUsers
+    .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+
+  return {
+    team,
+    creators,
+    events: getOrderedEvents(store.events || []),
+    rules: COMMUNITY_RULES,
+    faq: COMMUNITY_FAQ,
+    stats: {
+      members: activeUsers.filter((entry) => entry.role === "member").length,
+      moderators: activeUsers.filter((entry) => entry.role === "moderator").length,
+      planners: activeUsers.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
+      news: store.announcements.length,
+      creators: creators.length
+    }
+  };
+}
+
 function normalizeUsers(users, legacyModeratorNames) {
   const normalized = [];
   const usedUsernames = new Set();
@@ -1756,6 +1794,8 @@ function sanitizeManagedUser(user) {
     ...sanitizeUser(user),
     weeklyHoursCapacity: normalizeWeeklyHoursCapacity(user.weeklyHoursCapacity),
     weeklyDaysCapacity: normalizeWeeklyDaysCapacity(user.weeklyDaysCapacity),
+    availabilitySchedule: normalizeAvailabilitySchedule(user.availabilitySchedule),
+    availabilityUpdatedAt: isIsoDate(user.availabilityUpdatedAt) ? user.availabilityUpdatedAt : "",
     isBlocked: Boolean(user.isBlocked),
     blockReason: user.blockReason || "",
     blockedAt: user.blockedAt || "",
@@ -1767,7 +1807,9 @@ function sanitizeSessionUser(user) {
   return {
     ...sanitizeUser(user),
     weeklyHoursCapacity: normalizeWeeklyHoursCapacity(user.weeklyHoursCapacity),
-    weeklyDaysCapacity: normalizeWeeklyDaysCapacity(user.weeklyDaysCapacity)
+    weeklyDaysCapacity: normalizeWeeklyDaysCapacity(user.weeklyDaysCapacity),
+    availabilitySchedule: normalizeAvailabilitySchedule(user.availabilitySchedule),
+    availabilityUpdatedAt: isIsoDate(user.availabilityUpdatedAt) ? user.availabilityUpdatedAt : ""
   };
 }
 
@@ -1788,7 +1830,7 @@ function buildCommunityPayload(store) {
   return {
     team,
     creators,
-    events: (store.events || []).slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)),
+    events: getOrderedEvents(store.events || []),
     rules: COMMUNITY_RULES,
     faq: COMMUNITY_FAQ,
     stats: {
@@ -1950,15 +1992,55 @@ function ensureAdminAccessStillExists(users, target, nextRole, nextBlocked, acti
 }
 
 function buildDefaultEvents() {
-  return COMMUNITY_EVENTS.map((entry) => ({
-    id: String(entry.id || crypto.randomUUID()),
-    title: String(entry.title || "").trim(),
-    dateLabel: String(entry.dateLabel || "").trim(),
-    world: String(entry.world || "").trim(),
-    host: String(entry.host || "").trim(),
-    summary: String(entry.summary || "").trim(),
-    createdAt: new Date().toISOString(),
-    createdBy: ""
+  return [
+    {
+      id: "welcome-night",
+      title: "Welcome Night",
+      world: "Community Hub",
+      host: "SONARA Team",
+      summary: "Neue Mitglieder kennenlernen, Gruppeninfos teilen und entspannt in den Abend starten.",
+      scheduleType: "weekly",
+      weekday: 5,
+      eventTime: "20:00",
+      eventDate: "",
+      reminderEnabled: true,
+      reminderLeadMinutes: 120,
+      createdAt: new Date().toISOString(),
+      createdBy: ""
+    },
+    {
+      id: "world-tour",
+      title: "World Tour",
+      world: "Event Arena",
+      host: "Event Team",
+      summary: "Gemeinsame Weltreise mit Stopps fuer Screenshots, Spiele und kleine Community-Momente.",
+      scheduleType: "weekly",
+      weekday: 6,
+      eventTime: "21:00",
+      eventDate: "",
+      reminderEnabled: true,
+      reminderLeadMinutes: 120,
+      createdAt: new Date().toISOString(),
+      createdBy: ""
+    },
+    {
+      id: "late-lounge",
+      title: "Late Lounge",
+      world: "Sunset Lounge",
+      host: "Night Crew",
+      summary: "Ruhiger Community-Abend mit Musik, offenen Gespraechen und lockerer Moderationspraesenz.",
+      scheduleType: "weekly",
+      weekday: 0,
+      eventTime: "22:00",
+      eventDate: "",
+      reminderEnabled: true,
+      reminderLeadMinutes: 120,
+      createdAt: new Date().toISOString(),
+      createdBy: ""
+    }
+  ].map((entry) => ({
+    ...entry,
+    dateLabel: buildEventDateLabel(entry)
   }));
 }
 
@@ -1967,14 +2049,122 @@ function normalizeEvents(events) {
     .map((entry) => ({
       id: String(entry.id || crypto.randomUUID()),
       title: String(entry.title || "").trim(),
-      dateLabel: String(entry.dateLabel || "").trim(),
       world: String(entry.world || "").trim(),
       host: String(entry.host || "").trim(),
       summary: String(entry.summary || "").trim(),
+      scheduleType: normalizeEventScheduleType(entry.scheduleType),
+      eventDate: isDateKey(entry.eventDate) ? String(entry.eventDate) : "",
+      eventTime: normalizeTimeValue(entry.eventTime),
+      weekday: normalizeEventWeekday(entry.weekday),
+      reminderEnabled: entry.reminderEnabled === undefined ? true : normalizeBooleanInput(entry.reminderEnabled),
+      reminderLeadMinutes: normalizePositiveInteger(entry.reminderLeadMinutes, 120),
+      dateLabel: String(entry.dateLabel || "").trim(),
       createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
       createdBy: String(entry.createdBy || "").trim()
     }))
-    .filter((entry) => entry.title && entry.dateLabel && entry.world && entry.summary);
+    .map((entry) => ({
+      ...entry,
+      dateLabel: buildEventDateLabel(entry)
+    }))
+    .filter((entry) => entry.title && entry.world && entry.summary && entry.dateLabel);
+}
+
+function normalizeEventScheduleType(value) {
+  return String(value || "").trim().toLowerCase() === "weekly" ? "weekly" : "single";
+}
+
+function normalizeEventWeekday(value) {
+  const numeric = Number.parseInt(String(value ?? ""), 10);
+  return Number.isInteger(numeric) && numeric >= 0 && numeric <= 6 ? numeric : -1;
+}
+
+function buildEventDateLabel(event) {
+  const eventTime = normalizeTimeValue(event.eventTime);
+  const timeLabel = eventTime ? `${eventTime} Uhr` : "";
+
+  if (event.scheduleType === "weekly" && normalizeEventWeekday(event.weekday) >= 0) {
+    const weekdayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(
+      getDateForWeekday(normalizeEventWeekday(event.weekday))
+    );
+    return [capitalizeFirstLetter(weekdayLabel), timeLabel].filter(Boolean).join(" · ");
+  }
+
+  if (isDateKey(event.eventDate)) {
+    return [formatDisplayDate(event.eventDate), timeLabel].filter(Boolean).join(" · ");
+  }
+
+  return String(event.dateLabel || "").trim();
+}
+
+function getDateForWeekday(weekday) {
+  const base = new Date(2026, 0, 4, 12, 0, 0);
+  base.setDate(base.getDate() + weekday);
+  return base;
+}
+
+function capitalizeFirstLetter(value) {
+  const normalized = String(value || "");
+  return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "";
+}
+
+function getEventOccurrenceAt(event, referenceDate = new Date()) {
+  const eventTime = normalizeTimeValue(event.eventTime);
+  const [hours, minutes] = eventTime ? eventTime.split(":").map(Number) : [20, 0];
+
+  if (event.scheduleType === "weekly") {
+    const weekday = normalizeEventWeekday(event.weekday);
+    if (weekday < 0) return null;
+
+    const candidate = new Date(referenceDate);
+    candidate.setSeconds(0, 0);
+    candidate.setHours(hours, minutes, 0, 0);
+    const delta = (weekday - candidate.getDay() + 7) % 7;
+    candidate.setDate(candidate.getDate() + delta);
+    if (delta === 0 && candidate < referenceDate) {
+      candidate.setDate(candidate.getDate() + 7);
+    }
+    return candidate;
+  }
+
+  if (!isDateKey(event.eventDate)) return null;
+
+  const [year, month, day] = event.eventDate.split("-").map(Number);
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+}
+
+function getOrderedEvents(events, referenceDate = new Date()) {
+  return (Array.isArray(events) ? events : [])
+    .map((entry) => {
+      const occurrenceAt = getEventOccurrenceAt(entry, referenceDate);
+      const occurrenceMs = occurrenceAt ? occurrenceAt.getTime() : Number.NaN;
+      const isPastSingle = entry.scheduleType !== "weekly" && Number.isFinite(occurrenceMs) && occurrenceMs < referenceDate.getTime();
+      return {
+        ...entry,
+        dateLabel: buildEventDateLabel(entry),
+        nextOccurrenceAt: occurrenceAt && !isPastSingle ? occurrenceAt.toISOString() : "",
+        scheduleLabel: entry.scheduleType === "weekly" ? "Woechentlich" : "Einmalig"
+      };
+    })
+    .sort((left, right) => {
+      const leftTime = left.nextOccurrenceAt ? Date.parse(left.nextOccurrenceAt) : Number.MAX_SAFE_INTEGER;
+      const rightTime = right.nextOccurrenceAt ? Date.parse(right.nextOccurrenceAt) : Number.MAX_SAFE_INTEGER;
+      if (leftTime !== rightTime) return leftTime - rightTime;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    });
+}
+
+function buildUpcomingEventNotifications(store, limit = 2, referenceDate = new Date()) {
+  return getOrderedEvents(store.events || [], referenceDate)
+    .filter((entry) => entry.reminderEnabled && entry.nextOccurrenceAt && Date.parse(entry.nextOccurrenceAt) >= referenceDate.getTime())
+    .slice(0, limit)
+    .map((entry) => ({
+      id: `event-${entry.id}`,
+      title: `${entry.scheduleType === "weekly" ? "Wochentermin" : "Event"}: ${entry.title}`,
+      body: `${entry.dateLabel} | ${entry.world} | Host: ${entry.host}`,
+      tone: "amber",
+      createdAt: entry.nextOccurrenceAt,
+      category: "event"
+    }));
 }
 
 function buildEmptyFeedReactions() {
@@ -2087,18 +2277,47 @@ function decorateFeedPost(entry, store) {
 
 function validateEventPayload(body, user) {
   const title = String(body.title || "").trim();
-  const dateLabel = String(body.dateLabel || "").trim();
   const world = String(body.world || "").trim();
   const host = String(body.host || "").trim() || findUserName([{ id: user.id, vrchatName: user.vrchatName, displayName: user.displayName }], user.id);
   const summary = String(body.summary || "").trim();
+  const scheduleType = normalizeEventScheduleType(body.scheduleType);
+  const eventDate = isDateKey(body.eventDate) ? String(body.eventDate) : "";
+  const eventTime = normalizeTimeValue(body.eventTime);
+  const weekday = normalizeEventWeekday(body.weekday);
+  const reminderEnabled = body.reminderEnabled === undefined ? true : normalizeBooleanInput(body.reminderEnabled);
+  const reminderLeadMinutes = normalizePositiveInteger(body.reminderLeadMinutes, 120);
 
-  if (!title || !dateLabel || !world || !summary) {
+  if (!title || !world || !summary) {
     const error = new Error("Bitte Titel, Zeitpunkt, Welt und Kurzbeschreibung angeben.");
     error.statusCode = 400;
     throw error;
   }
 
-  return { title, dateLabel, world, host, summary };
+  if (scheduleType === "weekly") {
+    if (weekday < 0 || !eventTime) {
+      const error = new Error("Bitte fuer woechentliche Events Wochentag und Uhrzeit angeben.");
+      error.statusCode = 400;
+      throw error;
+    }
+  } else if (!eventDate || !eventTime) {
+    const error = new Error("Bitte fuer einmalige Events Datum und Uhrzeit angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    title,
+    world,
+    host,
+    summary,
+    scheduleType,
+    eventDate: scheduleType === "single" ? eventDate : "",
+    eventTime,
+    weekday: scheduleType === "weekly" ? weekday : -1,
+    reminderEnabled,
+    reminderLeadMinutes,
+    dateLabel: buildEventDateLabel({ scheduleType, eventDate, eventTime, weekday })
+  };
 }
 
 function validateFeedPostPayload(body) {
@@ -2146,7 +2365,7 @@ function buildCommunityPayload(store) {
   return {
     team,
     creators,
-    events: (store.events || []).slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)),
+    events: getOrderedEvents(store.events || []),
     rules: COMMUNITY_RULES,
     faq: COMMUNITY_FAQ,
     stats: {
@@ -2216,6 +2435,7 @@ function projectDataForRole(user, store) {
     community,
     announcements,
     directory,
+    calendarShifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateCalendarShift(entry, store)),
     communityChatMessages,
     staffChatMessages,
     chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
@@ -2504,14 +2724,7 @@ function buildCommunityNotifications(store) {
       category: "news"
     }));
 
-  const eventNotifications = COMMUNITY_EVENTS.slice(0, 2).map((entry, index) => ({
-    id: `event-${entry.id}`,
-    title: entry.title,
-    body: `${entry.dateLabel} | ${entry.world} | Host: ${entry.host}`,
-    tone: "amber",
-    createdAt: new Date(Date.now() - index * 60000).toISOString(),
-    category: "event"
-  }));
+  const eventNotifications = buildUpcomingEventNotifications(store, 2);
 
   return [...notifications, ...eventNotifications].slice(0, 6);
 }
@@ -2561,7 +2774,9 @@ function buildViewerNotifications(user, store) {
       category: "announcement"
     }));
 
-  return [...notifications, ...pinnedAnnouncements]
+  const eventNotifications = buildUpcomingEventNotifications(store, 2);
+
+  return [...notifications, ...pinnedAnnouncements, ...eventNotifications]
     .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
     .slice(0, 6);
 }
@@ -2617,6 +2832,9 @@ function buildManagerNotifications(store) {
       category: "swap"
     });
   }
+
+  const upcomingEvents = buildUpcomingEventNotifications(store, 2);
+  notifications.push(...upcomingEvents);
 
   return notifications.slice(0, 6);
 }
@@ -3489,6 +3707,13 @@ function normalizeWeeklyDaysCapacity(value) {
   return Math.max(0, Math.min(7, numeric));
 }
 
+function normalizeAvailabilitySchedule(value) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .trim()
+    .slice(0, 1200);
+}
+
 function normalizePositiveInteger(value, fallback) {
   const numeric = Number.parseInt(String(value || ""), 10);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
@@ -3805,7 +4030,7 @@ function buildCommunityPayload(store) {
   return {
     team,
     creators,
-    events: (store.events || []).slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)),
+    events: getOrderedEvents(store.events || []),
     rules: COMMUNITY_RULES,
     faq: COMMUNITY_FAQ,
     stats: {
@@ -4097,6 +4322,12 @@ function normalizeUsers(users, legacyModeratorNames) {
     const creatorVisible = Boolean(entry.creatorVisible && (creatorLinks.length || creatorBlurb));
     const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(entry.weeklyHoursCapacity);
     const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(entry.weeklyDaysCapacity);
+    const availabilitySchedule = normalizeAvailabilitySchedule(entry.availabilitySchedule);
+    const availabilityUpdatedAt = isIsoDate(entry.availabilityUpdatedAt) ? entry.availabilityUpdatedAt : "";
+    const isBlocked = Boolean(entry.isBlocked);
+    const blockReason = String(entry.blockReason || "").trim().slice(0, 500);
+    const blockedAt = isIsoDate(entry.blockedAt) ? entry.blockedAt : "";
+    const blockedBy = String(entry.blockedBy || "").trim();
     const passwordHash = String(entry.passwordHash || "").trim();
     const normalizedRole = entry.role === "viewer" ? "member" : entry.role;
     const role = ["member", "moderator", "planner", "admin"].includes(normalizedRole) ? normalizedRole : "member";
@@ -4119,6 +4350,12 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorVisible,
       weeklyHoursCapacity,
       weeklyDaysCapacity,
+      availabilitySchedule,
+      availabilityUpdatedAt,
+      isBlocked,
+      blockReason,
+      blockedAt,
+      blockedBy,
       passwordHash
     });
   }
@@ -4146,6 +4383,12 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorVisible: false,
       weeklyHoursCapacity: 0,
       weeklyDaysCapacity: 0,
+      availabilitySchedule: "",
+      availabilityUpdatedAt: "",
+      isBlocked: false,
+      blockReason: "",
+      blockedAt: "",
+      blockedBy: "",
       passwordHash: hashPassword("mod123!")
     });
   }
@@ -4211,6 +4454,8 @@ function validateRegistrationPayload(body, store) {
   const creatorVisible = Boolean(body.creatorVisible && (creatorLinks.length || creatorBlurb));
   const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(body.weeklyHoursCapacity);
   const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(body.weeklyDaysCapacity);
+  const availabilitySchedule = normalizeAvailabilitySchedule(body.availabilitySchedule);
+  const availabilityUpdatedAt = availabilitySchedule || weeklyHoursCapacity || weeklyDaysCapacity ? new Date().toISOString() : "";
 
   if (!password || !vrchatName || !discordName) {
     const error = new Error("Bitte VRChat-Name, Discord-Name und Passwort ausfuellen.");
@@ -4239,7 +4484,9 @@ function validateRegistrationPayload(body, store) {
     creatorLinks,
     creatorVisible,
     weeklyHoursCapacity,
-    weeklyDaysCapacity
+    weeklyDaysCapacity,
+    availabilitySchedule,
+    availabilityUpdatedAt
   };
 }
 
@@ -4251,10 +4498,15 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   const nextContactNote = body.contactNote !== undefined ? String(body.contactNote || "").trim().slice(0, 600) : target.contactNote || "";
   const nextCreatorBlurb = body.creatorBlurb !== undefined ? String(body.creatorBlurb || "").trim().slice(0, 300) : target.creatorBlurb || "";
   const nextCreatorLinks = body.creatorLinks !== undefined ? normalizeCreatorLinks(body.creatorLinks) : Array.isArray(target.creatorLinks) ? target.creatorLinks : [];
+  const currentWeeklyHoursCapacity = normalizeWeeklyHoursCapacity(target.weeklyHoursCapacity);
+  const currentWeeklyDaysCapacity = normalizeWeeklyDaysCapacity(target.weeklyDaysCapacity);
+  const currentAvailabilitySchedule = normalizeAvailabilitySchedule(target.availabilitySchedule);
   const nextWeeklyHoursCapacity =
-    body.weeklyHoursCapacity !== undefined ? normalizeWeeklyHoursCapacity(body.weeklyHoursCapacity) : normalizeWeeklyHoursCapacity(target.weeklyHoursCapacity);
+    body.weeklyHoursCapacity !== undefined ? normalizeWeeklyHoursCapacity(body.weeklyHoursCapacity) : currentWeeklyHoursCapacity;
   const nextWeeklyDaysCapacity =
-    body.weeklyDaysCapacity !== undefined ? normalizeWeeklyDaysCapacity(body.weeklyDaysCapacity) : normalizeWeeklyDaysCapacity(target.weeklyDaysCapacity);
+    body.weeklyDaysCapacity !== undefined ? normalizeWeeklyDaysCapacity(body.weeklyDaysCapacity) : currentWeeklyDaysCapacity;
+  const nextAvailabilitySchedule =
+    body.availabilitySchedule !== undefined ? normalizeAvailabilitySchedule(body.availabilitySchedule) : currentAvailabilitySchedule;
   const nextCreatorVisible =
     body.creatorVisible !== undefined
       ? Boolean(body.creatorVisible && (nextCreatorLinks.length || nextCreatorBlurb))
@@ -4300,6 +4552,15 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   target.creatorVisible = nextCreatorVisible;
   target.weeklyHoursCapacity = nextWeeklyHoursCapacity;
   target.weeklyDaysCapacity = nextWeeklyDaysCapacity;
+  target.availabilitySchedule = nextAvailabilitySchedule;
+  if (
+    nextWeeklyHoursCapacity !== currentWeeklyHoursCapacity ||
+    nextWeeklyDaysCapacity !== currentWeeklyDaysCapacity ||
+    nextAvailabilitySchedule !== currentAvailabilitySchedule
+  ) {
+    target.availabilityUpdatedAt =
+      nextAvailabilitySchedule || nextWeeklyHoursCapacity || nextWeeklyDaysCapacity ? new Date().toISOString() : "";
+  }
 }
 
 function normalizeStore(store) {

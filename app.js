@@ -29,6 +29,7 @@ const SHIFT_WINDOW_PRESETS = [
 ];
 const CHAT_TRIM_OPTIONS = [20, 30, 40, 50];
 const SONARA_ART_PATH = "/sonara-crest.png";
+let portalRefreshTimer = 0;
 
 const state = {
   session: null,
@@ -45,7 +46,9 @@ const state = {
     liveChatConnected: false,
     notificationPermission: "default",
     tabBarScrollLeft: 0,
-    tabViewportScrollY: null
+    tabViewportScrollY: null,
+    scrollToShiftId: "",
+    plannerDraft: null
   }
 };
 
@@ -240,9 +243,27 @@ function renderSonaraHero({ eyebrow, title, intro, chips = [] }) {
 function render() {
   root.innerHTML = state.session ? renderDashboard() : renderPublicPortal();
   restoreTabBarState();
+  restorePlannerFocus();
   syncChatStream();
+  syncPortalRefreshLoop();
   syncNotificationPermission();
   emitBrowserNotifications();
+}
+
+function syncPortalRefreshLoop() {
+  if (portalRefreshTimer) return;
+
+  portalRefreshTimer = window.setInterval(async () => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+
+    if (state.session) {
+      await refreshBootstrap();
+    } else {
+      await refreshPublicData();
+    }
+
+    render();
+  }, 60000);
 }
 
 function restoreTabBarState() {
@@ -278,6 +299,18 @@ function rememberTabBarState(sourceElement = null) {
 
   state.ui.tabBarScrollLeft = tabBar.scrollLeft;
   state.ui.tabViewportScrollY = window.scrollY;
+}
+
+function restorePlannerFocus() {
+  const shiftId = String(state.ui.scrollToShiftId || "").trim();
+  if (!shiftId) return;
+
+  state.ui.scrollToShiftId = "";
+  requestAnimationFrame(() => {
+    const target = document.getElementById(`shift-card-${shiftId}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 }
 
 async function performAction(callback, successMessage = "", successTone = "success") {
@@ -893,113 +926,441 @@ function renderNotificationCard(entry) {
 
 function renderPlannerPanel() {
   const editingShift = (state.data.shifts || []).find((entry) => entry.id === state.ui.editingShiftId) || null;
+  const plannerFormValues = getPlannerFormValues(editingShift);
   const users = getAssignableUsers();
-  const presetValue = getMatchingShiftPresetValue(editingShift?.startTime || "12:00", editingShift?.endTime || "16:00");
-  const shiftsMarkup = getSortedShifts(state.data.shifts || [])
-    .map((shift) => renderShiftCard(shift, { adminView: true }))
-    .join("");
+  const shifts = getSortedShifts(state.data.shifts || []);
+  const plannerGroups = buildPlannerOverviewGroups(shifts);
+  const presetValue = getMatchingShiftPresetValue(plannerFormValues.startTime || "12:00", plannerFormValues.endTime || "16:00");
+  const shiftsMarkup = renderPlannerGroupedShiftSections(plannerGroups);
 
   return `
-    <section class="panel span-8">
+    <section class="panel span-12">
       <div class="section-head">
         <div>
           <p class="eyebrow">Schichtplanung</p>
           <h2>Welten, Aufgaben und Besetzung</h2>
-          <p class="section-copy">Neue Eintraege sind sofort im persoenlichen Bereich der Moderatoren sichtbar.</p>
+          <p class="section-copy">Links siehst du direkt, wer schon wie oft eingetragen ist. Unten bleibt alles nach Person sortiert bearbeitbar.</p>
         </div>
         <span class="pill neutral">Auto-Save auf dem Server</span>
       </div>
 
       <div class="planner-layout">
-        <form class="stack-form" data-form="shift">
-          <div class="form-grid">
-            <div class="field">
-              <label for="shiftDate">Datum</label>
-              <input id="shiftDate" name="date" type="date" value="${escapeHtml(editingShift?.date || getLocalDateKey())}" required>
+        ${renderPlannerSidebar(plannerGroups)}
+
+        <div class="planner-editor-stack">
+          <form class="stack-form" data-form="shift">
+            <div class="form-grid">
+              <div class="field">
+                <label for="shiftDate">Datum</label>
+                <input id="shiftDate" name="date" type="date" value="${escapeHtml(plannerFormValues.date || getLocalDateKey())}" required>
+              </div>
+              <div class="field">
+                <label for="shiftMember">Moderator</label>
+                <select id="shiftMember" name="memberId" required>
+                  ${buildUserOptions(users, plannerFormValues.memberId || "")}
+                </select>
+              </div>
+              <div class="field">
+                <label for="shiftPreset">Schichtfenster</label>
+                <select id="shiftPreset" data-change="shift-preset">
+                  ${renderShiftPresetOptions(presetValue)}
+                </select>
+              </div>
+              <div class="field">
+                <label for="shiftStartTime">Beginn</label>
+                <input id="shiftStartTime" name="startTime" type="time" value="${escapeHtml(plannerFormValues.startTime || "12:00")}" required>
+              </div>
+              <div class="field">
+                <label for="shiftEndTime">Ende</label>
+                <input id="shiftEndTime" name="endTime" type="time" value="${escapeHtml(plannerFormValues.endTime || "16:00")}" required>
+              </div>
+              <div class="field">
+                <label for="shiftType">Schichttyp</label>
+                <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Abloese" required>
+              </div>
+              <div class="field">
+                <label for="shiftWorld">Welt</label>
+                <input id="shiftWorld" name="world" list="worldOptions" value="${escapeHtml(plannerFormValues.world || state.data.settings.worlds?.[0] || "")}" placeholder="z. B. Community Hub" required>
+              </div>
+              <div class="field">
+                <label for="shiftTask">Aufgabe</label>
+                <input id="shiftTask" name="task" list="taskOptions" value="${escapeHtml(plannerFormValues.task || state.data.settings.tasks?.[0] || "")}" placeholder="z. B. Patrouille" required>
+              </div>
+              <div class="field checkbox-field">
+                <label class="checkbox-row" for="shiftIsLead">
+                  <input id="shiftIsLead" name="isLead" type="checkbox" ${plannerFormValues.isLead ? "checked" : ""}>
+                  <span>Leitung in dieser Instanz</span>
+                </label>
+                <p class="helper-text">Wird im Kalender besonders hervorgehoben.</p>
+              </div>
+              <div class="field">
+                <label for="shiftNotes">Interne Notiz</label>
+                <textarea id="shiftNotes" name="notes" placeholder="Briefing, Besonderheiten oder Ansprechpartner">${escapeHtml(plannerFormValues.notes || "")}</textarea>
+              </div>
             </div>
-            <div class="field">
-              <label for="shiftMember">Moderator</label>
-              <select id="shiftMember" name="memberId" required>
-                ${buildUserOptions(users, editingShift?.memberId || "")}
-              </select>
+
+            <datalist id="shiftTypeOptions">${renderDatalistOptions(state.data.settings.shiftTypes)}</datalist>
+            <datalist id="worldOptions">${renderDatalistOptions(state.data.settings.worlds)}</datalist>
+            <datalist id="taskOptions">${renderDatalistOptions(state.data.settings.tasks)}</datalist>
+
+            <div class="card-actions">
+              <button type="submit">${editingShift ? "Aenderung speichern" : "Schicht speichern"}</button>
+              ${editingShift ? '<button type="button" class="ghost small" data-action="cancel-shift-edit">Bearbeitung abbrechen</button>' : ""}
             </div>
-            <div class="field">
-              <label for="shiftPreset">Schichtfenster</label>
-              <select id="shiftPreset" data-change="shift-preset">
-                ${renderShiftPresetOptions(presetValue)}
-              </select>
-            </div>
-            <div class="field">
-              <label for="shiftStartTime">Beginn</label>
-              <input id="shiftStartTime" name="startTime" type="time" value="${escapeHtml(editingShift?.startTime || "12:00")}" required>
-            </div>
-            <div class="field">
-              <label for="shiftEndTime">Ende</label>
-              <input id="shiftEndTime" name="endTime" type="time" value="${escapeHtml(editingShift?.endTime || "16:00")}" required>
-            </div>
-            <div class="field">
-              <label for="shiftType">Schichttyp</label>
-              <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(editingShift?.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Abloese" required>
-            </div>
-            <div class="field">
-              <label for="shiftWorld">Welt</label>
-              <input id="shiftWorld" name="world" list="worldOptions" value="${escapeHtml(editingShift?.world || state.data.settings.worlds?.[0] || "")}" placeholder="z. B. Community Hub" required>
-            </div>
-            <div class="field">
-              <label for="shiftTask">Aufgabe</label>
-              <input id="shiftTask" name="task" list="taskOptions" value="${escapeHtml(editingShift?.task || state.data.settings.tasks?.[0] || "")}" placeholder="z. B. Patrouille" required>
-            </div>
-            <div class="field checkbox-field">
-              <label class="checkbox-row" for="shiftIsLead">
-                <input id="shiftIsLead" name="isLead" type="checkbox" ${editingShift?.isLead ? "checked" : ""}>
-                <span>Leitung in dieser Instanz</span>
-              </label>
-              <p class="helper-text">Wird im Kalender besonders hervorgehoben.</p>
-            </div>
-            <div class="field">
-              <label for="shiftNotes">Interne Notiz</label>
-              <textarea id="shiftNotes" name="notes" placeholder="Briefing, Besonderheiten oder Ansprechpartner">${escapeHtml(editingShift?.notes || "")}</textarea>
+            <p class="pill-note">Nach jedem neuen Speichern bleiben Moderator, Welt und Aufgabe stehen. Das Datum springt auf den naechsten Tag, damit du eine Woche am Stueck planen kannst.</p>
+          </form>
+
+          <div class="planner-hint">
+            <h3>Team-Workflow</h3>
+            <p>
+              Lege hier fest, wer wann welche Welt moderiert und welche Aufgabe uebernimmt.
+              Moderatoren sehen spaeter nur ihre eigenen Einsaetze, koennen Wuensche senden und ihre Zeiten erfassen.
+            </p>
+            <p>
+              Die Kernschichten laufen ab 12 Uhr im 4-Stunden-Takt. Fuer Abloesen und Verstaerkung stehen Zwischenschichten bereit,
+              und Beginn sowie Ende lassen sich jederzeit frei anpassen.
+            </p>
+            <p>
+              Wenn die Datenbank-Verbindung aktiv ist, bleiben Schichten, Kataloge und Kalender auch nach GitHub-Updates und neuen Deploys erhalten.
+            </p>
+
+            <div class="inline-stats">
+              <span>${escapeHtml(String(shifts.length))} Schichten gespeichert</span>
+              <span>${escapeHtml(String((state.data.settings.worlds || []).length))} Welten im Katalog</span>
+              <span>${escapeHtml(String((state.data.requests || []).filter((entry) => entry.status === "offen").length))} neue Rueckmeldungen</span>
             </div>
           </div>
 
-          <datalist id="shiftTypeOptions">${renderDatalistOptions(state.data.settings.shiftTypes)}</datalist>
-          <datalist id="worldOptions">${renderDatalistOptions(state.data.settings.worlds)}</datalist>
-          <datalist id="taskOptions">${renderDatalistOptions(state.data.settings.tasks)}</datalist>
+          <form class="stack-form planner-bulk-form" data-form="shift-bulk">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Sammelplanung</p>
+                <h3>Eine Woche in einem Rutsch planen</h3>
+                <p class="section-copy">Ein Moderator = ganze Woche fuer eine Person. Mehrere Moderatoren = gleiche Schicht fuer alle ausgewaehlten Personen.</p>
+              </div>
+            </div>
 
-          <div class="card-actions">
-            <button type="submit">${editingShift ? "Aenderung speichern" : "Schicht speichern"}</button>
-            ${editingShift ? '<button type="button" class="ghost small" data-action="cancel-shift-edit">Bearbeitung abbrechen</button>' : ""}
-          </div>
-          <p class="pill-note">Neue Schichttypen, Welten oder Aufgaben kannst du frei eingeben. Vor dem Speichern fragt dich das Portal, ob diese Werte auch in die Kataloge aufgenommen werden sollen.</p>
-        </form>
+            <div class="form-grid">
+              <div class="field span-all">
+                <label for="bulkMembers">Moderatoren auswaehlen</label>
+                <select id="bulkMembers" name="memberIds" multiple size="${Math.min(Math.max(users.length, 4), 8)}" required>
+                  ${users.map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(getPrimaryDisplayName(user))}</option>`).join("")}
+                </select>
+                <p class="helper-text">Mit Strg oder Cmd kannst du mehrere Moderatoren gleichzeitig auswaehlen. Ein Moderator = Wochenplanung fuer eine Person.</p>
+              </div>
+              <div class="field">
+                <label for="bulkDateStart">Von</label>
+                <input id="bulkDateStart" name="dateStart" type="date" value="${escapeHtml(plannerFormValues.date || getLocalDateKey())}" required>
+              </div>
+              <div class="field">
+                <label for="bulkDateEnd">Bis</label>
+                <input id="bulkDateEnd" name="dateEnd" type="date" value="${escapeHtml(getNextPlannerDateKey(plannerFormValues.date || getLocalDateKey()))}" required>
+              </div>
+              <div class="field">
+                <label for="bulkStartTime">Beginn</label>
+                <input id="bulkStartTime" name="startTime" type="time" value="${escapeHtml(plannerFormValues.startTime || "12:00")}" required>
+              </div>
+              <div class="field">
+                <label for="bulkEndTime">Ende</label>
+                <input id="bulkEndTime" name="endTime" type="time" value="${escapeHtml(plannerFormValues.endTime || "16:00")}" required>
+              </div>
+              <div class="field">
+                <label for="bulkShiftType">Schichttyp</label>
+                <input id="bulkShiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" required>
+              </div>
+              <div class="field">
+                <label for="bulkWorld">Welt</label>
+                <input id="bulkWorld" name="world" list="worldOptions" value="${escapeHtml(plannerFormValues.world || state.data.settings.worlds?.[0] || "")}" required>
+              </div>
+              <div class="field">
+                <label for="bulkTask">Aufgabe</label>
+                <input id="bulkTask" name="task" list="taskOptions" value="${escapeHtml(plannerFormValues.task || state.data.settings.tasks?.[0] || "")}" required>
+              </div>
+              <div class="field checkbox-field">
+                <label class="checkbox-row" for="bulkIsLead">
+                  <input id="bulkIsLead" name="isLead" type="checkbox" ${plannerFormValues.isLead ? "checked" : ""}>
+                  <span>Leitung mitsetzen</span>
+                </label>
+              </div>
+              <div class="field span-all">
+                <label>Wochentage</label>
+                <div class="weekday-grid">
+                  ${renderPlannerWeekdayChecks()}
+                </div>
+              </div>
+              <div class="field span-all">
+                <label for="bulkNotes">Interne Notiz</label>
+                <textarea id="bulkNotes" name="notes" placeholder="Gleiche Notiz fuer alle angelegten Schichten">${escapeHtml(plannerFormValues.notes || "")}</textarea>
+              </div>
+            </div>
 
-        <div class="planner-hint">
-          <h3>Team-Workflow</h3>
-          <p>
-            Lege hier fest, wer wann welche Welt moderiert und welche Aufgabe uebernimmt.
-            Moderatoren sehen spaeter nur ihre eigenen Einsaetze, koennen Wuensche senden und ihre Zeiten erfassen.
-          </p>
-          <p>
-            Die Kernschichten laufen ab 12 Uhr im 4-Stunden-Takt. Fuer Abloesen und Verstaerkung stehen Zwischenschichten bereit,
-            und Beginn sowie Ende lassen sich jederzeit frei anpassen.
-          </p>
-          <p>
-            Wenn die Datenbank-Verbindung aktiv ist, bleiben Schichten, Kataloge und Kalender auch nach GitHub-Updates und neuen Deploys erhalten.
-          </p>
-
-          <div class="inline-stats">
-            <span>${escapeHtml(String((state.data.shifts || []).length))} Schichten gespeichert</span>
-            <span>${escapeHtml(String((state.data.settings.worlds || []).length))} Welten im Katalog</span>
-            <span>${escapeHtml(String((state.data.requests || []).filter((entry) => entry.status === "offen").length))} neue Rueckmeldungen</span>
-          </div>
+            <button type="submit">Sammelplanung speichern</button>
+          </form>
         </div>
       </div>
 
-      <div class="card-list">
+      <div class="planner-groups">
         ${shiftsMarkup || renderEmptyState("Noch keine Schichten", "Lege oben den ersten Einsatz an.")}
       </div>
     </section>
   `;
+}
+
+function getPlannerFormValues(editingShift) {
+  if (editingShift) {
+    return {
+      date: editingShift.date || getLocalDateKey(),
+      memberId: editingShift.memberId || "",
+      startTime: editingShift.startTime || "12:00",
+      endTime: editingShift.endTime || "16:00",
+      shiftType: editingShift.shiftType || state.data.settings.shiftTypes?.[0] || "",
+      world: editingShift.world || state.data.settings.worlds?.[0] || "",
+      task: editingShift.task || state.data.settings.tasks?.[0] || "",
+      notes: editingShift.notes || "",
+      isLead: Boolean(editingShift.isLead)
+    };
+  }
+
+  const draft = state.ui.plannerDraft || {};
+  return {
+    date: draft.date || getLocalDateKey(),
+    memberId: draft.memberId || "",
+    startTime: draft.startTime || "12:00",
+    endTime: draft.endTime || "16:00",
+    shiftType: draft.shiftType || state.data.settings.shiftTypes?.[0] || "",
+    world: draft.world || state.data.settings.worlds?.[0] || "",
+    task: draft.task || state.data.settings.tasks?.[0] || "",
+    notes: draft.notes || "",
+    isLead: Boolean(draft.isLead)
+  };
+}
+
+function rememberPlannerDraft(payload, { advanceDate = false } = {}) {
+  const nextDate = advanceDate ? getNextPlannerDateKey(payload.date) : payload.date;
+  state.ui.plannerDraft = {
+    date: nextDate || getLocalDateKey(),
+    memberId: payload.memberId || "",
+    startTime: payload.startTime || "12:00",
+    endTime: payload.endTime || "16:00",
+    shiftType: payload.shiftType || "",
+    world: payload.world || "",
+    task: payload.task || "",
+    notes: payload.notes || "",
+    isLead: Boolean(payload.isLead)
+  };
+}
+
+function getNextPlannerDateKey(dateKey) {
+  const normalized = String(dateKey || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return getLocalDateKey();
+
+  const [year, month, day] = normalized.split("-").map(Number);
+  const nextDate = new Date(year, month - 1, day + 1, 12, 0, 0);
+  return getLocalDateKey(nextDate);
+}
+
+function renderPlannerWeekdayChecks() {
+  return [
+    { value: "1", label: "Mo" },
+    { value: "2", label: "Di" },
+    { value: "3", label: "Mi" },
+    { value: "4", label: "Do" },
+    { value: "5", label: "Fr" },
+    { value: "6", label: "Sa" },
+    { value: "0", label: "So" }
+  ]
+    .map(
+      (entry) => `
+        <label class="weekday-check">
+          <input type="checkbox" name="weekdays" value="${entry.value}" ${Number(entry.value) <= 5 ? "checked" : ""}>
+          <span>${escapeHtml(entry.label)}</span>
+        </label>
+      `
+    )
+    .join("");
+}
+
+function buildBulkShiftEntries(formData) {
+  const memberIds = formData
+    .getAll("memberIds")
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+  const weekdays = new Set(
+    formData
+      .getAll("weekdays")
+      .map((entry) => Number.parseInt(String(entry || ""), 10))
+      .filter((entry) => Number.isInteger(entry) && entry >= 0 && entry <= 6)
+  );
+  const dateStart = String(formData.get("dateStart") || "").trim();
+  const dateEnd = String(formData.get("dateEnd") || "").trim();
+  const basePayload = {
+    startTime: normalizeTimeValue(formData.get("startTime")),
+    endTime: normalizeTimeValue(formData.get("endTime")),
+    shiftType: String(formData.get("shiftType") || "").trim(),
+    world: String(formData.get("world") || "").trim(),
+    task: String(formData.get("task") || "").trim(),
+    notes: String(formData.get("notes") || "").trim(),
+    isLead: formData.get("isLead") === "on"
+  };
+
+  if (!memberIds.length) {
+    throw new Error("Bitte mindestens einen Moderator fuer die Sammelplanung auswaehlen.");
+  }
+  if (!dateStart || !dateEnd) {
+    throw new Error("Bitte Start- und Enddatum fuer die Sammelplanung angeben.");
+  }
+  if (dateStart > dateEnd) {
+    throw new Error("Das Enddatum muss nach dem Startdatum liegen.");
+  }
+  if (!weekdays.size) {
+    throw new Error("Bitte mindestens einen Wochentag fuer die Sammelplanung auswaehlen.");
+  }
+  if (!basePayload.startTime || !basePayload.endTime || !basePayload.shiftType || !basePayload.world || !basePayload.task) {
+    throw new Error("Bitte Beginn, Ende, Schichttyp, Welt und Aufgabe fuer die Sammelplanung ausfuellen.");
+  }
+
+  const entries = [];
+  const cursor = parseDateKey(dateStart);
+  const last = parseDateKey(dateEnd);
+
+  while (cursor <= last) {
+    if (weekdays.has(cursor.getDay())) {
+      const dateKey = getLocalDateKey(cursor);
+      for (const memberId of memberIds) {
+        entries.push({
+          date: dateKey,
+          memberId,
+          ...basePayload
+        });
+      }
+    }
+
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  if (!entries.length) {
+    throw new Error("Im gewaelten Zeitraum liegen keine passenden Wochentage.");
+  }
+
+  return entries;
+}
+
+function buildPlannerOverviewGroups(shifts) {
+  const groups = new Map();
+
+  for (const shift of shifts) {
+    const groupKey = String(shift.memberId || "");
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        memberId: groupKey,
+        memberName: shift.memberName || "Unbekannt",
+        memberRole: shift.memberRole || "",
+        totalHours: 0,
+        entries: []
+      });
+    }
+
+    const group = groups.get(groupKey);
+    group.entries.push(shift);
+    group.totalHours += getShiftDurationHours(shift);
+  }
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      shiftCount: group.entries.length,
+      dayCount: new Set(group.entries.map((entry) => entry.date)).size,
+      entries: group.entries.slice().sort((left, right) => compareShiftValues(left, right))
+    }))
+    .sort((left, right) => left.memberName.localeCompare(right.memberName, "de"));
+}
+
+function compareShiftValues(left, right) {
+  if ((left.date || "") !== (right.date || "")) return String(left.date || "").localeCompare(String(right.date || ""));
+  if ((left.startTime || "") !== (right.startTime || "")) return compareTimeValues(left.startTime || "", right.startTime || "");
+  return String(left.world || "").localeCompare(String(right.world || ""), "de");
+}
+
+function renderPlannerSidebar(groups) {
+  return `
+    <aside class="planner-sidebar">
+      <div class="planner-sidebar-head">
+        <div>
+          <p class="eyebrow">Wochenuebersicht</p>
+          <h3>Wer hat was?</h3>
+        </div>
+        <span class="pill neutral">${escapeHtml(String(groups.length))} Personen</span>
+      </div>
+      <div class="planner-sidebar-list">
+        ${
+          groups.length
+            ? groups.map((group) => renderPlannerSidebarGroup(group)).join("")
+            : renderEmptyState("Noch keine Personen im Plan", "Sobald du Schichten speicherst, erscheint hier die Schnelluebersicht.")
+        }
+      </div>
+    </aside>
+  `;
+}
+
+function renderPlannerSidebarGroup(group) {
+  return `
+    <section class="planner-person-card">
+      <div class="planner-person-head">
+        <div>
+          <h3>${escapeHtml(group.memberName)}</h3>
+          <p class="timeline-meta">${escapeHtml(ROLE_LABELS[group.memberRole] || roleLabelForUserId(group.memberId))}</p>
+        </div>
+        <span class="pill amber">${escapeHtml(String(group.shiftCount))} Schichten</span>
+      </div>
+      <div class="inline-stats planner-inline-stats">
+        <span>${escapeHtml(String(group.dayCount))} Tage</span>
+        <span>${escapeHtml(formatHoursValue(group.totalHours))}</span>
+      </div>
+      <div class="planner-jump-list">
+        ${group.entries.map((entry) => renderPlannerJumpButton(entry)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderPlannerJumpButton(shift) {
+  return `
+    <button
+      type="button"
+      class="planner-jump-button ${state.ui.editingShiftId === shift.id ? "active" : ""}"
+      data-action="focus-shift"
+      data-shift-id="${escapeHtml(shift.id)}"
+    >
+      <span class="planner-jump-day">${escapeHtml(formatDate(shift.date))}</span>
+      <strong>${escapeHtml(`${formatShiftWindow(shift)} · ${shift.world}`)}</strong>
+      <span class="timeline-meta">${escapeHtml(`${shift.shiftType}${shift.isLead ? " · Leitung" : ""}`)}</span>
+    </button>
+  `;
+}
+
+function renderPlannerGroupedShiftSections(groups) {
+  return groups
+    .map(
+      (group) => `
+        <section class="planner-group">
+          <div class="planner-group-head">
+            <div>
+              <p class="eyebrow">Moderator</p>
+              <h3>${escapeHtml(group.memberName)}</h3>
+            </div>
+            <div class="inline-stats planner-inline-stats">
+              <span>${escapeHtml(String(group.shiftCount))} Schichten</span>
+              <span>${escapeHtml(String(group.dayCount))} Tage</span>
+              <span>${escapeHtml(formatHoursValue(group.totalHours))}</span>
+            </div>
+          </div>
+          <div class="card-list planner-card-list">
+            ${group.entries.map((shift) => renderShiftCard(shift, { adminView: true })).join("")}
+          </div>
+        </section>
+      `
+    )
+    .join("");
 }
 
 function renderShiftCard(shift, options = {}) {
@@ -1009,9 +1370,10 @@ function renderShiftCard(shift, options = {}) {
   const statusLabel = openEntry ? "Eingestempelt" : latestEntry?.checkOutAt ? "Abgeschlossen" : "Geplant";
   const statusTone = openEntry ? "teal" : latestEntry?.checkOutAt ? "success" : "amber";
   const todayShift = shift.date === getLocalDateKey();
+  const focused = state.ui.editingShiftId === shift.id;
 
   return `
-    <article class="mini-card ${status}">
+    <article id="shift-card-${escapeHtml(shift.id)}" class="mini-card ${status} ${focused ? "focused" : ""}">
       <div class="status-row">
         <span class="pill ${todayShift ? "teal" : "neutral"}">${escapeHtml(formatDate(shift.date))}</span>
         ${shift.isLead ? '<span class="pill rose">Leitung</span>' : ""}
@@ -1044,31 +1406,35 @@ function renderShiftCard(shift, options = {}) {
 function renderShiftCalendarPanel() {
   const shifts = getSortedShifts(state.data?.calendarShifts || state.data?.shifts || []);
   const days = buildShiftCalendarDays(shifts);
+  const events = getCommunityData().events || [];
+  const weeks = buildShiftCalendarWeeks(days, events);
   const leadCount = shifts.filter((entry) => entry.isLead).length;
   const worldCount = new Set(shifts.map((entry) => entry.world).filter(Boolean)).size;
+  const eventCount = events.length;
 
   return `
     <section class="panel span-12">
       <div class="section-head">
         <div>
           <p class="eyebrow">Kalender</p>
-          <h2>Wer wann mit wem Schicht hat</h2>
-          <p class="section-copy">Gruppiert nach Tag, Uhrzeit und Welt. Leitungen sind sofort sichtbar.</p>
+          <h2>Wochenkalender fuer Schichten</h2>
+          <p class="section-copy">Ein normaler Wochenkalender: pro Tag direkt Uhrzeit, Welt, Leitung und Team.</p>
         </div>
       </div>
 
       <div class="stats-strip compact-stats">
         ${renderStatCard("Schichten", shifts.length, "Aktuell sichtbare Eintraege", "amber")}
-        ${renderStatCard("Kalendertage", days.length, "Tage mit geplanter Besetzung", "sky")}
+        ${renderStatCard("Kalenderwochen", weeks.length, "Wochen mit geplanter Besetzung", "sky")}
         ${renderStatCard("Leitungen", leadCount, "Markierte Instanz-Leitungen", "rose")}
         ${renderStatCard("Welten", worldCount, "Einsatzorte im Plan", "teal")}
+        ${renderStatCard("Events", eventCount, "Community-Termine im Kalender", "sky")}
       </div>
 
-      <div class="calendar-days">
+      <div class="calendar-weeks">
         ${
-          days.length
-            ? days.map((day) => renderShiftCalendarDay(day)).join("")
-            : renderEmptyState("Noch keine Schichten im Kalender", "Sobald Schichten geplant sind, erscheinen sie hier gruppiert.")
+          weeks.length
+            ? weeks.map((week) => renderShiftCalendarWeek(week)).join("")
+            : renderEmptyState("Noch keine Schichten im Kalender", "Sobald Schichten geplant sind, erscheinen sie hier als Wochenkalender.")
         }
       </div>
     </section>
@@ -1083,9 +1449,9 @@ function renderShiftCalendarDay(day) {
           <p class="eyebrow">Kalendertag</p>
           <h3>${escapeHtml(formatDate(day.date))}</h3>
         </div>
-        <span class="pill neutral">${escapeHtml(String(day.slots.length))} Gruppen</span>
+        <span class="pill neutral">${escapeHtml(String(day.slots.length))} Schichtfenster</span>
       </div>
-      <div class="calendar-slots">
+      <div class="calendar-agenda">
         ${day.slots.map((slot) => renderShiftCalendarSlot(slot)).join("")}
       </div>
     </article>
@@ -1095,10 +1461,14 @@ function renderShiftCalendarDay(day) {
 function renderShiftCalendarSlot(slot) {
   const leaders = slot.members.filter((entry) => entry.isLead);
   const leaderText = leaders.length ? leaders.map((entry) => entry.memberName).join(", ") : "Noch keine Leitung gesetzt";
+  const teamText =
+    slot.members
+      .map((entry) => `${entry.memberName}${entry.task ? ` (${entry.task})` : ""}${entry.isLead ? " [Leitung]" : ""}`)
+      .join(", ") || "Noch niemand eingetragen";
 
   return `
-    <section class="calendar-slot">
-      <div class="calendar-slot-head">
+    <section class="calendar-slot calendar-row">
+      <div class="calendar-slot-head calendar-row-head">
         <div>
           <div class="status-row">
             <span class="pill teal">${escapeHtml(slot.windowLabel)}</span>
@@ -1106,6 +1476,8 @@ function renderShiftCalendarSlot(slot) {
             <span class="pill ${leaders.length ? "rose" : "neutral"}">${escapeHtml(leaders.length ? `Leitung: ${leaderText}` : leaderText)}</span>
           </div>
           <h3>${escapeHtml(slot.shiftTypes.join(" · "))}</h3>
+          <p class="calendar-row-copy"><strong>Team:</strong> ${escapeHtml(teamText)}</p>
+          <p class="calendar-row-copy"><strong>Team:</strong> ${escapeHtml(teamText)}</p>
         </div>
         <p class="pill-note">${escapeHtml(String(slot.members.length))} Personen in dieser Gruppe</p>
       </div>
@@ -1129,6 +1501,174 @@ function renderShiftCalendarMember(entry) {
   `;
 }
 
+function buildShiftCalendarWeeks(days, events = []) {
+  const dayMap = new Map(days.map((day) => [day.date, day]));
+  const dateKeys = [...days.map((day) => day.date), ...buildCalendarEventAnchorDates(events)];
+  if (!dateKeys.length) return [];
+
+  const sortedDateKeys = dateKeys.slice().sort((left, right) => left.localeCompare(right));
+  const firstDate = parseDateKey(sortedDateKeys[0]);
+  const lastDate = parseDateKey(sortedDateKeys[sortedDateKeys.length - 1]);
+  const start = getStartOfCalendarWeek(firstDate);
+  const end = getEndOfCalendarWeek(lastDate);
+  const weeks = [];
+
+  for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 7)) {
+    const weekStart = new Date(cursor);
+    const weekDays = [];
+
+    for (let offset = 0; offset < 7; offset += 1) {
+      const current = new Date(weekStart);
+      current.setDate(weekStart.getDate() + offset);
+      const dateKey = getLocalDateKey(current);
+      const existing = dayMap.get(dateKey);
+
+      weekDays.push({
+        date: dateKey,
+        weekdayLabel: formatWeekdayLabel(dateKey),
+        dayLabel: formatCalendarDayLabel(dateKey),
+        isToday: dateKey === getLocalDateKey(),
+        slots: existing?.slots || [],
+        events: buildCalendarEventEntriesForDate(events, dateKey)
+      });
+    }
+
+    weeks.push({
+      startDate: weekDays[0].date,
+      endDate: weekDays[6].date,
+      totalSlots: weekDays.reduce((sum, day) => sum + day.slots.length, 0),
+      days: weekDays
+    });
+  }
+
+  return weeks;
+}
+
+function buildCalendarEventAnchorDates(events) {
+  return (Array.isArray(events) ? events : [])
+    .map((entry) => {
+      if (entry.scheduleType === "weekly") return getLocalDateKey();
+      return String(entry.eventDate || "").trim();
+    })
+    .filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+}
+
+function renderShiftCalendarWeek(week) {
+  return `
+    <article class="calendar-week">
+      <div class="calendar-week-head">
+        <div>
+          <p class="eyebrow">Kalenderwoche</p>
+          <h3>${escapeHtml(`${formatDate(week.startDate)} bis ${formatDate(week.endDate)}`)}</h3>
+        </div>
+        <span class="pill neutral">${escapeHtml(String(week.totalSlots))} Schichtfenster</span>
+      </div>
+      <div class="calendar-week-grid">
+        ${week.days.map((day) => renderShiftCalendarDayCell(day)).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderShiftCalendarDayCell(day) {
+  const totalItems = day.slots.length + day.events.length;
+  return `
+    <section class="calendar-day-cell ${day.isToday ? "today" : ""}">
+      <div class="calendar-day-cell-head">
+        <div>
+          <p class="eyebrow">${escapeHtml(day.weekdayLabel)}</p>
+          <h4>${escapeHtml(day.dayLabel)}</h4>
+        </div>
+        <span class="pill ${totalItems ? "teal" : "neutral"}">${escapeHtml(String(totalItems))}</span>
+      </div>
+      <div class="calendar-day-cell-list">
+        ${day.events.length ? day.events.map((entry) => renderCalendarEventEntry(entry)).join("") : ""}
+        ${
+          day.slots.length
+            ? day.slots.map((slot) => renderShiftCalendarEntry(slot)).join("")
+            : !day.events.length
+              ? '<p class="helper-text">Nichts geplant</p>'
+              : ""
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderShiftCalendarEntry(slot) {
+  const leaders = slot.members.filter((entry) => entry.isLead);
+  const leaderText = leaders.length ? leaders.map((entry) => entry.memberName).join(", ") : "Keine Leitung";
+  const teamText = slot.members.map((entry) => entry.memberName).join(", ");
+
+  return `
+    <article class="calendar-entry ${leaders.length ? "lead" : ""}">
+      <p class="calendar-entry-time">${escapeHtml(slot.windowLabel)}</p>
+      <p class="calendar-entry-world">${escapeHtml(slot.world)}</p>
+      <p class="calendar-entry-meta"><strong>Leitung:</strong> ${escapeHtml(leaderText)}</p>
+      <p class="calendar-entry-meta"><strong>Team:</strong> ${escapeHtml(teamText)}</p>
+    </article>
+  `;
+}
+
+function buildCalendarEventEntriesForDate(events, dateKey) {
+  return (Array.isArray(events) ? events : [])
+    .filter((entry) => eventOccursOnDate(entry, dateKey))
+    .slice()
+    .sort((left, right) => compareTimeValues(left.eventTime || "", right.eventTime || ""))
+    .map((entry) => ({
+      ...entry,
+      eventTimeLabel: entry.eventTime ? `${entry.eventTime} Uhr` : entry.dateLabel || ""
+    }));
+}
+
+function eventOccursOnDate(event, dateKey) {
+  if (event.scheduleType === "weekly") {
+    return parseDateKey(dateKey).getDay() === Number(event.weekday);
+  }
+  return String(event.eventDate || "") === String(dateKey || "");
+}
+
+function renderCalendarEventEntry(event) {
+  return `
+    <article class="calendar-entry event">
+      <p class="calendar-entry-time">${escapeHtml(event.eventTimeLabel || event.dateLabel || "Event")}</p>
+      <p class="calendar-entry-world">${escapeHtml(event.title)}</p>
+      <p class="calendar-entry-meta"><strong>Ort:</strong> ${escapeHtml(event.world || "-")}</p>
+      <p class="calendar-entry-meta"><strong>Host:</strong> ${escapeHtml(event.host || "-")}</p>
+    </article>
+  `;
+}
+
+function parseDateKey(dateKey) {
+  const [year, month, day] = String(dateKey || "")
+    .split("-")
+    .map((value) => Number.parseInt(value, 10));
+  return new Date(year, (month || 1) - 1, day || 1, 12, 0, 0);
+}
+
+function getStartOfCalendarWeek(date) {
+  const start = new Date(date);
+  const weekday = start.getDay();
+  const deltaToMonday = weekday === 0 ? -6 : 1 - weekday;
+  start.setDate(start.getDate() + deltaToMonday);
+  start.setHours(12, 0, 0, 0);
+  return start;
+}
+
+function getEndOfCalendarWeek(date) {
+  const end = getStartOfCalendarWeek(date);
+  end.setDate(end.getDate() + 6);
+  return end;
+}
+
+function formatWeekdayLabel(dateKey) {
+  return new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(parseDateKey(dateKey));
+}
+
+function formatCalendarDayLabel(dateKey) {
+  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(parseDateKey(dateKey));
+}
+
 function renderCapacityPanel() {
   const rows = buildCapacityRows();
   const totalWorkedHours = rows.reduce((sum, entry) => sum + entry.workedHours, 0);
@@ -1142,9 +1682,11 @@ function renderCapacityPanel() {
         <div>
           <p class="eyebrow">Auslastung</p>
           <h2>Stunden und Verfuegbarkeit im Blick</h2>
-          <p class="section-copy">Hier siehst du, wer diese Woche schon gearbeitet hat, was geplant ist und wie viel jede Person laut Profil noch abdecken kann.</p>
+          <p class="section-copy">Hier siehst du pro Moderator geleistete Stunden, geplante Schichten und die gemeldeten Zeitfenster fuer diese Woche. Die Stunden sind nur der Rahmen, entscheidend sind die echten Zeitfenster.</p>
         </div>
       </div>
+
+      <p class="pill-note">Bitte bis Samstag die Verfuegbarkeiten fuer die naechste Woche einsammeln. Ohne Rueckmeldung keine Einplanung; wiederholt fehlend kann zu Verwarnungen fuehren.</p>
 
       <div class="stats-strip compact-stats">
         ${renderStatCard("Geleistet", formatHoursValue(totalWorkedHours), "Bisher erfasste Stunden diese Woche", "teal")}
@@ -1179,8 +1721,16 @@ function renderCapacityCard(entry) {
       <p><strong>Geplant:</strong> ${escapeHtml(formatHoursValue(entry.plannedHours))} an ${escapeHtml(formatCapacityDays(entry.plannedDays))}</p>
       <p><strong>Verfuegbar:</strong> ${escapeHtml(formatCapacityHours(entry.capacityHours))} / ${escapeHtml(formatCapacityDays(entry.capacityDays))}</p>
       ${
+        entry.availabilitySchedule
+          ? `<p><strong>Zeitfenster:</strong> ${escapeHtml(entry.availabilitySchedule)}</p>`
+          : '<p class="helper-text">Noch kein konkretes Zeitfenster fuer diese Woche eingetragen.</p>'
+      }
+      ${entry.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(entry.availabilityUpdatedAt))}</p>` : ""}
+      ${
         plannedDelta === null && dayDelta === null
-          ? '<p class="helper-text">Diese Person hat noch keine Wochen-Kapazitaet im Profil hinterlegt.</p>'
+          ? entry.availabilitySchedule
+            ? '<p class="helper-text">Zeitfenster ist eingetragen, aber noch ohne Stunden- oder Tagesrahmen.</p>'
+            : '<p class="helper-text">Diese Person hat noch keine Wochen-Kapazitaet im Profil hinterlegt.</p>'
           : `<p class="helper-text">${escapeHtml(buildCapacityDeltaText(plannedDelta, dayDelta))}</p>`
       }
     </article>
@@ -2910,7 +3460,8 @@ async function handleSubmit(event) {
         shiftType: String(formData.get("shiftType") || "").trim(),
         world: String(formData.get("world") || "").trim(),
         task: String(formData.get("task") || "").trim(),
-        notes: formData.get("notes")
+        notes: formData.get("notes"),
+        isLead: formData.get("isLead") === "on"
       };
       const catalogAdds = collectCatalogAddsForShift(payload, state.data.settings);
       if (catalogAdds.shiftTypes.length || catalogAdds.worlds.length || catalogAdds.tasks.length) {
@@ -2937,6 +3488,7 @@ async function handleSubmit(event) {
           }),
         shiftId ? "Schicht wurde aktualisiert." : "Neue Schicht wurde gespeichert."
       );
+      rememberPlannerDraft(payload, { advanceDate: !shiftId });
       state.ui.editingShiftId = "";
       render();
       break;
@@ -2991,6 +3543,43 @@ async function handleSubmit(event) {
             })
           }),
         "Neue Info wurde veroeffentlicht."
+      );
+      break;
+    }
+
+    case "event-create": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/events", {
+            method: "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              scheduleType: formData.get("scheduleType"),
+              eventDate: formData.get("eventDate"),
+              eventTime: formData.get("eventTime"),
+              weekday: formData.get("weekday"),
+              world: formData.get("world"),
+              host: formData.get("host"),
+              summary: formData.get("summary"),
+              reminderEnabled: formData.get("reminderEnabled") === "on"
+            })
+          }),
+        "Event wurde gespeichert."
+      );
+      break;
+    }
+
+    case "event-delete": {
+      const eventId = form.dataset.eventId;
+      if (!window.confirm("Dieses Event wirklich entfernen?")) return;
+      await performAction(
+        () =>
+          api(`/api/events/${encodeURIComponent(eventId)}`, {
+            method: "DELETE"
+          }),
+        "Event wurde entfernt.",
+        "warning"
       );
       break;
     }
@@ -3184,6 +3773,14 @@ async function handleClick(event) {
 
     case "edit-shift":
       state.ui.editingShiftId = actionElement.dataset.shiftId || "";
+      state.ui.scrollToShiftId = actionElement.dataset.shiftId || "";
+      render();
+      break;
+
+    case "focus-shift":
+      state.ui.activeTab = normalizeActiveTab("planning");
+      state.ui.editingShiftId = actionElement.dataset.shiftId || "";
+      state.ui.scrollToShiftId = actionElement.dataset.shiftId || "";
       render();
       break;
 
@@ -3763,6 +4360,7 @@ function renderTeamPanelV2() {
                     ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
                     ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
                     ${user.role === "moderator" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
+                    ${user.role === "moderator" && user.availabilitySchedule ? `<p class="helper-text"><strong>Diese Woche:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
                     ${renderCreatorLinkList(user, true)}
                   </div>
                 </div>
@@ -3815,6 +4413,11 @@ function renderTeamPanelV2() {
                           <div class="field">
                             <label for="weeklyDays-${escapeHtml(user.id)}">Tage pro Woche</label>
                             <input id="weeklyDays-${escapeHtml(user.id)}" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
+                          </div>
+                          <div class="field span-all">
+                            <label for="availability-${escapeHtml(user.id)}">Zeitfenster fuer diese Woche</label>
+                            <textarea id="availability-${escapeHtml(user.id)}" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+                            <p class="helper-text">Bitte bis Samstag eintragen. Ohne Rueckmeldung keine Einplanung; wiederholt fehlend kann zu Verwarnungen fuehren.</p>
                           </div>
                         `
                         : ""
@@ -4155,17 +4758,20 @@ function buildCapacityRows() {
       const plannedDays = calculatePlannedDaysForWeek(user.id, week);
       const capacityHours = Number(user.weeklyHoursCapacity || 0);
       const capacityDays = Number(user.weeklyDaysCapacity || 0);
+      const availabilitySchedule = String(user.availabilitySchedule || "").trim();
+      const availabilityUpdatedAt = String(user.availabilityUpdatedAt || "").trim();
       const overHours = capacityHours > 0 && plannedHours > capacityHours;
       const overDays = capacityDays > 0 && plannedDays > capacityDays;
       const fullyPlanned =
         (capacityHours > 0 && plannedHours >= capacityHours) ||
         (capacityDays > 0 && plannedDays >= capacityDays);
+      const hasAvailability = Boolean(availabilitySchedule || capacityHours || capacityDays);
 
       let statusLabel = "Noch offen";
       let statusTone = "amber";
-      if (!capacityHours && !capacityDays) {
-        statusLabel = "Keine Angabe";
-        statusTone = "neutral";
+      if (!hasAvailability) {
+        statusLabel = "Rueckmeldung fehlt";
+        statusTone = "rose";
       } else if (overHours || overDays) {
         statusLabel = "Ueberplant";
         statusTone = "rose";
@@ -4182,6 +4788,8 @@ function buildCapacityRows() {
         plannedDays,
         capacityHours,
         capacityDays,
+        availabilitySchedule,
+        availabilityUpdatedAt,
         statusLabel,
         statusTone
       };
@@ -4617,7 +5225,8 @@ async function handleSubmit(event) {
         shiftType: String(formData.get("shiftType") || "").trim(),
         world: String(formData.get("world") || "").trim(),
         task: String(formData.get("task") || "").trim(),
-        notes: formData.get("notes")
+        notes: String(formData.get("notes") || "").trim(),
+        isLead: formData.get("isLead") === "on"
       };
       const catalogAdds = collectCatalogAddsForShift(payload, state.data.settings);
       if (catalogAdds.shiftTypes.length || catalogAdds.worlds.length || catalogAdds.tasks.length) {
@@ -4640,6 +5249,49 @@ async function handleSubmit(event) {
             body: JSON.stringify(payload)
           }),
         shiftId ? "Schicht wurde aktualisiert." : "Neue Schicht wurde gespeichert."
+      );
+      rememberPlannerDraft(payload, { advanceDate: !shiftId });
+      state.ui.editingShiftId = "";
+      render();
+      break;
+    }
+
+    case "shift-bulk": {
+      const formData = new FormData(form);
+      const entries = buildBulkShiftEntries(formData);
+      const catalogAdds = collectCatalogAddsForShift(entries[0], state.data.settings);
+      if (catalogAdds.shiftTypes.length || catalogAdds.worlds.length || catalogAdds.tasks.length) {
+        const lines = [
+          "Diese Werte sind neu und noch nicht im Katalog:",
+          ...catalogAdds.shiftTypes.map((entry) => `- Schichttyp: ${entry}`),
+          ...catalogAdds.worlds.map((entry) => `- Welt: ${entry}`),
+          ...catalogAdds.tasks.map((entry) => `- Aufgabe: ${entry}`),
+          "",
+          "Sollen diese Werte zusaetzlich in die Listen aufgenommen werden?"
+        ];
+        if (window.confirm(lines.join("\n"))) {
+          for (const entry of entries) {
+            entry.catalogAdds = catalogAdds;
+          }
+        }
+      }
+
+      await performAction(async () => {
+        let lastPayload = null;
+        for (const entry of entries) {
+          lastPayload = await api("/api/shifts", {
+            method: "POST",
+            body: JSON.stringify(entry)
+          });
+        }
+        return lastPayload;
+      }, `${entries.length} Schichten wurden gesammelt angelegt.`);
+      rememberPlannerDraft(
+        {
+          ...entries[0],
+          date: getNextPlannerDateKey(entries[entries.length - 1].date)
+        },
+        { advanceDate: false }
       );
       state.ui.editingShiftId = "";
       render();
@@ -4695,6 +5347,43 @@ async function handleSubmit(event) {
             })
           }),
         "Neue Info wurde veroeffentlicht."
+      );
+      break;
+    }
+
+    case "event-create": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/events", {
+            method: "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              scheduleType: formData.get("scheduleType"),
+              eventDate: formData.get("eventDate"),
+              eventTime: formData.get("eventTime"),
+              weekday: formData.get("weekday"),
+              world: formData.get("world"),
+              host: formData.get("host"),
+              summary: formData.get("summary"),
+              reminderEnabled: formData.get("reminderEnabled") === "on"
+            })
+          }),
+        "Event wurde gespeichert."
+      );
+      break;
+    }
+
+    case "event-delete": {
+      const eventId = form.dataset.eventId;
+      if (!window.confirm("Dieses Event wirklich entfernen?")) return;
+      await performAction(
+        () =>
+          api(`/api/events/${encodeURIComponent(eventId)}`, {
+            method: "DELETE"
+          }),
+        "Event wurde entfernt.",
+        "warning"
       );
       break;
     }
@@ -4854,6 +5543,9 @@ async function handleSubmit(event) {
               avatarUrl: payload.avatarUrl || "",
               bio: payload.bio,
               contactNote: payload.contactNote,
+              weeklyHoursCapacity: payload.weeklyHoursCapacity,
+              weeklyDaysCapacity: payload.weeklyDaysCapacity,
+              availabilitySchedule: payload.availabilitySchedule,
               creatorBlurb: payload.creatorBlurb,
               creatorLinks: payload.creatorLinks,
               creatorVisible: payload.creatorVisible,
@@ -5919,6 +6611,9 @@ async function buildProfilePayload(form) {
     discordName: formData.get("discordName"),
     bio: formData.get("bio"),
     contactNote: formData.get("contactNote"),
+    weeklyHoursCapacity: formData.get("weeklyHoursCapacity"),
+    weeklyDaysCapacity: formData.get("weeklyDaysCapacity"),
+    availabilitySchedule: formData.get("availabilitySchedule"),
     creatorBlurb: formData.get("creatorBlurb"),
     creatorLinks: formData.get("creatorLinks"),
     creatorVisible: formData.get("creatorVisible") === "on"
@@ -5977,6 +6672,8 @@ function renderProfilePanel(managerView) {
             ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
             ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
             ${showAvailabilityFields && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
+            ${showAvailabilityFields && user.availabilitySchedule ? `<p class="helper-text"><strong>Diese Woche:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
+            ${showAvailabilityFields && user.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(user.availabilityUpdatedAt))}</p>` : ""}
             ${renderCreatorLinkList(user, true)}
           </div>
         </div>
@@ -6018,6 +6715,11 @@ function renderProfilePanel(managerView) {
                   <div class="field">
                     <label for="profileWeeklyDaysCapacity">Verfuegbare Tage pro Woche</label>
                     <input id="profileWeeklyDaysCapacity" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}" placeholder="z. B. 3">
+                  </div>
+                  <div class="field span-all">
+                    <label for="profileAvailabilitySchedule">Zeitfenster fuer diese Woche</label>
+                    <textarea id="profileAvailabilitySchedule" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+                    <p class="helper-text">Bitte bis Samstag deine Verfuegbarkeit fuer die naechste Woche eintragen. Ohne Rueckmeldung keine Einplanung; wiederholt fehlend kann zu Verwarnungen fuehren.</p>
                   </div>
                 `
                 : ""
@@ -6553,7 +7255,7 @@ function renderDashboardTabs(activeTab) {
 
   let tabs = common;
   if (canManagePortal()) {
-    tabs = [...common, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }, { id: "settings", label: "Einstellungen" }];
+    tabs = [...common, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "capacity", label: "Auslastung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }, { id: "settings", label: "Einstellungen" }];
   } else if (canAccessStaffArea()) {
     tabs = [...common, { id: "schedule", label: "Meine Schichten" }, { id: "feedback", label: "Feedback" }, { id: "time", label: "Zeiten" }];
   } else {
@@ -6681,4 +7383,126 @@ function normalizeActiveTab(tab) {
       : ["overview", "feed", "community", "calendar", "events", "news", "creators", "forum", "feedback", "chat", "profile"];
 
   return allowed.includes(tab) ? tab : "overview";
+}
+
+function renderEventsPanel() {
+  const events = getCommunityData().events || [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Eventplan</p>
+          <h2>Kommende SONARA-Events</h2>
+          <p class="section-copy">Wochentermine und einmalige Events bleiben hier sichtbar, erzeugen Hinweise und tauchen im Kalender automatisch mit auf.</p>
+        </div>
+      </div>
+
+      ${
+        canManagePortal()
+          ? `
+            <form class="stack-form event-editor" data-form="event-create">
+              <div class="form-grid">
+                <div class="field">
+                  <label for="eventTitle">Titel</label>
+                  <input id="eventTitle" name="title" type="text" required>
+                </div>
+                <div class="field">
+                  <label for="eventScheduleType">Rhythmus</label>
+                  <select id="eventScheduleType" name="scheduleType">
+                    <option value="single">Einmalig</option>
+                    <option value="weekly">Woechentlich</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="eventDate">Datum fuer einmalige Events</label>
+                  <input id="eventDate" name="eventDate" type="date">
+                </div>
+                <div class="field">
+                  <label for="eventWeekday">Wochentag fuer Wochentermine</label>
+                  <select id="eventWeekday" name="weekday">
+                    ${buildEventWeekdayOptions()}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="eventTime">Uhrzeit</label>
+                  <input id="eventTime" name="eventTime" type="time" required>
+                </div>
+                <div class="field">
+                  <label for="eventWorld">Welt</label>
+                  <input id="eventWorld" name="world" type="text" required>
+                </div>
+                <div class="field">
+                  <label for="eventHost">Host</label>
+                  <input id="eventHost" name="host" type="text" placeholder="Optional">
+                </div>
+                <div class="field checkbox-field">
+                  <label class="checkbox-row" for="eventReminderEnabled">
+                    <input id="eventReminderEnabled" name="reminderEnabled" type="checkbox" checked>
+                    <span>Erinnerungen aktivieren</span>
+                  </label>
+                  <p class="helper-text">Wird in Hinweisen und im Kalender sichtbar.</p>
+                </div>
+                <div class="field span-all">
+                  <label for="eventSummary">Kurzbeschreibung</label>
+                  <textarea id="eventSummary" name="summary" required></textarea>
+                </div>
+              </div>
+              <p class="pill-note">Einmalige Events brauchen Datum und Uhrzeit. Wochentermine brauchen Wochentag und Uhrzeit und erscheinen dann jede Woche automatisch im Kalender und in den Hinweisen.</p>
+              <button type="submit">Event speichern</button>
+            </form>
+          `
+          : ""
+      }
+
+      <div class="event-grid">
+        ${events.length ? events.map((event) => renderEventCard(event)).join("") : renderEmptyState("Noch keine Events", "Sobald neue Termine feststehen, erscheinen sie hier.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderEventCard(event) {
+  return `
+    <article class="mini-card event-card">
+      <div class="status-row">
+        <div class="chip-list">
+          <span class="pill amber">Event</span>
+          <span class="pill neutral">${escapeHtml(event.scheduleLabel || (event.scheduleType === "weekly" ? "Woechentlich" : "Einmalig"))}</span>
+          ${event.reminderEnabled ? '<span class="pill teal">Erinnerung aktiv</span>' : ""}
+        </div>
+        <span class="timeline-meta">${escapeHtml(event.dateLabel || "-")}</span>
+      </div>
+      <div>
+        <h3>${escapeHtml(event.title)}</h3>
+        <p class="timeline-meta">${escapeHtml(event.world)} | Host: ${escapeHtml(event.host)}</p>
+      </div>
+      <p>${escapeHtml(event.summary)}</p>
+      ${event.nextOccurrenceAt ? `<p class="helper-text">Naechster Termin: ${escapeHtml(formatDateTime(event.nextOccurrenceAt))}</p>` : ""}
+      ${
+        canManagePortal()
+          ? `
+            <form class="card-actions" data-form="event-delete" data-event-id="${escapeHtml(event.id)}">
+              <button type="submit" class="danger small">Event loeschen</button>
+            </form>
+          `
+          : ""
+      }
+    </article>
+  `;
+}
+
+function buildEventWeekdayOptions(selectedValue = "") {
+  return [
+    { value: "", label: "Wochentag waehlen" },
+    { value: "1", label: "Montag" },
+    { value: "2", label: "Dienstag" },
+    { value: "3", label: "Mittwoch" },
+    { value: "4", label: "Donnerstag" },
+    { value: "5", label: "Freitag" },
+    { value: "6", label: "Samstag" },
+    { value: "0", label: "Sonntag" }
+  ]
+    .map((entry) => `<option value="${entry.value}" ${String(selectedValue) === entry.value ? "selected" : ""}>${escapeHtml(entry.label)}</option>`)
+    .join("");
 }
