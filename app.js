@@ -1042,11 +1042,17 @@ function renderPlannerPanel() {
 
             <div class="form-grid">
               <div class="field span-all">
-                <label for="bulkMembers">Moderatoren auswaehlen</label>
-                <select id="bulkMembers" name="memberIds" multiple size="${Math.min(Math.max(users.length, 4), 8)}" required>
-                  ${users.map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(getPrimaryDisplayName(user))}</option>`).join("")}
-                </select>
-                <p class="helper-text">Mit Strg oder Cmd kannst du mehrere Moderatoren gleichzeitig auswaehlen. Ein Moderator = Wochenplanung fuer eine Person.</p>
+                <div class="field-head">
+                  <label>Moderatoren auswaehlen</label>
+                  <div class="bulk-selector-toolbar">
+                    <button type="button" class="ghost small" data-action="bulk-select-all-members">Alle</button>
+                    <button type="button" class="ghost small" data-action="bulk-clear-members">Keine</button>
+                  </div>
+                </div>
+                <div class="bulk-checkbox-grid">
+                  ${buildBulkMemberChecks(users)}
+                </div>
+                <p class="helper-text">Ein Moderator = Wochenplanung fuer eine Person. Mehrere Haken = gleiche Schicht fuer alle markierten Moderatoren.</p>
               </div>
               <div class="field">
                 <label for="bulkDateStart">Von</label>
@@ -1083,7 +1089,14 @@ function renderPlannerPanel() {
                 </label>
               </div>
               <div class="field span-all">
-                <label>Wochentage</label>
+                <div class="field-head">
+                  <label>Wochentage</label>
+                  <div class="bulk-selector-toolbar">
+                    <button type="button" class="ghost small" data-action="bulk-weekdays-workdays">Mo-Fr</button>
+                    <button type="button" class="ghost small" data-action="bulk-weekdays-all">Alle Tage</button>
+                    <button type="button" class="ghost small" data-action="bulk-weekdays-clear">Keine</button>
+                  </div>
+                </div>
                 <div class="weekday-grid">
                   ${renderPlannerWeekdayChecks()}
                 </div>
@@ -1183,6 +1196,22 @@ function renderPlannerWeekdayChecks() {
         <label class="weekday-check">
           <input type="checkbox" name="weekdays" value="${entry.value}" ${Number(entry.value) <= 5 ? "checked" : ""}>
           <span>${escapeHtml(entry.label)}</span>
+        </label>
+      `
+    )
+    .join("");
+}
+
+function buildBulkMemberChecks(users) {
+  return users
+    .map(
+      (user) => `
+        <label class="bulk-checkbox-card">
+          <input type="checkbox" name="memberIds" value="${escapeHtml(user.id)}">
+          <span>
+            <strong>${escapeHtml(getPrimaryDisplayName(user))}</strong>
+            <small>${escapeHtml(ROLE_LABELS[user.role] || "Moderator")}</small>
+          </span>
         </label>
       `
     )
@@ -3711,6 +3740,17 @@ async function handleClick(event) {
   const actionElement = event.target.closest("[data-action]");
   if (!actionElement) return;
 
+  const toggleCheckboxes = (selector, predicate) => {
+    const form = actionElement.closest("form");
+    if (!form) return false;
+    const inputs = [...form.querySelectorAll(selector)];
+    if (!inputs.length) return false;
+    inputs.forEach((input) => {
+      input.checked = typeof predicate === "function" ? Boolean(predicate(input)) : Boolean(predicate);
+    });
+    return true;
+  };
+
   switch (actionElement.dataset.action) {
     case "dismiss-flash":
       state.ui.flash = null;
@@ -3796,6 +3836,26 @@ async function handleClick(event) {
     case "cancel-shift-edit":
       state.ui.editingShiftId = "";
       render();
+      break;
+
+    case "bulk-select-all-members":
+      if (toggleCheckboxes('input[name="memberIds"]', true)) render();
+      break;
+
+    case "bulk-clear-members":
+      if (toggleCheckboxes('input[name="memberIds"]', false)) render();
+      break;
+
+    case "bulk-weekdays-workdays":
+      if (toggleCheckboxes('input[name="weekdays"]', (input) => ["1", "2", "3", "4", "5"].includes(String(input.value)))) render();
+      break;
+
+    case "bulk-weekdays-all":
+      if (toggleCheckboxes('input[name="weekdays"]', true)) render();
+      break;
+
+    case "bulk-weekdays-clear":
+      if (toggleCheckboxes('input[name="weekdays"]', false)) render();
       break;
 
     case "delete-shift":
