@@ -269,6 +269,12 @@ function applyPayload(payload) {
 function renderSonaraHero({ eyebrow, title, intro, chips = [] }) {
   return `
     <header class="site-header sonara-header">
+      <div class="sonara-scene" aria-hidden="true">
+        <span class="sonara-scene-orb sonara-scene-sun"></span>
+        <span class="sonara-scene-orb sonara-scene-moon"></span>
+        <span class="sonara-scene-spirit sonara-scene-stag"></span>
+        <span class="sonara-scene-spirit sonara-scene-owl"></span>
+      </div>
       <div class="sonara-copy">
         <p class="eyebrow">${escapeHtml(eyebrow)}</p>
         <h1>${escapeHtml(title)}</h1>

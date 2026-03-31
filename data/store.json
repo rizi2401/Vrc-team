@@ -14,6 +14,14 @@
       "creatorBlurb": "",
       "creatorLinks": [],
       "creatorVisible": false,
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "availabilitySchedule": "",
+      "availabilityUpdatedAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
       "passwordHash": "ee0e53f6ceb47dcef6f9fe5cb345261d:4eac92098e4ac33a67ec191e90c62f9b657c3cf112caa4d95c37e8cd5248f98c786af4cd9b756930f7653bcdacf17195310c23e798a5585d776d1119a2ce9594"
     },
     {
@@ -29,6 +37,14 @@
       "creatorBlurb": "",
       "creatorLinks": [],
       "creatorVisible": false,
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "availabilitySchedule": "",
+      "availabilityUpdatedAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
       "passwordHash": "bca7771658e6e5e407617e6c68597837:11f0f1a7bb5c60ad868f299fff0015d53caa3c701298765c115e9ce0354e2cb443ca1b5323a4b9175701fef4482ddf01349a5acb6736d6dadd9ee14162d85af8"
     }
   ],
@@ -54,6 +70,38 @@
     ]
   },
   "shifts": [],
+  "events": [
+    {
+      "id": "welcome-night",
+      "title": "Welcome Night",
+      "dateLabel": "Freitag · 20:00 Uhr",
+      "world": "Community Hub",
+      "host": "SONARA Team",
+      "summary": "Neue Mitglieder kennenlernen, Gruppeninfos teilen und entspannt in den Abend starten.",
+      "createdAt": "2026-03-29T16:46:36.255Z",
+      "createdBy": ""
+    },
+    {
+      "id": "world-tour",
+      "title": "World Tour",
+      "dateLabel": "Samstag · 21:00 Uhr",
+      "world": "Event Arena",
+      "host": "Event Team",
+      "summary": "Gemeinsame Weltreise mit Stopps fuer Screenshots, Spiele und kleine Community-Momente.",
+      "createdAt": "2026-03-29T16:46:36.255Z",
+      "createdBy": ""
+    },
+    {
+      "id": "late-lounge",
+      "title": "Late Lounge",
+      "dateLabel": "Sonntag · 22:00 Uhr",
+      "world": "Sunset Lounge",
+      "host": "Night Crew",
+      "summary": "Ruhiger Community-Abend mit Musik, offenen Gespraechen und lockerer Moderationspraesenz.",
+      "createdAt": "2026-03-29T16:46:36.255Z",
+      "createdBy": ""
+    }
+  ],
   "requests": [],
   "announcements": [],
   "chatMessages": [],
@@ -68,5 +116,6 @@
   "vrchatAnalytics": {},
   "directMessages": [],
   "forumThreads": [],
-  "warnings": []
+  "warnings": [],
+  "feedPosts": []
 }
