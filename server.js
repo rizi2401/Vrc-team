@@ -247,20 +247,20 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/vrchat/overview") {
-    requireRole(auth.user, "admin");
+    requireRole(auth.user, "planner");
     const overview = await fetchVrchatOverview();
     sendJson(res, 200, { overview });
     return;
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/discord/status") {
-    requireRole(auth.user, "admin");
+    requireRole(auth.user, "planner");
     sendJson(res, 200, { status: getDiscordStatus() });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/discord/test") {
-    requireRole(auth.user, "admin");
+    requireRole(auth.user, "planner");
     const result = await notifyDiscord(buildDiscordTestMessage(auth.user), { kind: "manual" });
     if (!result.ok) {
       sendJson(res, 400, { error: result.message, status: getDiscordStatus() });
@@ -272,7 +272,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/vrchat/sync") {
-    requireRole(auth.user, "admin");
+    requireRole(auth.user, "planner");
     const result = await syncVrchatAnalytics();
     if (result.ok) {
       broadcastEvent("portal", { type: "vrchat-sync" });
@@ -284,7 +284,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/vrchat/verify-code") {
-    requireRole(auth.user, "admin");
+    requireRole(auth.user, "planner");
     const body = await readJson(req);
     const result = await verifyVrchatSecurityCode(body.code);
     if (result.ok) {
@@ -326,6 +326,36 @@ async function handleApi(req, res, url) {
     const savedStore = writeStore(nextStore);
     void notifyDiscord(buildShiftDiscordMessage("created", savedStore.shifts[0], savedStore), { kind: "auto" });
     broadcastEvent("portal", { type: "shift-created" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  if (
+    req.method === "POST" &&
+    (url.pathname === "/api/shifts/bulk" || url.pathname === "/api/planning/bulk-shifts")
+  ) {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const rawEntries = Array.isArray(body.entries) ? body.entries : [];
+
+    if (!rawEntries.length) {
+      sendJson(res, 400, { error: "Bitte mindestens eine Schicht fuer die Sammelplanung uebergeben." });
+      return;
+    }
+
+    const nextStore = structuredClone(auth.store);
+
+    for (const rawEntry of rawEntries) {
+      const normalized = validateShiftPayload(rawEntry, nextStore);
+      nextStore.shifts.unshift({
+        id: crypto.randomUUID(),
+        ...normalized
+      });
+      applyCatalogAdds(nextStore.settings, normalized.catalogAdds);
+    }
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "shift-bulk-created", count: rawEntries.length });
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -489,6 +519,10 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/chat") {
     const body = await readJson(req);
     const normalized = validateChatPayload(body, auth.user, auth.store);
+    if (hasRecentDuplicateChatMessage(auth.store, auth.user.id, normalized)) {
+      sendPortalData(res, 200, auth.user, auth.store);
+      return;
+    }
     enforceMessageCooldown(auth.user.id, `chat:${normalized.channel}`);
     const nextStore = structuredClone(auth.store);
 
@@ -528,9 +562,28 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/chat/clear") {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const channel = validateChatTrimChannel(body.channel);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.chatMessages = (nextStore.chatMessages || []).filter((entry) => entry.channel !== channel);
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("chat", { ok: true, type: "clear", channel });
+    broadcastEvent("portal", { type: "chat-clear", channel });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/direct-messages") {
     const body = await readJson(req);
     const normalized = validateDirectMessagePayload(body, auth.user, auth.store);
+    if (hasRecentDuplicateDirectMessage(auth.store, auth.user.id, normalized)) {
+      sendPortalData(res, 200, auth.user, auth.store);
+      return;
+    }
     enforceMessageCooldown(auth.user.id, "direct-message");
     const nextStore = structuredClone(auth.store);
 
@@ -558,6 +611,17 @@ async function handleApi(req, res, url) {
 
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "direct-message-trim" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/direct-messages/clear") {
+    requireRole(auth.user, "planner");
+    const nextStore = structuredClone(auth.store);
+    nextStore.directMessages = [];
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "direct-message-clear" });
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -985,6 +1049,11 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/feed-posts") {
     const body = await readJson(req);
     const normalized = validateFeedPostPayload(body);
+    if (hasRecentDuplicateFeedPost(auth.store, auth.user.id, normalized)) {
+      sendPortalData(res, 200, auth.user, auth.store);
+      return;
+    }
+    enforceMessageCooldown(auth.user.id, "feed-post");
     const nextStore = structuredClone(auth.store);
 
     nextStore.feedPosts = Array.isArray(nextStore.feedPosts) ? nextStore.feedPosts : [];
@@ -1926,6 +1995,90 @@ function projectDataForRole(user, store) {
   };
 }
 
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .filter((entry) => !entry.isBlocked)
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+  const feedPosts = (store.feedPosts || []).map((entry) => decorateFeedPost(entry, store));
+  const managedUsers = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeManagedUser);
+
+  const base = {
+    community,
+    announcements,
+    directory,
+    calendarShifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateCalendarShift(entry, store)),
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    managedWarnings: user.role === "planner" || user.role === "admin" ? getManagedWarnings(store) : [],
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store),
+    feedPosts
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: managedUsers,
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
 function normalizeBlockedPayload(body, fallbackBlocked = false, fallbackReason = "") {
   const source = body || {};
   const hasBlockedFlag = Object.prototype.hasOwnProperty.call(source, "blocked") || Object.prototype.hasOwnProperty.call(source, "isBlocked");
@@ -2506,6 +2659,42 @@ function enforceMessageCooldown(userId, scope) {
   messageCooldownStore.set(key, now);
 }
 
+function isRecentTimestamp(value, windowMs = 15000) {
+  const timestamp = Date.parse(String(value || ""));
+  return Number.isFinite(timestamp) && Date.now() - timestamp >= 0 && Date.now() - timestamp <= windowMs;
+}
+
+function hasRecentDuplicateChatMessage(store, userId, payload) {
+  return (store.chatMessages || []).some(
+    (entry) =>
+      entry.authorId === userId &&
+      entry.channel === payload.channel &&
+      String(entry.relatedShiftId || "") === String(payload.relatedShiftId || "") &&
+      String(entry.content || "").trim() === payload.content &&
+      isRecentTimestamp(entry.createdAt)
+  );
+}
+
+function hasRecentDuplicateDirectMessage(store, userId, payload) {
+  return (store.directMessages || []).some(
+    (entry) =>
+      entry.senderId === userId &&
+      entry.recipientId === payload.recipientId &&
+      String(entry.content || "").trim() === payload.content &&
+      isRecentTimestamp(entry.createdAt)
+  );
+}
+
+function hasRecentDuplicateFeedPost(store, userId, payload) {
+  return (store.feedPosts || []).some(
+    (entry) =>
+      entry.authorId === userId &&
+      String(entry.content || "").trim() === payload.content &&
+      String(entry.imageUrl || "").trim() === String(payload.imageUrl || "").trim() &&
+      isRecentTimestamp(entry.createdAt)
+  );
+}
+
 function validateTrimCount(value) {
   const count = Number(value || 0);
   if (!CHAT_TRIM_COUNTS.has(count)) {
@@ -2791,8 +2980,8 @@ function buildManagerNotifications(store) {
   if (openRequests.length) {
     notifications.push({
       id: `requests-${openRequests.length}`,
-      title: `${openRequests.length} offene Team-Rueckmeldungen`,
-      body: "Neue Wuensche oder Hinweise warten auf Bearbeitung.",
+      title: `${openRequests.length} offene Team-R\u00fcckmeldungen`,
+      body: "Neue W\u00fcnsche oder Hinweise warten auf Bearbeitung.",
       tone: "rose",
       createdAt: openRequests[0].createdAt,
       category: "request"
@@ -2802,8 +2991,8 @@ function buildManagerNotifications(store) {
   if (todayShifts.length) {
     notifications.push({
       id: `today-shifts-${today}`,
-      title: `${todayShifts.length} Schichten fuer heute`,
-      body: "Pruefe Besetzung, Welten und letzte Briefings.",
+      title: `${todayShifts.length} Schichten f\u00fcr heute`,
+      body: "Pr\u00fcfe Besetzung, Welten und letzte Briefings.",
       tone: "teal",
       createdAt: `${today}T08:00:00.000Z`,
       category: "shift"
@@ -2825,8 +3014,8 @@ function buildManagerNotifications(store) {
   if (openSwapRequests.length) {
     notifications.push({
       id: `swap-${openSwapRequests.length}`,
-      title: `${openSwapRequests.length} offene Tauschwuesche`,
-      body: "Pruefe, ob eine Uebernahme genehmigt werden soll.",
+      title: `${openSwapRequests.length} offene Tauschw\u00fcnsche`,
+      body: "Pr\u00fcfe, ob eine \u00dcbernahme genehmigt werden soll.",
       tone: "amber",
       createdAt: openSwapRequests[0].updatedAt,
       category: "swap"

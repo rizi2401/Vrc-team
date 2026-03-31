@@ -30,6 +30,7 @@ const SHIFT_WINDOW_PRESETS = [
 const CHAT_TRIM_OPTIONS = [20, 30, 40, 50];
 const SONARA_ART_PATH = "/sonara-crest.png";
 let portalRefreshTimer = 0;
+const pendingSubmitForms = new WeakSet();
 
 const state = {
   session: null,
@@ -52,11 +53,55 @@ const state = {
   }
 };
 
-root.addEventListener("submit", handleSubmit);
+root.addEventListener("submit", handleSubmitProxy);
 root.addEventListener("click", handleClick);
 root.addEventListener("change", handleChange);
 
 boot();
+
+async function handleSubmitProxy(event) {
+  const form = event.target;
+  const formName = form?.dataset?.form;
+  if (!formName) return;
+
+  if (pendingSubmitForms.has(form)) {
+    event.preventDefault();
+    return;
+  }
+
+  pendingSubmitForms.add(form);
+  setFormSubmittingState(form, true);
+
+  try {
+    await handleSubmit(event);
+  } finally {
+    setFormSubmittingState(form, false);
+    pendingSubmitForms.delete(form);
+  }
+}
+
+function setFormSubmittingState(form, isSubmitting) {
+  if (!form) return;
+
+  if (isSubmitting) {
+    form.dataset.submitting = "true";
+  } else {
+    delete form.dataset.submitting;
+  }
+
+  const controls = form.querySelectorAll('button, input[type="submit"]');
+  controls.forEach((control) => {
+    if (isSubmitting) {
+      control.dataset.wasDisabled = control.disabled ? "true" : "false";
+      control.disabled = true;
+      return;
+    }
+
+    const wasDisabled = control.dataset.wasDisabled === "true";
+    control.disabled = wasDisabled;
+    delete control.dataset.wasDisabled;
+  });
+}
 
 async function boot() {
   syncNotificationPermission();
@@ -64,7 +109,7 @@ async function boot() {
   if (!state.session) {
     await refreshPublicData();
   }
-  if (canManageUsers()) {
+  if (canManagePortal()) {
     await refreshDiscordStatus(false);
     await refreshVrchatOverview(false);
   }
@@ -115,7 +160,7 @@ async function refreshPublicData() {
 }
 
 async function refreshVrchatOverview(showErrors = true) {
-  if (!canManageUsers()) return;
+  if (!canManagePortal()) return;
   state.vrchatLoading = true;
 
   try {
@@ -130,7 +175,7 @@ async function refreshVrchatOverview(showErrors = true) {
 }
 
 async function refreshDiscordStatus(showErrors = true) {
-  if (!canManageUsers()) return;
+  if (!canManagePortal()) return;
   state.discordLoading = true;
 
   try {
@@ -213,7 +258,7 @@ function applyPayload(payload) {
   state.session = payload?.session || null;
   state.data = payload?.data || null;
   state.ui.activeTab = normalizeActiveTab(state.ui.activeTab);
-  if (!canManageUsers()) {
+  if (!canManagePortal()) {
     state.vrchatOverview = null;
     state.vrchatLoading = false;
     state.discordStatus = null;
@@ -318,7 +363,7 @@ async function performAction(callback, successMessage = "", successTone = "succe
     const payload = await callback();
     if (payload?.session || payload?.data) applyPayload(payload);
     if (successMessage) setFlash(successMessage, successTone);
-    if (state.session?.role === "admin" && !state.vrchatOverview) {
+    if (canManagePortal() && !state.vrchatOverview) {
       void refreshVrchatOverview(false);
     }
   } catch (error) {
@@ -910,10 +955,11 @@ function renderNotificationsPanel() {
 
 function renderNotificationCard(entry) {
   const tone = entry.tone || "neutral";
+  const categoryLabel = getNotificationCategoryLabel(entry.category);
   return `
     <article class="mini-card notification-card ${tone}">
       <div class="status-row">
-        <span class="pill ${tone === "info" ? "neutral" : tone}">${escapeHtml(entry.category || "Hinweis")}</span>
+        <span class="pill ${tone === "info" ? "neutral" : tone}">${escapeHtml(categoryLabel)}</span>
         <span class="timeline-meta">${escapeHtml(formatDateTime(entry.createdAt))}</span>
       </div>
       <div>
@@ -922,6 +968,28 @@ function renderNotificationCard(entry) {
       </div>
     </article>
   `;
+}
+
+function getNotificationCategoryLabel(category) {
+  const rawCategory = String(category || "").trim();
+  if (!rawCategory) return "Hinweis";
+
+  switch (rawCategory.toLowerCase()) {
+    case "shift":
+      return "Schicht";
+    case "request":
+      return "R\u00fcckmeldung";
+    case "announcement":
+      return "Info";
+    case "attendance":
+      return "Zeiten";
+    case "swap":
+      return "Tausch";
+    case "event":
+      return "Event";
+    default:
+      return rawCategory;
+  }
 }
 
 function renderPlannerPanel() {
@@ -1720,7 +1788,7 @@ function renderCapacityPanel() {
         <div>
           <p class="eyebrow">Auslastung</p>
           <h2>Stunden und Verfuegbarkeit im Blick</h2>
-          <p class="section-copy">Hier siehst du pro Moderator geleistete Stunden, geplante Schichten und die gemeldeten Zeitfenster fuer diese Woche. Die Stunden sind nur der Rahmen, entscheidend sind die echten Zeitfenster.</p>
+          <p class="section-copy">Hier siehst du pro Staff-Mitglied geleistete Stunden, geplante Schichten und die gemeldeten Zeitfenster fuer diese Woche. Die Stunden sind nur der Rahmen, entscheidend sind die echten Zeitfenster.</p>
         </div>
       </div>
 
@@ -1737,7 +1805,7 @@ function renderCapacityPanel() {
         ${
           rows.length
             ? rows.map((entry) => renderCapacityCard(entry)).join("")
-            : renderEmptyState("Noch keine Staff-Daten", "Sobald Moderatoren oder Leitung angelegt sind, erscheint die Wochenuebersicht hier.")
+            : renderEmptyState("Noch keine Staff-Daten", "Sobald Staff-Mitglieder angelegt sind und ihre Verfuegbarkeit im Profil eintragen, erscheint die Wochenuebersicht hier.")
         }
       </div>
     </section>
@@ -2591,6 +2659,25 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "chat-clear": {
+      const channel = String(form.dataset.channel || "community");
+      const label = channel === "staff" ? "Staff-Chat" : "Community-Chat";
+      if (!window.confirm(`Den ${label} wirklich komplett leeren?`)) {
+        return;
+      }
+
+      await performAction(
+        () =>
+          api("/api/chat/clear", {
+            method: "POST",
+            body: JSON.stringify({ channel })
+          }),
+        `${label} wurde komplett geleert.`,
+        "warning"
+      );
+      break;
+    }
+
     case "direct-message": {
       const formData = new FormData(form);
       await performAction(
@@ -2669,6 +2756,23 @@ async function handleSubmit(event) {
             body: JSON.stringify({ count })
           }),
         `Die letzten ${count} Direktnachrichten wurden entfernt.`
+      );
+      break;
+    }
+
+    case "direct-message-clear": {
+      if (!window.confirm("Alle Direktnachrichten wirklich komplett leeren?")) {
+        return;
+      }
+
+      await performAction(
+        () =>
+          api("/api/direct-messages/clear", {
+            method: "POST",
+            body: "{}"
+          }),
+        "Alle Direktnachrichten wurden entfernt.",
+        "warning"
       );
       break;
     }
@@ -2952,7 +3056,7 @@ function renderAttendancePanel(managerView) {
         </div>
 
         <div class="attendance-admin-grid">
-          <div class="stack-list">
+          <div class="stack-list attendance-column">
             <h3>Gerade aktiv</h3>
             ${
               liveEntries.length
@@ -2961,12 +3065,12 @@ function renderAttendancePanel(managerView) {
             }
           </div>
 
-          <div class="stack-list">
+          <div class="stack-list attendance-column">
             <h3>Letzte Stempelungen</h3>
             ${history.length ? history.map((entry) => renderTimeEntry(entry, false)).join("") : renderEmptyState("Noch keine Eintraege", "Sobald Einsaetze gestempelt wurden, erscheinen sie hier.")}
           </div>
 
-          <div class="stack-list">
+          <div class="stack-list attendance-column">
             <h3>Schichtkontrolle</h3>
             ${
               audits.length
@@ -2982,7 +3086,7 @@ function renderAttendancePanel(managerView) {
   const activeEntry = getOpenEntryForViewer();
 
   return `
-    <section class="panel span-5">
+    <section class="panel span-12 attendance-member-panel">
       <div class="section-head">
         <div>
           <p class="eyebrow">Meine Zeiten</p>
@@ -3012,7 +3116,7 @@ function renderShiftAuditCard(entry) {
       </div>
       <div>
         <h3>${escapeHtml(entry.memberName)}</h3>
-        <p class="timeline-meta">${escapeHtml(`${formatShiftWindow(entry)} · ${entry.shiftType} · ${entry.world} · ${entry.task}`)}</p>
+        <p class="timeline-meta">${escapeHtml(`${formatShiftWindow(entry)} | ${entry.shiftType} | ${entry.world} | ${entry.task}`)}</p>
       </div>
       <p class="helper-text">${escapeHtml(entry.detail)}</p>
     </article>
@@ -3027,7 +3131,7 @@ function renderActiveEntry(entry, personal) {
         <span class="timeline-meta">seit ${escapeHtml(formatTime(entry.checkInAt))}</span>
       </div>
       <h3>${escapeHtml(personal ? "Du bist eingestempelt" : entry.memberName)}</h3>
-      <p>${escapeHtml(entry.shift ? `${formatShiftWindow(entry.shift)} · ${entry.shift.shiftType} · ${entry.shift.world} · ${entry.shift.task}` : "Schicht wurde geloescht")}</p>
+      <p>${escapeHtml(entry.shift ? `${formatShiftWindow(entry.shift)} | ${entry.shift.shiftType} | ${entry.shift.world} | ${entry.shift.task}` : "Schicht wurde geloescht")}</p>
     </div>
   `;
 }
@@ -3042,7 +3146,7 @@ function renderTimeEntry(entry, personal) {
         <span class="timeline-meta">${escapeHtml(duration)}</span>
       </div>
       <h3>${escapeHtml(personal ? (entry.shift ? formatDate(entry.shift.date) : "Meine Schicht") : entry.memberName)}</h3>
-      <p>${escapeHtml(entry.shift ? `${formatShiftWindow(entry.shift)} · ${entry.shift.shiftType} · ${entry.shift.world}` : "Keine Schichtreferenz mehr")}</p>
+      <p>${escapeHtml(entry.shift ? `${formatShiftWindow(entry.shift)} | ${entry.shift.shiftType} | ${entry.shift.world}` : "Keine Schichtreferenz mehr")}</p>
       <p class="timeline-meta">${escapeHtml(`${formatTime(entry.checkInAt)} bis ${entry.checkOutAt ? formatTime(entry.checkOutAt) : "offen"}`)}</p>
     </article>
   `;
@@ -3839,23 +3943,23 @@ async function handleClick(event) {
       break;
 
     case "bulk-select-all-members":
-      if (toggleCheckboxes('input[name="memberIds"]', true)) render();
+      toggleCheckboxes('input[name="memberIds"]', true);
       break;
 
     case "bulk-clear-members":
-      if (toggleCheckboxes('input[name="memberIds"]', false)) render();
+      toggleCheckboxes('input[name="memberIds"]', false);
       break;
 
     case "bulk-weekdays-workdays":
-      if (toggleCheckboxes('input[name="weekdays"]', (input) => ["1", "2", "3", "4", "5"].includes(String(input.value)))) render();
+      toggleCheckboxes('input[name="weekdays"]', (input) => ["1", "2", "3", "4", "5"].includes(String(input.value)));
       break;
 
     case "bulk-weekdays-all":
-      if (toggleCheckboxes('input[name="weekdays"]', true)) render();
+      toggleCheckboxes('input[name="weekdays"]', true);
       break;
 
     case "bulk-weekdays-clear":
-      if (toggleCheckboxes('input[name="weekdays"]', false)) render();
+      toggleCheckboxes('input[name="weekdays"]', false);
       break;
 
     case "delete-shift":
@@ -4084,16 +4188,26 @@ function renderCreatorLinkList(user, compact = false) {
 }
 
 function renderCreatorCard(user) {
+  const creatorLinks = renderCreatorLinkList(user, true);
   return `
     <article class="team-card creator-card">
       <div class="profile-head">
         ${renderUserAvatar(user, "profile-avatar")}
-        <div>
+        <div class="creator-card-copy">
           <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
           <p class="timeline-meta">${escapeHtml(user.creatorBlurb || user.contactNote || "Creator-Profil")}</p>
         </div>
       </div>
-      ${renderCreatorLinkList(user, true)}
+      ${
+        creatorLinks
+          ? `
+            <div class="creator-card-links">
+              <p class="creator-links-label">Plattformen</p>
+              ${creatorLinks}
+            </div>
+          `
+          : ""
+      }
     </article>
   `;
 }
@@ -4428,8 +4542,8 @@ function renderTeamPanelV2() {
                     ${user.isBlocked ? `<p class="helper-text"><strong>Gesperrt:</strong> ${escapeHtml(user.blockReason || "Kein Grund angegeben.")}</p>` : ""}
                     ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
                     ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
-                    ${user.role === "moderator" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
-                    ${user.role === "moderator" && user.availabilitySchedule ? `<p class="helper-text"><strong>Diese Woche:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
+                    ${user.role !== "member" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
+                    ${user.role !== "member" && user.availabilitySchedule ? `<p class="helper-text"><strong>Diese Woche:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
                     ${renderCreatorLinkList(user, true)}
                   </div>
                 </div>
@@ -4473,7 +4587,7 @@ function renderTeamPanelV2() {
                       <textarea id="contact-${escapeHtml(user.id)}" name="contactNote">${escapeHtml(user.contactNote || "")}</textarea>
                     </div>
                     ${
-                      user.role === "moderator"
+                      user.role !== "member"
                         ? `
                           <div class="field">
                             <label for="weeklyHours-${escapeHtml(user.id)}">Stunden pro Woche</label>
@@ -4816,7 +4930,7 @@ function buildShiftCalendarDays(shifts) {
 }
 
 function buildCapacityRows() {
-  const users = (state.data?.users || []).filter((entry) => entry.role === "moderator");
+  const users = (state.data?.users || []).filter((entry) => entry.role !== "member");
   const week = getCurrentWeekRange();
 
   return users
@@ -5347,7 +5461,7 @@ async function handleSubmit(event) {
 
       await performAction(
         () =>
-          api("/api/shifts/bulk", {
+          api("/api/planning/bulk-shifts", {
             method: "POST",
             body: JSON.stringify({ entries })
           }),
@@ -5751,8 +5865,8 @@ function renderStatsStrip() {
       <section class="stats-strip">
         ${renderStatCard("Mitglieder", memberCount, "Registrierte Community-Accounts", "teal")}
         ${renderStatCard("Moderatoren", moderatorCount, "Aktive Staff-Mitglieder", "amber")}
-        ${renderStatCard("Schichten", nextWeekShifts.length, "Einsaetze in den naechsten 7 Tagen", "amber")}
-        ${renderStatCard("Offenes Feedback", openRequests, "Rueckmeldungen warten auf Sichtung", "rose")}
+        ${renderStatCard("Schichten", nextWeekShifts.length, "Eins\u00e4tze in den n\u00e4chsten 7 Tagen", "amber")}
+        ${renderStatCard("Offenes Feedback", openRequests, "R\u00fcckmeldungen warten auf Sichtung", "rose")}
         ${renderStatCard("Eingestempelt", liveEntries, "Aktuell aktive Moderatoren", "sky")}
       </section>
     `;
@@ -5769,9 +5883,9 @@ function renderStatsStrip() {
 
     return `
       <section class="stats-strip">
-        ${renderStatCard("Naechste Schicht", nextShift ? `${formatDate(nextShift.date)} | ${formatShiftWindow(nextShift)}` : "-", nextShift ? `${nextShift.shiftType} | ${nextShift.world}` : "Noch nichts geplant", "teal")}
-        ${renderStatCard("Meine Einsaetze", myShifts.length, "Aktuell in deinem Plan", "amber")}
-        ${renderStatCard("Offene Notizen", openRequests, "Rueckmeldungen mit offenem Status", "rose")}
+        ${renderStatCard("N\u00e4chste Schicht", nextShift ? `${formatDate(nextShift.date)} | ${formatShiftWindow(nextShift)}` : "-", nextShift ? `${nextShift.shiftType} | ${nextShift.world}` : "Noch nichts geplant", "teal")}
+        ${renderStatCard("Meine Eins\u00e4tze", myShifts.length, "Aktuell in deinem Plan", "amber")}
+        ${renderStatCard("Offene Notizen", openRequests, "R\u00fcckmeldungen mit offenem Status", "rose")}
         ${renderStatCard("Erfasste Zeit", formatDuration(totalHours), activeEntry ? "Gerade aktiv eingestempelt" : "Gesamt aus abgeschlossenen Schichten", "sky")}
       </section>
     `;
@@ -5785,7 +5899,7 @@ function renderStatsStrip() {
     <section class="stats-strip">
       ${renderStatCard("Community News", getAnnouncementFeed().length, "Aktuelle sichtbare Updates", "teal")}
       ${renderStatCard("Events", (community.events || []).length, "Geplante Community-Termine", "amber")}
-      ${renderStatCard("Feedback", openRequests, "Deine offenen Rueckmeldungen", "rose")}
+      ${renderStatCard("Feedback", openRequests, "Deine offenen R\u00fcckmeldungen", "rose")}
       ${renderStatCard("Staff", (stats.moderators || 0) + (stats.planners || 0), "Moderation und Leitung im Portal", "sky")}
     </section>
   `;
@@ -6719,7 +6833,7 @@ async function handleChange(event) {
 function renderProfilePanel(managerView) {
   const user = state.session;
   const draftKey = "profile-update:";
-  const showAvailabilityFields = user.role === "moderator";
+  const showAvailabilityFields = user.role !== "member";
 
   return `
     <section class="panel ${managerView ? "span-12" : "span-12"}">
@@ -6816,6 +6930,41 @@ function getCommunityDirectory() {
   return Array.isArray(directory) ? directory : [];
 }
 
+function getEntryTimestampMs(entry) {
+  const rawValue = entry?.createdAt || entry?.updatedAt || entry?.checkInAt || "";
+  const timestamp = Date.parse(String(rawValue || ""));
+  return Number.isFinite(timestamp) ? timestamp : Number.NaN;
+}
+
+function dedupeRecentEntries(entries, buildFingerprint, timeWindowMs = 15000) {
+  const seen = [];
+
+  return (entries || []).filter((entry) => {
+    const fingerprint = String(buildFingerprint(entry) || entry?.id || "").trim();
+    if (!fingerprint) return true;
+
+    const entryTime = getEntryTimestampMs(entry);
+    const duplicate = seen.some((candidate) => {
+      if (candidate.fingerprint !== fingerprint) return false;
+      if (!Number.isFinite(candidate.entryTime) || !Number.isFinite(entryTime)) return true;
+      return Math.abs(candidate.entryTime - entryTime) <= timeWindowMs;
+    });
+
+    if (!duplicate) {
+      seen.push({ fingerprint, entryTime });
+    }
+
+    return !duplicate;
+  });
+}
+
+function getFeedPosts() {
+  return dedupeRecentEntries(
+    state.data?.feedPosts || [],
+    (entry) => `${entry.authorId || ""}|${entry.content || ""}|${entry.imageUrl || ""}`
+  );
+}
+
 function getCreatorEntries() {
   const baseCommunity = state.data?.community || state.publicData?.community || {};
   const directCreators = Array.isArray(baseCommunity.creators) ? baseCommunity.creators : [];
@@ -6849,13 +6998,19 @@ function getCommunityData() {
 }
 
 function getChatFeed(mode = "community") {
-  if (mode === "staff") {
-    if ((state.data?.staffChatMessages || []).length) return state.data.staffChatMessages;
-    return (state.data?.chatMessages || []).filter((entry) => entry.channel === "staff");
-  }
+  const source =
+    mode === "staff"
+      ? (state.data?.staffChatMessages || []).length
+        ? state.data.staffChatMessages
+        : (state.data?.chatMessages || []).filter((entry) => entry.channel === "staff")
+      : (state.data?.communityChatMessages || []).length
+        ? state.data.communityChatMessages
+        : (state.data?.chatMessages || []).filter((entry) => entry.channel !== "staff");
 
-  if ((state.data?.communityChatMessages || []).length) return state.data.communityChatMessages;
-  return (state.data?.chatMessages || []).filter((entry) => entry.channel !== "staff");
+  return dedupeRecentEntries(
+    source,
+    (entry) => `${entry.authorId || ""}|${entry.channel || mode}|${entry.relatedShiftId || entry.relatedShift?.id || ""}|${entry.content || ""}`
+  );
 }
 
 function renderCreatorsPanel(managerView) {
@@ -6902,12 +7057,17 @@ function renderChatPanel(mode = "community", compact = false) {
     : "Die erste Nachricht erscheint sofort fuer alle Mitglieder online.";
   const managerTools = canManagePortal()
     ? `
-      <form class="chat-tools" data-form="chat-trim" data-channel="${escapeHtml(mode)}">
-        <span class="helper-text">Verlauf kuerzen</span>
-        <div class="trim-actions">
-          ${CHAT_TRIM_OPTIONS.map((count) => `<button type="submit" class="ghost small" value="${count}">${count}</button>`).join("")}
-        </div>
-      </form>
+      <div class="chat-tool-stack">
+        <form class="chat-tools" data-form="chat-trim" data-channel="${escapeHtml(mode)}">
+          <span class="helper-text">Verlauf kuerzen</span>
+          <div class="trim-actions">
+            ${CHAT_TRIM_OPTIONS.map((count) => `<button type="submit" class="ghost small" value="${count}">${count}</button>`).join("")}
+          </div>
+        </form>
+        <form class="chat-tools" data-form="chat-clear" data-channel="${escapeHtml(mode)}">
+          <button type="submit" class="danger small">Alles loeschen</button>
+        </form>
+      </div>
     `
     : "";
 
@@ -6964,12 +7124,17 @@ function renderDirectMessagesPanel() {
   const conversations = buildDirectMessageConversations();
   const trimControls = canManagePortal()
     ? `
-      <form class="chat-tools" data-form="direct-message-trim">
-        <span class="helper-text">Verlauf kuerzen</span>
-        <div class="trim-actions">
-          ${CHAT_TRIM_OPTIONS.map((count) => `<button type="submit" class="ghost small" value="${count}">${count}</button>`).join("")}
-        </div>
-      </form>
+      <div class="chat-tool-stack">
+        <form class="chat-tools" data-form="direct-message-trim">
+          <span class="helper-text">Verlauf kuerzen</span>
+          <div class="trim-actions">
+            ${CHAT_TRIM_OPTIONS.map((count) => `<button type="submit" class="ghost small" value="${count}">${count}</button>`).join("")}
+          </div>
+        </form>
+        <form class="chat-tools" data-form="direct-message-clear">
+          <button type="submit" class="danger small">Alles loeschen</button>
+        </form>
+      </div>
     `
     : "";
 
@@ -7006,7 +7171,10 @@ function renderDirectMessagesPanel() {
 }
 
 function buildDirectMessageConversations() {
-  const messages = state.data?.directMessages || [];
+  const messages = dedupeRecentEntries(
+    state.data?.directMessages || [],
+    (entry) => `${entry.senderId || ""}|${entry.recipientId || ""}|${entry.content || ""}`
+  );
   const users = new Map(getCommunityDirectory().map((entry) => [entry.id, entry]));
   const conversations = new Map();
 
@@ -7273,7 +7441,7 @@ function renderFeedPostCard(post) {
 }
 
 function renderFeedPanel() {
-  const posts = state.data?.feedPosts || [];
+  const posts = getFeedPosts();
 
   return `
     <section class="panel span-12">
@@ -7762,17 +7930,17 @@ function renderNotificationsPanel() {
   const manager = canManagePortal();
   const staff = canAccessStaffArea();
   const title = manager
-    ? "Automatische Hinweise fuer Leitung und Planung"
+    ? "Automatische Hinweise f\u00fcr Leitung und Planung"
     : staff
-      ? "Automatische Hinweise fuer Schichten und Staff-News"
+      ? "Automatische Hinweise f\u00fcr Schichten und Staff-News"
       : "Das Wichtigste aus Community, News und Events";
   const copy = manager
-    ? "Offene Rueckmeldungen, heutige Einsaetze und laufende Schichten werden hier automatisch zusammengefasst."
+    ? "Offene R\u00fcckmeldungen, heutige Eins\u00e4tze und laufende Schichten werden hier automatisch zusammengefasst."
     : staff
-      ? "Schicht-Erinnerungen, Staff-News und naechste Einsaetze werden hier automatisch gebuendelt."
-      : "Angeheftete News und kommende Events werden hier automatisch fuer dich gesammelt.";
+      ? "Schicht-Erinnerungen, Staff-News und n\u00e4chste Eins\u00e4tze werden hier automatisch geb\u00fcndelt."
+      : "Angeheftete News und kommende Events werden hier automatisch f\u00fcr dich gesammelt.";
   const emptyBody = manager
-    ? "Sobald neue Rueckmeldungen oder Einsaetze anstehen, erscheinen sie hier."
+    ? "Sobald neue R\u00fcckmeldungen oder Eins\u00e4tze anstehen, erscheinen sie hier."
     : staff
       ? "Sobald neue Staff-Hinweise oder Schichten anstehen, erscheinen sie hier."
       : "Sobald es neue News oder Events gibt, erscheinen sie hier.";
@@ -7801,7 +7969,7 @@ function renderNotificationsPanel() {
                 }
               </button>
             `
-            : '<span class="pill neutral">Browser-Popups nicht verfuegbar</span>'
+            : '<span class="pill neutral">Browser-Popups nicht verf\u00fcgbar</span>'
         }
       </div>
 
