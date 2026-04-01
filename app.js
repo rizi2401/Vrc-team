@@ -52,6 +52,7 @@ const state = {
     plannerDraft: null,
     pendingPortalRefresh: false,
     pendingRender: false,
+    formEditingUntil: 0,
     lastActionSucceeded: false
   }
 };
@@ -166,6 +167,9 @@ function clearPersistentFormDraft(sourceOrKey, metadata = {}) {
       : getPersistentFormDraftKey(sourceOrKey);
   if (!key) return;
   delete getPersistentFormDraftStore()[key];
+  if (!Object.keys(getPersistentFormDraftStore()).length) {
+    state.ui.formEditingUntil = 0;
+  }
 }
 
 function shouldClearFormDraftAfterSuccess(formName) {
@@ -204,9 +208,34 @@ function getDraftableControlsByName(form, name) {
   return Array.from(form?.elements || []).filter((control) => isDraftableFormControl(control) && control.name === name);
 }
 
+function markFormEditingWindow(durationMs = 5 * 60 * 1000) {
+  state.ui.formEditingUntil = Date.now() + Math.max(15000, Number(durationMs || 0));
+}
+
+function isFormCurrentlyVisible(form) {
+  if (!form || !root.contains(form)) return false;
+  if (typeof form.getClientRects === "function" && !form.getClientRects().length) return false;
+  return true;
+}
+
+function hasVisibleDraftedForm() {
+  return Array.from(root.querySelectorAll("form[data-form]")).some((form) => isFormCurrentlyVisible(form) && Boolean(getPersistentFormDraft(form)));
+}
+
+function isRecentFormEditingSession() {
+  return Number(state.ui.formEditingUntil || 0) > Date.now() && hasVisibleDraftedForm();
+}
+
+function rememberViewportScrollPosition() {
+  if (typeof window === "undefined") return;
+  if (String(state.ui.scrollToShiftId || "").trim()) return;
+  state.ui.tabViewportScrollY = window.scrollY;
+}
+
 function rememberPersistentFormDraft(form) {
   const key = getPersistentFormDraftKey(form);
   if (!key) return;
+  markFormEditingWindow();
 
   const controls = Array.from(form.elements || []).filter((control) => isDraftableFormControl(control));
   if (!controls.length) {
@@ -280,6 +309,7 @@ function restoreFormDrafts() {
 }
 
 function isFormInteractionLocked() {
+  if (isRecentFormEditingSession()) return true;
   if (typeof document === "undefined") return false;
 
   const activeElement = document.activeElement;
@@ -297,6 +327,7 @@ function renderIfFormIdle() {
   }
 
   state.ui.pendingRender = false;
+  rememberViewportScrollPosition();
   render();
 }
 
@@ -308,6 +339,7 @@ async function refreshPortalDataFromBackground() {
 
   state.ui.pendingPortalRefresh = false;
   state.ui.pendingRender = false;
+  rememberViewportScrollPosition();
 
   if (state.session) {
     await refreshBootstrap();
@@ -328,6 +360,7 @@ async function flushPendingPortalRefresh() {
 
   if (state.ui.pendingRender) {
     state.ui.pendingRender = false;
+    rememberViewportScrollPosition();
     render();
   }
 }
@@ -2060,6 +2093,7 @@ function renderCapacityCard(entry) {
       </div>
       <p class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</p>
       <p><strong>Geleistet:</strong> ${escapeHtml(formatHoursValue(entry.workedHours))} an ${escapeHtml(formatCapacityDays(entry.workedDays))}</p>
+      <p><strong>Heute:</strong> ${escapeHtml(formatHoursValue(entry.todayWorkedHours || 0))}</p>
       <p><strong>Geplant:</strong> ${escapeHtml(formatHoursValue(entry.plannedHours))} an ${escapeHtml(formatCapacityDays(entry.plannedDays))}</p>
       <p><strong>Verfuegbar:</strong> ${escapeHtml(formatCapacityHours(entry.capacityHours))} / ${escapeHtml(formatCapacityDays(entry.capacityDays))}</p>
       ${
@@ -3302,6 +3336,7 @@ function renderAttendancePanel(managerView) {
     const liveEntries = entries.filter((entry) => !entry.checkOutAt);
     const history = entries.slice(0, 8);
     const audits = buildShiftAuditRows();
+    const summaryRows = buildAttendanceSummaryRows();
 
     return `
       <section class="panel span-12">
@@ -3310,6 +3345,14 @@ function renderAttendancePanel(managerView) {
             <p class="eyebrow">Stempelzeiten</p>
             <h2>Wer arbeitet gerade und wer hat seine Schicht gemacht?</h2>
           </div>
+        </div>
+
+        <div class="attendance-summary-grid">
+          ${
+            summaryRows.length
+              ? summaryRows.map((entry) => renderAttendanceSummaryCard(entry)).join("")
+              : renderEmptyState("Noch keine Stunden", "Sobald das Team Zeiten stempelt, erscheinen hier Wochen- und Tageswerte pro Person.")
+          }
         </div>
 
         <div class="attendance-admin-grid">
@@ -3361,6 +3404,25 @@ function renderAttendancePanel(managerView) {
         ${entries.length ? entries.map((entry) => renderTimeEntry(entry, true)).join("") : ""}
       </div>
     </section>
+  `;
+}
+
+function renderAttendanceSummaryCard(entry) {
+  return `
+    <article class="mini-card attendance-summary-card">
+      <div class="status-row">
+        <span class="pill ${entry.liveEntry ? "teal" : "neutral"}">${escapeHtml(entry.liveEntry ? "Live" : "Diese Woche")}</span>
+        <span class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</span>
+      </div>
+      <h3>${escapeHtml(getPrimaryDisplayName(entry.user))}</h3>
+      <p><strong>Woche:</strong> ${escapeHtml(formatHoursValue(entry.weekHours))}</p>
+      <p><strong>Heute:</strong> ${escapeHtml(formatHoursValue(entry.todayHours))}</p>
+      ${
+        entry.liveEntry
+          ? `<p class="helper-text">Aktiv seit ${escapeHtml(formatTime(entry.liveEntry.checkInAt))}</p>`
+          : '<p class="helper-text">Aktuell nicht eingestempelt.</p>'
+      }
+    </article>
   `;
 }
 
@@ -4445,6 +4507,30 @@ function renderCreatorLinkList(user, compact = false) {
   `;
 }
 
+function truncateText(value, maxLength = 140) {
+  const text = String(value || "").trim();
+  if (!text || text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function formatMultilineText(value) {
+  return escapeHtml(String(value || "").trim()).replace(/\r?\n/g, "<br>");
+}
+
+function renderExpandableTextBlock(title, value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  return `
+    <details class="mystic-expander">
+      <summary>${escapeHtml(title)}</summary>
+      <div class="mystic-expander-body">
+        <p class="helper-text">${formatMultilineText(text)}</p>
+      </div>
+    </details>
+  `;
+}
+
 function renderCreatorCard(user) {
   const creatorLinks = renderCreatorLinkList(user, true);
   return `
@@ -4714,6 +4800,7 @@ function renderForumPanel(managerView) {
 
 function renderTeamPanelV2() {
   const users = state.data?.users || [];
+  const createDraftKey = "admin-user-create:";
 
   return `
     <section class="panel span-12">
@@ -4745,6 +4832,7 @@ function renderTeamPanelV2() {
                 <div class="field">
                   <label for="newAvatarFile">Profilbild</label>
                   <input id="newAvatarFile" name="avatarFile" type="file" accept="image/*">
+                  ${renderAvatarDraftHint(createDraftKey, false)}
                 </div>
                 <div class="field">
                   <label for="newPassword">Startpasswort</label>
@@ -4780,8 +4868,46 @@ function renderTeamPanelV2() {
       <div class="wide-team-grid">
         ${users
           .map((user) => {
+            const updateDraftKey = `user-update:${user.id}`;
             const shiftCount = (state.data?.shifts || []).filter((entry) => entry.memberId === user.id).length;
             const requestCount = (state.data?.requests || []).filter((entry) => entry.userId === user.id && entry.status !== "beruecksichtigt").length;
+            const compactBio = truncateText(user.bio, 140);
+            const compactContact = truncateText(user.contactNote, 140);
+            const availabilitySummary =
+              user.role !== "member" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0) || user.availabilitySchedule)
+                ? `
+                  <div class="team-user-availability">
+                    ${(Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
+                    ${user.availabilitySchedule ? `<p class="helper-text"><strong>Diese Woche:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
+                  </div>
+                `
+                : "";
+            const profileDetails = [
+              user.bio ? renderExpandableTextBlock("Kurzprofil lesen", user.bio) : "",
+              user.contactNote ? renderExpandableTextBlock("Kontakt und Hinweise", user.contactNote) : "",
+              availabilitySummary
+                ? `
+                  <details class="mystic-expander">
+                    <summary>Verfuegbarkeit ansehen</summary>
+                    <div class="mystic-expander-body">
+                      ${availabilitySummary}
+                    </div>
+                  </details>
+                `
+                : "",
+              renderCreatorLinkList(user, true)
+                ? `
+                  <details class="mystic-expander">
+                    <summary>Creator-Links</summary>
+                    <div class="mystic-expander-body">
+                      ${renderCreatorLinkList(user, true)}
+                    </div>
+                  </details>
+                `
+                : ""
+            ]
+              .filter(Boolean)
+              .join("");
 
             return `
               <article class="request-card team-user-card">
@@ -4794,108 +4920,128 @@ function renderTeamPanelV2() {
                 </div>
                 <div class="profile-head">
                   ${renderUserAvatar(user, "profile-avatar")}
-                  <div>
+                  <div class="team-user-copy">
                     <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
                     <p class="timeline-meta">Discord: ${escapeHtml(user.discordName || "-")}</p>
                     ${user.isBlocked ? `<p class="helper-text"><strong>Gesperrt:</strong> ${escapeHtml(user.blockReason || "Kein Grund angegeben.")}</p>` : ""}
-                    ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
-                    ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
+                    ${compactBio ? `<p class="helper-text team-user-teaser">${escapeHtml(compactBio)}</p>` : ""}
+                    ${compactContact ? `<p class="helper-text team-user-teaser">${escapeHtml(compactContact)}</p>` : ""}
                     ${user.role !== "member" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
-                    ${user.role !== "member" && user.availabilitySchedule ? `<p class="helper-text"><strong>Diese Woche:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
-                    ${renderCreatorLinkList(user, true)}
                   </div>
                 </div>
+                ${profileDetails}
 
-                <form data-form="user-update" data-user-id="${escapeHtml(user.id)}">
-                  <div class="form-grid">
-                    <div class="field">
-                      <label for="vrchat-${escapeHtml(user.id)}">VRChat-Name</label>
-                      <input id="vrchat-${escapeHtml(user.id)}" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}" required>
-                    </div>
-                    <div class="field">
-                      <label for="discord-${escapeHtml(user.id)}">Discord-Name</label>
-                      <input id="discord-${escapeHtml(user.id)}" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
-                    </div>
-                    <div class="field">
-                      <label for="role-${escapeHtml(user.id)}">Rolle</label>
-                      <select id="role-${escapeHtml(user.id)}" name="role">${buildRoleOptions(user.role)}</select>
-                    </div>
-                    <div class="field">
-                      <label for="avatar-${escapeHtml(user.id)}">Profilbild</label>
-                      <input id="avatar-${escapeHtml(user.id)}" name="avatarFile" type="file" accept="image/*">
-                    </div>
-                    <div class="field">
-                      <label for="password-${escapeHtml(user.id)}">Neues Passwort</label>
-                      <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen = behalten">
-                    </div>
-                    <div class="field">
-                      <label for="creatorVisible-${escapeHtml(user.id)}">Im Creator-Bereich zeigen</label>
-                      <input id="creatorVisible-${escapeHtml(user.id)}" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
-                    </div>
-                    <div class="field">
-                      <label for="blocked-${escapeHtml(user.id)}">Account sperren</label>
-                      <input id="blocked-${escapeHtml(user.id)}" name="blocked" type="checkbox" ${user.isBlocked ? "checked" : ""}>
-                    </div>
-                    <div class="field span-all">
-                      <label for="bio-${escapeHtml(user.id)}">Kurzprofil</label>
-                      <textarea id="bio-${escapeHtml(user.id)}" name="bio">${escapeHtml(user.bio || "")}</textarea>
-                    </div>
-                    <div class="field span-all">
-                      <label for="contact-${escapeHtml(user.id)}">Kontakt / Hinweise</label>
-                      <textarea id="contact-${escapeHtml(user.id)}" name="contactNote">${escapeHtml(user.contactNote || "")}</textarea>
-                    </div>
-                    ${
-                      user.role !== "member"
-                        ? `
-                          <div class="field">
-                            <label for="weeklyHours-${escapeHtml(user.id)}">Stunden pro Woche</label>
-                            <input id="weeklyHours-${escapeHtml(user.id)}" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}">
-                          </div>
-                          <div class="field">
-                            <label for="weeklyDays-${escapeHtml(user.id)}">Tage pro Woche</label>
-                            <input id="weeklyDays-${escapeHtml(user.id)}" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
-                          </div>
-                          <div class="field span-all">
-                            <label for="availability-${escapeHtml(user.id)}">Zeitfenster fuer diese Woche</label>
-                            <textarea id="availability-${escapeHtml(user.id)}" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
-                            <p class="helper-text">Bitte bis Samstag eintragen. Ohne Rueckmeldung keine Einplanung; wiederholt fehlend kann zu Verwarnungen fuehren.</p>
-                          </div>
-                        `
-                        : ""
-                    }
-                    <div class="field">
-                      <label for="creatorBlurb-${escapeHtml(user.id)}">Creator-Text</label>
-                      <input id="creatorBlurb-${escapeHtml(user.id)}" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}">
-                    </div>
-                    <div class="field">
-                      <label for="blockReason-${escapeHtml(user.id)}">Sperrgrund</label>
-                      <input id="blockReason-${escapeHtml(user.id)}" name="blockReason" type="text" value="${escapeHtml(user.blockReason || "")}" placeholder="z. B. Missbrauch oder Regelverstoss">
-                    </div>
-                    <div class="field span-all">
-                      <label for="creatorLinks-${escapeHtml(user.id)}">Creator-Links</label>
-                      <textarea id="creatorLinks-${escapeHtml(user.id)}" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
-                    </div>
+                <details class="mystic-expander editor-expander">
+                  <summary>Account bearbeiten</summary>
+                  <div class="mystic-expander-body">
+                    <form data-form="user-update" data-user-id="${escapeHtml(user.id)}">
+                      <div class="form-grid">
+                        <div class="field">
+                          <label for="vrchat-${escapeHtml(user.id)}">VRChat-Name</label>
+                          <input id="vrchat-${escapeHtml(user.id)}" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}" required>
+                        </div>
+                        <div class="field">
+                          <label for="discord-${escapeHtml(user.id)}">Discord-Name</label>
+                          <input id="discord-${escapeHtml(user.id)}" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
+                        </div>
+                        <div class="field">
+                          <label for="role-${escapeHtml(user.id)}">Rolle</label>
+                          <select id="role-${escapeHtml(user.id)}" name="role">${buildRoleOptions(user.role)}</select>
+                        </div>
+                        <div class="field">
+                          <label for="avatar-${escapeHtml(user.id)}">Profilbild</label>
+                          <input id="avatar-${escapeHtml(user.id)}" name="avatarFile" type="file" accept="image/*">
+                          ${renderAvatarDraftHint(updateDraftKey, Boolean(user.avatarUrl))}
+                        </div>
+                        <div class="field">
+                          <label for="password-${escapeHtml(user.id)}">Neues Passwort</label>
+                          <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen = behalten">
+                        </div>
+                        <div class="field">
+                          <label for="creatorVisible-${escapeHtml(user.id)}">Im Creator-Bereich zeigen</label>
+                          <input id="creatorVisible-${escapeHtml(user.id)}" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
+                        </div>
+                        <div class="field">
+                          <label for="blocked-${escapeHtml(user.id)}">Account sperren</label>
+                          <input id="blocked-${escapeHtml(user.id)}" name="blocked" type="checkbox" ${user.isBlocked ? "checked" : ""}>
+                        </div>
+                        <div class="field span-all">
+                          <label for="bio-${escapeHtml(user.id)}">Kurzprofil</label>
+                          <textarea id="bio-${escapeHtml(user.id)}" name="bio">${escapeHtml(user.bio || "")}</textarea>
+                        </div>
+                        <div class="field span-all">
+                          <label for="contact-${escapeHtml(user.id)}">Kontakt / Hinweise</label>
+                          <textarea id="contact-${escapeHtml(user.id)}" name="contactNote">${escapeHtml(user.contactNote || "")}</textarea>
+                        </div>
+                        ${
+                          user.role !== "member"
+                            ? `
+                              <div class="span-all availability-form-shell compact">
+                                <div class="availability-form-head">
+                                  <div>
+                                    <p class="eyebrow">Verfuegbarkeit</p>
+                                    <h3>Wochenrahmen fuer die Planung</h3>
+                                  </div>
+                                </div>
+                                <div class="availability-form-grid">
+                                  <div class="field">
+                                    <label for="weeklyHours-${escapeHtml(user.id)}">Stunden pro Woche</label>
+                                    <input id="weeklyHours-${escapeHtml(user.id)}" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}">
+                                  </div>
+                                  <div class="field">
+                                    <label for="weeklyDays-${escapeHtml(user.id)}">Tage pro Woche</label>
+                                    <input id="weeklyDays-${escapeHtml(user.id)}" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
+                                  </div>
+                                  <div class="field span-all">
+                                    <label for="availability-${escapeHtml(user.id)}">Zeitfenster fuer diese Woche</label>
+                                    <textarea id="availability-${escapeHtml(user.id)}" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+                                    <p class="helper-text">Bitte bis Samstag eintragen. Die Eingaben bleiben auch bei Live-Updates stabil bestehen.</p>
+                                  </div>
+                                </div>
+                              </div>
+                            `
+                            : ""
+                        }
+                        <div class="field">
+                          <label for="creatorBlurb-${escapeHtml(user.id)}">Creator-Text</label>
+                          <input id="creatorBlurb-${escapeHtml(user.id)}" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}">
+                        </div>
+                        <div class="field">
+                          <label for="blockReason-${escapeHtml(user.id)}">Sperrgrund</label>
+                          <input id="blockReason-${escapeHtml(user.id)}" name="blockReason" type="text" value="${escapeHtml(user.blockReason || "")}" placeholder="z. B. Missbrauch oder Regelverstoss">
+                        </div>
+                        <div class="field span-all">
+                          <label for="creatorLinks-${escapeHtml(user.id)}">Creator-Links</label>
+                          <textarea id="creatorLinks-${escapeHtml(user.id)}" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
+                        </div>
+                      </div>
+                      <div class="card-actions">
+                        <button type="submit" class="ghost small">Speichern</button>
+                        ${
+                          user.username !== "admin" && user.id !== state.session?.id
+                            ? `<button type="button" class="danger small" data-action="delete-user" data-user-id="${escapeHtml(user.id)}">Loeschen</button>`
+                            : ""
+                        }
+                      </div>
+                    </form>
                   </div>
-                  <div class="card-actions">
-                    <button type="submit" class="ghost small">Speichern</button>
-                    ${
-                      user.username !== "admin" && user.id !== state.session?.id
-                        ? `<button type="button" class="danger small" data-action="delete-user" data-user-id="${escapeHtml(user.id)}">Loeschen</button>`
-                        : ""
-                    }
-                  </div>
-                </form>
+                </details>
 
                 ${
                   user.id !== state.session?.id
                     ? `
-                      <form class="stack-form" data-form="warning-create" data-user-id="${escapeHtml(user.id)}">
-                        <div class="field">
-                          <label for="warning-${escapeHtml(user.id)}">Verwarnung an ${escapeHtml(getPrimaryDisplayName(user))}</label>
-                          <textarea id="warning-${escapeHtml(user.id)}" name="reason" placeholder="Begruendung"></textarea>
+                      <details class="mystic-expander editor-expander warning-expander">
+                        <summary>Verwarnung senden</summary>
+                        <div class="mystic-expander-body">
+                          <form class="stack-form" data-form="warning-create" data-user-id="${escapeHtml(user.id)}">
+                            <div class="field">
+                              <label for="warning-${escapeHtml(user.id)}">Verwarnung an ${escapeHtml(getPrimaryDisplayName(user))}</label>
+                              <textarea id="warning-${escapeHtml(user.id)}" name="reason" placeholder="Begruendung"></textarea>
+                            </div>
+                            <button type="submit" class="ghost small">Verwarnung senden</button>
+                          </form>
                         </div>
-                        <button type="submit" class="ghost small">Verwarnung senden</button>
-                      </form>
+                      </details>
                     `
                     : ""
                 }
@@ -5199,10 +5345,12 @@ function buildShiftCalendarDays(shifts) {
 function buildCapacityRows() {
   const users = (state.data?.users || []).filter((entry) => entry.role !== "member");
   const week = getCurrentWeekRange();
+  const today = getCurrentDayRange();
 
   return users
     .map((user) => {
       const workedHours = calculateWorkedHoursForWeek(user.id, week);
+      const todayWorkedHours = calculateWorkedHoursForRange(user.id, today);
       const workedDays = calculateWorkedDaysForWeek(user.id, week);
       const plannedHours = calculatePlannedHoursForWeek(user.id, week);
       const plannedDays = calculatePlannedDaysForWeek(user.id, week);
@@ -5233,6 +5381,7 @@ function buildCapacityRows() {
       return {
         user,
         workedHours,
+        todayWorkedHours,
         workedDays,
         plannedHours,
         plannedDays,
@@ -5245,6 +5394,27 @@ function buildCapacityRows() {
       };
     })
     .sort((left, right) => left.user.vrchatName.localeCompare(right.user.vrchatName, "de"));
+}
+
+function buildAttendanceSummaryRows() {
+  const users = (state.data?.users || []).filter((entry) => entry.role !== "member");
+  const week = getCurrentWeekRange();
+  const today = getCurrentDayRange();
+  const entries = state.data?.timeEntries || [];
+
+  return users
+    .map((user) => ({
+      user,
+      weekHours: calculateWorkedHoursForWeek(user.id, week),
+      todayHours: calculateWorkedHoursForRange(user.id, today),
+      liveEntry: entries.find((entry) => entry.userId === user.id && !entry.checkOutAt) || null
+    }))
+    .sort(
+      (left, right) =>
+        Number(Boolean(right.liveEntry)) - Number(Boolean(left.liveEntry)) ||
+        right.weekHours - left.weekHours ||
+        getPrimaryDisplayName(left.user).localeCompare(getPrimaryDisplayName(right.user), "de")
+    );
 }
 
 function getCurrentWeekRange(referenceDate = new Date()) {
@@ -5265,10 +5435,29 @@ function getCurrentWeekRange(referenceDate = new Date()) {
   };
 }
 
-function calculateWorkedHoursForWeek(userId, week) {
+function getCurrentDayRange(referenceDate = new Date()) {
+  const start = new Date(referenceDate);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  return {
+    start,
+    end,
+    startKey: getLocalDateKey(start),
+    endKey: getLocalDateKey(end)
+  };
+}
+
+function calculateWorkedHoursForRange(userId, range) {
   return (state.data?.timeEntries || [])
     .filter((entry) => entry.userId === userId)
-    .reduce((sum, entry) => sum + calculateEntryOverlapHours(entry, week), 0);
+    .reduce((sum, entry) => sum + calculateEntryOverlapHours(entry, range), 0);
+}
+
+function calculateWorkedHoursForWeek(userId, week) {
+  return calculateWorkedHoursForRange(userId, week);
 }
 
 function calculateWorkedDaysForWeek(userId, week) {
@@ -7138,6 +7327,7 @@ async function captureAvatarDraft(fileInput) {
     setFlash(error.message, "danger");
   }
 
+  rememberViewportScrollPosition();
   render();
 }
 
@@ -7197,6 +7387,7 @@ async function buildProfilePayload(form) {
 function handleInput(event) {
   const form = event.target?.closest?.("form[data-form]");
   if (!form) return;
+  markFormEditingWindow();
   rememberPersistentFormDraft(form);
 }
 
@@ -7209,6 +7400,7 @@ async function handleChange(event) {
   }
 
   if (form) {
+    markFormEditingWindow();
     rememberPersistentFormDraft(form);
   }
 
@@ -7300,18 +7492,30 @@ function renderProfilePanel(managerView) {
             ${
               showAvailabilityFields
                 ? `
-                  <div class="field">
-                    <label for="profileWeeklyHoursCapacity">Verfuegbare Stunden pro Woche</label>
-                    <input id="profileWeeklyHoursCapacity" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}" placeholder="z. B. 12">
-                  </div>
-                  <div class="field">
-                    <label for="profileWeeklyDaysCapacity">Verfuegbare Tage pro Woche</label>
-                    <input id="profileWeeklyDaysCapacity" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}" placeholder="z. B. 3">
-                  </div>
-                  <div class="field span-all">
-                    <label for="profileAvailabilitySchedule">Zeitfenster fuer diese Woche</label>
-                    <textarea id="profileAvailabilitySchedule" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
-                    <p class="helper-text">Bitte trage hier moeglichst konkret ein, wann du Zeit hast. Die Leitung plant damit direkt weiter, deshalb bleiben deine Eingaben jetzt auch bei Hintergrund-Updates stabil stehen.</p>
+                  <div class="span-all availability-form-shell">
+                    <div class="availability-form-head">
+                      <div>
+                        <p class="eyebrow">Verfuegbarkeit</p>
+                        <h3>Dein Wochenrahmen fuer die Planung</h3>
+                        <p class="helper-text">Hier kannst du dir in Ruhe Stunden, Tage und konkrete Zeitfenster fuer die kommende Woche eintragen. Live-Updates halten deine offenen Eingaben jetzt fest.</p>
+                      </div>
+                      <span class="pill neutral">Staff-Planung</span>
+                    </div>
+                    <div class="availability-form-grid">
+                      <div class="field">
+                        <label for="profileWeeklyHoursCapacity">Verfuegbare Stunden pro Woche</label>
+                        <input id="profileWeeklyHoursCapacity" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}" placeholder="z. B. 12">
+                      </div>
+                      <div class="field">
+                        <label for="profileWeeklyDaysCapacity">Verfuegbare Tage pro Woche</label>
+                        <input id="profileWeeklyDaysCapacity" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}" placeholder="z. B. 3">
+                      </div>
+                      <div class="field span-all">
+                        <label for="profileAvailabilitySchedule">Zeitfenster fuer diese Woche</label>
+                        <textarea id="profileAvailabilitySchedule" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+                        <p class="helper-text">Bitte trage hier moeglichst konkret ein, wann du Zeit hast. Die Leitung plant damit direkt weiter, deshalb bleiben deine Eingaben jetzt auch bei Hintergrund-Updates stabil stehen.</p>
+                      </div>
+                    </div>
                   </div>
                 `
                 : ""
