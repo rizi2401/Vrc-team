@@ -1689,8 +1689,10 @@ body {
   position: relative;
   min-height: 100vh;
   background:
-    linear-gradient(90deg, rgba(255, 153, 34, 0.16) 0%, transparent 22%, transparent 76%, rgba(91, 150, 255, 0.18) 100%),
-    linear-gradient(180deg, #030813 0%, #07101d 24%, #050d18 62%, #02050c 100%);
+    radial-gradient(circle at 14% 14%, rgba(255, 177, 65, 0.2), transparent 20%),
+    radial-gradient(circle at 86% 18%, rgba(105, 166, 255, 0.16), transparent 18%),
+    linear-gradient(90deg, rgba(255, 149, 20, 0.22) 0%, rgba(255, 149, 20, 0.08) 18%, transparent 34%, transparent 68%, rgba(89, 149, 255, 0.1) 84%, rgba(89, 149, 255, 0.22) 100%),
+    linear-gradient(180deg, #030711 0%, #08111f 22%, #07111d 56%, #04070f 100%);
 }
 
 body::before,
@@ -1704,12 +1706,12 @@ body::after {
 body::before {
   z-index: 0;
   background:
-    url("/sonara-crest.png") center 34px / min(92vw, 1080px) auto no-repeat,
-    radial-gradient(circle at 14% 18%, rgba(255, 187, 82, 0.28), transparent 26%),
-    radial-gradient(circle at 86% 19%, rgba(99, 166, 255, 0.24), transparent 25%),
-    radial-gradient(circle at 50% 42%, rgba(255, 200, 117, 0.08), transparent 32%);
-  opacity: 0.19;
-  filter: saturate(1.14);
+    radial-gradient(circle at 11% 12%, rgba(255, 216, 140, 0.9) 0 5%, rgba(255, 170, 52, 0.46) 13%, rgba(255, 136, 19, 0.18) 21%, transparent 34%),
+    radial-gradient(ellipse at 17% 10%, rgba(58, 86, 34, 0.58) 0 24%, transparent 54%),
+    radial-gradient(ellipse at 86% 16%, rgba(45, 78, 121, 0.46) 0 19%, transparent 48%),
+    linear-gradient(180deg, rgba(255, 190, 90, 0.08), transparent 24%, transparent 76%, rgba(35, 64, 104, 0.14)),
+    radial-gradient(ellipse at 50% 38%, rgba(255, 215, 149, 0.06), transparent 38%);
+  opacity: 0.92;
 }
 
 body::after {
@@ -1718,13 +1720,53 @@ body::after {
     radial-gradient(circle at 12% 18%, rgba(255, 201, 120, 0.22) 0 2px, transparent 3px) 0 0 / 190px 190px,
     radial-gradient(circle at 84% 22%, rgba(124, 181, 255, 0.18) 0 1.5px, transparent 3px) 0 0 / 220px 220px,
     radial-gradient(circle at 52% 70%, rgba(255, 201, 120, 0.14) 0 1.2px, transparent 2px) 0 0 / 160px 160px;
-  opacity: 0.64;
+  opacity: 0.52;
   animation: sonaraSkyDrift 26s ease-in-out infinite alternate;
 }
 
 #app {
   position: relative;
   z-index: 1;
+}
+
+#app::before,
+#app::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#app::before {
+  left: -5vw;
+  right: auto;
+  width: min(44vw, 560px);
+  background:
+    radial-gradient(circle at 21% 16%, rgba(255, 204, 118, 0.76) 0 6%, rgba(255, 163, 39, 0.28) 13%, transparent 28%),
+    radial-gradient(ellipse at 23% 12%, rgba(89, 111, 50, 0.78) 0 18%, rgba(57, 74, 34, 0.56) 28%, transparent 52%),
+    radial-gradient(ellipse at 36% 11%, rgba(54, 80, 34, 0.72) 0 17%, transparent 45%),
+    linear-gradient(92deg, rgba(71, 42, 25, 0.96) 0 12%, rgba(95, 61, 34, 0.94) 14%, rgba(53, 31, 20, 0.94) 23%, transparent 39%),
+    linear-gradient(64deg, transparent 42%, rgba(84, 52, 30, 0.88) 46%, rgba(96, 61, 37, 0.7) 50%, transparent 56%) 9% 9% / 70% 24% no-repeat,
+    linear-gradient(112deg, transparent 44%, rgba(77, 47, 28, 0.86) 48%, rgba(103, 67, 38, 0.64) 52%, transparent 58%) 13% 18% / 76% 26% no-repeat,
+    radial-gradient(ellipse at 8% 100%, rgba(123, 48, 28, 0.58) 0 8%, rgba(53, 27, 18, 0.84) 18%, transparent 42%);
+  opacity: 0.92;
+  filter: blur(1px);
+}
+
+#app::after {
+  left: auto;
+  right: -4vw;
+  width: min(36vw, 480px);
+  background:
+    radial-gradient(circle at 72% 14%, rgba(228, 241, 255, 0.82) 0 5%, rgba(122, 183, 255, 0.34) 11%, transparent 24%),
+    radial-gradient(ellipse at 68% 18%, rgba(39, 77, 124, 0.38) 0 15%, transparent 40%),
+    radial-gradient(ellipse at 74% 76%, rgba(29, 63, 102, 0.48) 0 16%, transparent 44%),
+    url("/sonara-crest.png") 77% 39% / 320% auto no-repeat,
+    linear-gradient(180deg, transparent 0%, transparent 58%, rgba(10, 20, 36, 0.38) 86%, transparent 100%);
+  opacity: 0.46;
+  mix-blend-mode: screen;
+  filter: saturate(1.08) drop-shadow(0 22px 50px rgba(7, 12, 24, 0.44));
 }
 
 .app-shell {
@@ -1750,20 +1792,20 @@ body::after {
 .app-shell::before {
   top: 102px;
   bottom: 132px;
-  width: min(16vw, 190px);
+  width: min(12vw, 144px);
   transform: translateX(-50%);
-  border-radius: 160px 160px 92px 92px;
+  border-radius: 120px 120px 80px 80px;
   background:
-    linear-gradient(104deg, rgba(255, 176, 86, 0.16), transparent 28%),
-    linear-gradient(256deg, rgba(117, 173, 255, 0.13), transparent 30%),
-    linear-gradient(180deg, rgba(102, 66, 38, 0.92) 0%, rgba(76, 45, 28, 0.97) 18%, rgba(39, 25, 18, 0.98) 72%, rgba(76, 45, 28, 0.92) 100%);
+    linear-gradient(104deg, rgba(255, 176, 86, 0.22), transparent 32%),
+    linear-gradient(256deg, rgba(117, 173, 255, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(112, 73, 42, 0.98) 0%, rgba(77, 46, 29, 0.99) 16%, rgba(41, 25, 18, 0.99) 74%, rgba(74, 44, 28, 0.96) 100%);
   box-shadow:
     inset 0 0 0 1px rgba(255, 220, 173, 0.07),
-    inset 16px 0 32px rgba(255, 176, 86, 0.08),
-    inset -16px 0 32px rgba(117, 173, 255, 0.06),
-    0 0 90px rgba(17, 10, 10, 0.38);
-  opacity: 0.4;
-  filter: blur(0.4px);
+    inset 18px 0 32px rgba(255, 176, 86, 0.1),
+    inset -18px 0 32px rgba(117, 173, 255, 0.08),
+    0 0 96px rgba(17, 10, 10, 0.36);
+  opacity: 0.32;
+  filter: blur(0.2px);
 }
 
 .app-shell::after {
@@ -1772,6 +1814,7 @@ body::after {
   height: 220px;
   transform: translateX(-50%);
   background:
+    radial-gradient(circle at 10% 72%, rgba(202, 57, 36, 0.44) 0 4%, rgba(154, 38, 24, 0.18) 8%, transparent 18%) 0 0 / 100% 100% no-repeat,
     linear-gradient(22deg, transparent 44%, rgba(82, 51, 32, 0.58) 47%, transparent 52%) 10% 100% / 20% 70% no-repeat,
     linear-gradient(-22deg, transparent 44%, rgba(82, 51, 32, 0.58) 47%, transparent 52%) 90% 100% / 20% 70% no-repeat,
     linear-gradient(8deg, transparent 46%, rgba(72, 44, 28, 0.54) 49%, transparent 53%) 25% 100% / 24% 66% no-repeat,
@@ -1795,10 +1838,10 @@ body::after {
   overflow: hidden;
   isolation: isolate;
   background:
-    radial-gradient(circle at 12% 22%, rgba(255, 186, 83, 0.26), transparent 22%),
-    radial-gradient(circle at 88% 20%, rgba(102, 169, 255, 0.18), transparent 22%),
-    linear-gradient(90deg, rgba(255, 169, 57, 0.08), transparent 26%, transparent 72%, rgba(87, 155, 255, 0.08)),
-    linear-gradient(180deg, rgba(4, 10, 21, 0.9), rgba(8, 17, 34, 0.78));
+    radial-gradient(circle at 10% 18%, rgba(255, 196, 103, 0.28), transparent 18%),
+    radial-gradient(circle at 87% 18%, rgba(112, 173, 255, 0.2), transparent 17%),
+    linear-gradient(90deg, rgba(255, 169, 57, 0.12), rgba(255, 169, 57, 0.03) 22%, transparent 40%, transparent 68%, rgba(87, 155, 255, 0.06) 84%, rgba(87, 155, 255, 0.12)),
+    linear-gradient(180deg, rgba(4, 10, 21, 0.72), rgba(8, 17, 34, 0.58));
   border: 1px solid rgba(255, 220, 173, 0.14);
   box-shadow:
     0 34px 90px rgba(0, 0, 0, 0.5),
@@ -1821,11 +1864,11 @@ body::after {
 .sonara-header::after {
   content: "";
   position: absolute;
-  inset: -2% 18% auto;
+  inset: -8% 28% auto;
   height: 118%;
-  background: url("/sonara-crest.png") center top / min(60vw, 760px) auto no-repeat;
-  opacity: 0.16;
-  filter: saturate(1.08);
+  background: url("/sonara-crest.png") center top / min(44vw, 560px) auto no-repeat;
+  opacity: 0.07;
+  filter: saturate(1.04);
   mix-blend-mode: screen;
   pointer-events: none;
 }
@@ -1850,20 +1893,20 @@ body::after {
 }
 
 .sonara-scene-sun {
-  left: -38px;
-  top: -28px;
-  width: 310px;
-  height: 310px;
+  left: -42px;
+  top: -34px;
+  width: 338px;
+  height: 338px;
   background:
     radial-gradient(circle at 50% 50%, rgba(255, 211, 132, 0.92) 0 18%, rgba(255, 176, 62, 0.68) 30%, rgba(255, 148, 29, 0.26) 52%, transparent 72%);
-  box-shadow: 0 0 80px rgba(255, 163, 38, 0.28);
+  box-shadow: 0 0 90px rgba(255, 163, 38, 0.34);
 }
 
 .sonara-scene-moon {
-  right: 46px;
-  top: 34px;
-  width: 170px;
-  height: 170px;
+  right: 42px;
+  top: 36px;
+  width: 184px;
+  height: 184px;
   background:
     radial-gradient(circle at 50% 50%, rgba(232, 244, 255, 0.88) 0 18%, rgba(130, 188, 255, 0.48) 34%, rgba(100, 156, 255, 0.14) 58%, transparent 74%);
   box-shadow: 0 0 72px rgba(101, 162, 255, 0.24);
@@ -1878,25 +1921,31 @@ body::after {
 }
 
 .sonara-scene-stag {
-  left: 2%;
-  bottom: 8%;
-  width: 250px;
-  height: 240px;
-  background-size: 340%;
-  background-position: 19% 44%;
-  clip-path: ellipse(42% 38% at 50% 50%);
-  filter: drop-shadow(0 10px 30px rgba(255, 162, 35, 0.22));
+  left: 4%;
+  bottom: 10%;
+  width: 242px;
+  height: 222px;
+  background-size: 312%;
+  background-position: 18% 43%;
+  clip-path: ellipse(44% 40% at 50% 50%);
+  opacity: 0.42;
+  filter:
+    saturate(1.16)
+    drop-shadow(0 14px 32px rgba(255, 174, 54, 0.3))
+    drop-shadow(0 0 26px rgba(255, 198, 112, 0.18));
 }
 
 .sonara-scene-owl {
-  right: 2%;
-  top: 12%;
-  width: 230px;
-  height: 250px;
-  background-size: 320%;
-  background-position: 83% 36%;
+  right: -1%;
+  top: auto;
+  bottom: 0;
+  width: 270px;
+  height: 300px;
+  background-size: 308%;
+  background-position: 82% 34%;
   clip-path: ellipse(40% 44% at 50% 50%);
-  filter: drop-shadow(0 10px 30px rgba(105, 165, 255, 0.18));
+  opacity: 0.52;
+  filter: drop-shadow(0 14px 42px rgba(105, 165, 255, 0.24));
 }
 
 .sonara-copy,
@@ -1909,15 +1958,13 @@ body::after {
   min-height: 360px;
   align-content: end;
   gap: 18px;
-  padding: 28px 30px;
+  padding: 26px 22px 26px 12px;
   border-radius: 30px;
   background:
-    linear-gradient(180deg, rgba(5, 11, 22, 0.7), rgba(7, 15, 31, 0.42));
-  border: 1px solid rgba(255, 224, 184, 0.1);
-  backdrop-filter: blur(18px) saturate(136%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 24px 60px rgba(0, 0, 0, 0.26);
+    linear-gradient(90deg, rgba(5, 11, 22, 0.7), rgba(7, 15, 31, 0.32) 56%, transparent 100%);
+  border: none;
+  backdrop-filter: blur(4px) saturate(108%);
+  box-shadow: none;
 }
 
 .eyebrow {
@@ -1931,14 +1978,15 @@ h1 {
   line-height: 0.92;
   letter-spacing: -0.04em;
   text-wrap: balance;
+  text-shadow: 0 12px 28px rgba(0, 0, 0, 0.54);
 }
 
 .sonara-intro {
   max-width: 54ch;
   padding: 18px 20px;
-  background: linear-gradient(180deg, rgba(6, 12, 23, 0.72), rgba(7, 14, 28, 0.5));
-  border: 1px solid rgba(255, 221, 182, 0.08);
-  box-shadow: none;
+  background: linear-gradient(180deg, rgba(6, 12, 23, 0.62), rgba(7, 14, 28, 0.38));
+  border: 1px solid rgba(255, 221, 182, 0.07);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.16);
 }
 
 .hero-chip-row {
@@ -2017,8 +2065,8 @@ h1 {
 .profile-preview,
 .warning-modal {
   background:
-    linear-gradient(180deg, rgba(7, 14, 29, 0.88), rgba(9, 19, 39, 0.74)),
-    linear-gradient(90deg, rgba(255, 172, 49, 0.06), transparent 24%, transparent 78%, rgba(102, 182, 255, 0.06));
+    linear-gradient(180deg, rgba(7, 14, 29, 0.8), rgba(9, 19, 39, 0.62)),
+    linear-gradient(90deg, rgba(255, 172, 49, 0.07), transparent 24%, transparent 78%, rgba(102, 182, 255, 0.08));
   border: 1px solid rgba(255, 220, 173, 0.12);
   box-shadow:
     0 22px 56px rgba(0, 0, 0, 0.28),
@@ -2029,7 +2077,7 @@ h1 {
 .toolbar,
 .tab-bar {
   background:
-    linear-gradient(180deg, rgba(7, 14, 28, 0.86), rgba(10, 19, 38, 0.72));
+    linear-gradient(180deg, rgba(7, 14, 28, 0.8), rgba(10, 19, 38, 0.62));
   border: 1px solid rgba(255, 220, 173, 0.12);
   box-shadow:
     0 20px 48px rgba(0, 0, 0, 0.24),
@@ -2140,6 +2188,16 @@ button.danger {
 }
 
 @media (max-width: 980px) {
+  #app::before {
+    width: min(52vw, 420px);
+    opacity: 0.84;
+  }
+
+  #app::after {
+    width: min(42vw, 320px);
+    opacity: 0.32;
+  }
+
   .sonara-header {
     grid-template-columns: 1fr;
     min-height: auto;
@@ -2156,12 +2214,14 @@ button.danger {
 
   .sonara-scene-stag,
   .sonara-scene-owl {
-    opacity: 0.22;
+    opacity: 0.32;
   }
 
   .sonara-scene-stag {
-    width: 190px;
-    height: 180px;
+    left: 2%;
+    bottom: 8%;
+    width: 214px;
+    height: 196px;
   }
 
   .sonara-scene-owl {
@@ -2175,9 +2235,20 @@ button.danger {
 }
 
 @media (max-width: 640px) {
+  #app::before {
+    width: 52vw;
+    left: -10vw;
+    opacity: 0.64;
+  }
+
+  #app::after {
+    width: 38vw;
+    right: -8vw;
+    opacity: 0.18;
+  }
+
   body::before {
-    background-size: 138vw auto, auto, auto, auto;
-    opacity: 0.14;
+    opacity: 0.76;
   }
 
   .app-shell {
@@ -2201,7 +2272,7 @@ button.danger {
   }
 
   .sonara-copy {
-    padding: 22px;
+    padding: 18px 10px 18px 6px;
     border-radius: 24px;
   }
 
@@ -2221,7 +2292,24 @@ button.danger {
 
   .sonara-scene-stag,
   .sonara-scene-owl {
-    display: none;
+    display: block;
+    opacity: 0.28;
+  }
+
+  .sonara-scene-stag {
+    left: -2%;
+    bottom: 5%;
+    width: 148px;
+    height: 138px;
+    background-size: 302%;
+    background-position: 18% 43%;
+  }
+
+  .sonara-scene-owl {
+    right: -6%;
+    bottom: -1%;
+    width: 128px;
+    height: 146px;
   }
 
   h1 {

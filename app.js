@@ -49,13 +49,18 @@ const state = {
     tabBarScrollLeft: 0,
     tabViewportScrollY: null,
     scrollToShiftId: "",
-    plannerDraft: null
+    plannerDraft: null,
+    pendingPortalRefresh: false,
+    pendingRender: false,
+    lastActionSucceeded: false
   }
 };
 
 root.addEventListener("submit", handleSubmitProxy);
 root.addEventListener("click", handleClick);
+root.addEventListener("input", handleInput);
 root.addEventListener("change", handleChange);
+root.addEventListener("focusout", handleFocusOut);
 
 boot();
 
@@ -71,12 +76,21 @@ async function handleSubmitProxy(event) {
 
   pendingSubmitForms.add(form);
   setFormSubmittingState(form, true);
+  state.ui.lastActionSucceeded = false;
 
   try {
     await handleSubmit(event);
+    if (state.ui.lastActionSucceeded) {
+      if (shouldClearFormDraftAfterSuccess(formName)) {
+        clearPersistentFormDraft(form);
+      }
+      clearAvatarDraft(getAvatarDraftKey(form));
+    }
   } finally {
+    state.ui.lastActionSucceeded = false;
     setFormSubmittingState(form, false);
     pendingSubmitForms.delete(form);
+    void flushPendingPortalRefresh();
   }
 }
 
@@ -101,6 +115,227 @@ function setFormSubmittingState(form, isSubmitting) {
     control.disabled = wasDisabled;
     delete control.dataset.wasDisabled;
   });
+}
+
+function getPersistentFormDraftStore() {
+  if (!state.ui.formDrafts) state.ui.formDrafts = {};
+  return state.ui.formDrafts;
+}
+
+function buildPersistentFormDraftKey(formName, metadata = {}) {
+  const parts = [["form", formName], ...Object.entries(metadata).filter(([, value]) => value !== undefined && value !== null && value !== "")];
+  return parts
+    .sort((left, right) => String(left[0]).localeCompare(String(right[0])))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("|");
+}
+
+function getPersistentFormDraftKey(source) {
+  const form = source?.tagName === "FORM" ? source : source?.closest?.("form");
+  const formName = form?.dataset?.form;
+  if (!formName) return "";
+
+  const metadata = Object.fromEntries(
+    Object.entries(form.dataset || {}).filter(([key, value]) => key !== "form" && key !== "submitting" && value !== undefined && value !== null && value !== "")
+  );
+
+  if (formName === "chat" && !metadata.channel) {
+    const channel = form.dataset.channel || form.querySelector('input[name="channel"]')?.value || "";
+    if (channel) metadata.channel = channel;
+  }
+
+  return buildPersistentFormDraftKey(formName, metadata);
+}
+
+function getPersistentFormDraft(sourceOrKey, metadata = {}) {
+  const key =
+    typeof sourceOrKey === "string"
+      ? sourceOrKey.includes("=")
+        ? sourceOrKey
+        : buildPersistentFormDraftKey(sourceOrKey, metadata)
+      : getPersistentFormDraftKey(sourceOrKey);
+  return key ? getPersistentFormDraftStore()[key] || null : null;
+}
+
+function clearPersistentFormDraft(sourceOrKey, metadata = {}) {
+  const key =
+    typeof sourceOrKey === "string"
+      ? sourceOrKey.includes("=")
+        ? sourceOrKey
+        : buildPersistentFormDraftKey(sourceOrKey, metadata)
+      : getPersistentFormDraftKey(sourceOrKey);
+  if (!key) return;
+  delete getPersistentFormDraftStore()[key];
+}
+
+function shouldClearFormDraftAfterSuccess(formName) {
+  return [
+    "login",
+    "register",
+    "shift",
+    "shift-bulk",
+    "request",
+    "request-admin",
+    "announcement",
+    "event-create",
+    "chat",
+    "direct-message",
+    "forum-thread",
+    "forum-reply",
+    "feed-post",
+    "catalog",
+    "warning-create",
+    "admin-user-create",
+    "user-update",
+    "profile-update"
+  ].includes(String(formName || ""));
+}
+
+function isDraftableFormControl(control) {
+  if (!control || !control.name || control.disabled) return false;
+  if (!["INPUT", "TEXTAREA", "SELECT"].includes(control.tagName)) return false;
+
+  const type = String(control.type || "").toLowerCase();
+  if (["hidden", "submit", "button", "reset", "file", "password"].includes(type)) return false;
+  return true;
+}
+
+function getDraftableControlsByName(form, name) {
+  return Array.from(form?.elements || []).filter((control) => isDraftableFormControl(control) && control.name === name);
+}
+
+function rememberPersistentFormDraft(form) {
+  const key = getPersistentFormDraftKey(form);
+  if (!key) return;
+
+  const controls = Array.from(form.elements || []).filter((control) => isDraftableFormControl(control));
+  if (!controls.length) {
+    clearPersistentFormDraft(key);
+    return;
+  }
+
+  const names = [...new Set(controls.map((control) => control.name).filter(Boolean))];
+  const draft = {};
+
+  for (const name of names) {
+    const group = getDraftableControlsByName(form, name);
+    if (!group.length) continue;
+
+    const firstType = String(group[0].type || "").toLowerCase();
+    if (firstType === "radio") {
+      draft[name] = group.find((control) => control.checked)?.value || "";
+      continue;
+    }
+
+    if (firstType === "checkbox" && group.length > 1) {
+      draft[name] = group.filter((control) => control.checked).map((control) => control.value);
+      continue;
+    }
+
+    if (firstType === "checkbox") {
+      draft[name] = Boolean(group[0].checked);
+      continue;
+    }
+
+    draft[name] = String(group[0].value || "");
+  }
+
+  getPersistentFormDraftStore()[key] = draft;
+}
+
+function restoreFormDrafts() {
+  const forms = root.querySelectorAll("form[data-form]");
+  forms.forEach((form) => {
+    const draft = getPersistentFormDraft(form);
+    if (!draft) return;
+
+    Object.entries(draft).forEach(([name, value]) => {
+      const controls = getDraftableControlsByName(form, name);
+      if (!controls.length) return;
+
+      const firstType = String(controls[0].type || "").toLowerCase();
+      if (firstType === "radio") {
+        controls.forEach((control) => {
+          control.checked = String(value || "") === String(control.value || "");
+        });
+        return;
+      }
+
+      if (firstType === "checkbox" && controls.length > 1) {
+        const values = Array.isArray(value) ? value.map((entry) => String(entry)) : [];
+        controls.forEach((control) => {
+          control.checked = values.includes(String(control.value || ""));
+        });
+        return;
+      }
+
+      if (firstType === "checkbox") {
+        controls[0].checked = Boolean(value);
+        return;
+      }
+
+      controls[0].value = String(value ?? "");
+    });
+  });
+}
+
+function isFormInteractionLocked() {
+  if (typeof document === "undefined") return false;
+
+  const activeElement = document.activeElement;
+  if (!activeElement || !root.contains(activeElement)) return false;
+
+  const form = activeElement.closest?.("form[data-form]");
+  if (!form || form.dataset.submitting === "true") return false;
+  return isDraftableFormControl(activeElement);
+}
+
+function renderIfFormIdle() {
+  if (isFormInteractionLocked()) {
+    state.ui.pendingRender = true;
+    return;
+  }
+
+  state.ui.pendingRender = false;
+  render();
+}
+
+async function refreshPortalDataFromBackground() {
+  if (isFormInteractionLocked()) {
+    state.ui.pendingPortalRefresh = true;
+    return;
+  }
+
+  state.ui.pendingPortalRefresh = false;
+  state.ui.pendingRender = false;
+
+  if (state.session) {
+    await refreshBootstrap();
+  } else {
+    await refreshPublicData();
+  }
+
+  render();
+}
+
+async function flushPendingPortalRefresh() {
+  if (isFormInteractionLocked()) return;
+
+  if (state.ui.pendingPortalRefresh) {
+    await refreshPortalDataFromBackground();
+    return;
+  }
+
+  if (state.ui.pendingRender) {
+    state.ui.pendingRender = false;
+    render();
+  }
+}
+
+function handleFocusOut() {
+  window.setTimeout(() => {
+    void flushPendingPortalRefresh();
+  }, 0);
 }
 
 async function boot() {
@@ -293,6 +528,7 @@ function renderSonaraHero({ eyebrow, title, intro, chips = [] }) {
 
 function render() {
   root.innerHTML = state.session ? renderDashboard() : renderPublicPortal();
+  restoreFormDrafts();
   restoreTabBarState();
   restorePlannerFocus();
   syncChatStream();
@@ -307,13 +543,7 @@ function syncPortalRefreshLoop() {
   portalRefreshTimer = window.setInterval(async () => {
     if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
 
-    if (state.session) {
-      await refreshBootstrap();
-    } else {
-      await refreshPublicData();
-    }
-
-    render();
+    await refreshPortalDataFromBackground();
   }, 60000);
 }
 
@@ -1798,7 +2028,7 @@ function renderCapacityPanel() {
         </div>
       </div>
 
-      <p class="pill-note">Bitte bis Samstag die Verfuegbarkeiten fuer die naechste Woche einsammeln. Ohne Rueckmeldung keine Einplanung; wiederholt fehlend kann zu Verwarnungen fuehren.</p>
+      <p class="pill-note">Bitte bis Samstag die Verfuegbarkeiten fuer die naechste Woche einsammeln. Moderatoren und Leitung tragen das direkt im Profil ein. Ohne Rueckmeldung keine Einplanung; wiederholt fehlend kann zu Verwarnungen fuehren.</p>
 
       <div class="stats-strip compact-stats">
         ${renderStatCard("Geleistet", formatHoursValue(totalWorkedHours), "Bisher erfasste Stunden diese Woche", "teal")}
@@ -1846,6 +2076,27 @@ function renderCapacityCard(entry) {
           : `<p class="helper-text">${escapeHtml(buildCapacityDeltaText(plannedDelta, dayDelta))}</p>`
       }
     </article>
+  `;
+}
+
+function renderAvailabilityReminderPanel() {
+  const user = state.session;
+  if (!user || user.role === "member") return "";
+
+  const hasAvailability = Boolean(user.availabilitySchedule || Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0));
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Verfuegbarkeit</p>
+          <h2>Wo Moderatoren ihre freien Zeiten eintragen</h2>
+          <p class="section-copy">Die Verfuegbarkeit wird im Profil gepflegt. Dort traegst du Stunden, Tage und konkrete Zeitfenster fuer die kommende Woche ein.</p>
+        </div>
+        <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Zum Profil</button>
+      </div>
+      <p class="pill-note">${escapeHtml(hasAvailability ? "Deine aktuelle Verfuegbarkeit ist hinterlegt und kann jederzeit im Profil angepasst werden." : "Aktuell ist noch keine Verfuegbarkeit hinterlegt. Bitte im Profil eintragen, damit die Planung sauber funktioniert.")}</p>
+    </section>
   `;
 }
 
@@ -3858,6 +4109,7 @@ async function handleClick(event) {
     inputs.forEach((input) => {
       input.checked = typeof predicate === "function" ? Boolean(predicate(input)) : Boolean(predicate);
     });
+    rememberPersistentFormDraft(form);
     return true;
   };
 
@@ -4681,6 +4933,17 @@ function renderProfilePanel(managerView) {
           </div>
         </div>
 
+        ${
+          showAvailabilityFields
+            ? `
+              <article class="mini-card">
+                <h3>Verfuegbarkeit fuer die Planung</h3>
+                <p class="helper-text">Genau hier tragen Moderatoren und Leitung ihre freien Stunden, Tage und konkreten Zeitfenster fuer die kommende Woche ein. Diese Angaben landen danach direkt im Bereich Auslastung der Leitung.</p>
+              </article>
+            `
+            : ""
+        }
+
         <form class="stack-form" data-form="profile-update">
           <div class="form-grid">
             <div class="field">
@@ -4748,17 +5011,15 @@ function syncChatStream() {
 
   stream.addEventListener("open", () => {
     state.ui.liveChatConnected = true;
-    render();
+    renderIfFormIdle();
   });
 
   stream.addEventListener("chat", async () => {
-    await refreshBootstrap();
-    render();
+    await refreshPortalDataFromBackground();
   });
 
   stream.addEventListener("portal", async () => {
-    await refreshBootstrap();
-    render();
+    await refreshPortalDataFromBackground();
   });
 
   stream.addEventListener("error", () => {
@@ -4768,7 +5029,7 @@ function syncChatStream() {
       if (!state.session) return;
       syncChatStream();
     }, 2500);
-    render();
+    renderIfFormIdle();
   });
 }
 
@@ -5607,6 +5868,42 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "chat-trim": {
+      const channel = String(form.dataset.channel || "community");
+      const count = Number(event.submitter?.value || 0);
+      if (!CHAT_TRIM_OPTIONS.includes(count)) return;
+
+      const label = channel === "staff" ? "Staff-Chat" : "Community-Chat";
+      if (!window.confirm(`Die letzten ${count} Nachrichten im ${label} wirklich entfernen?`)) return;
+
+      await performAction(
+        () =>
+          api("/api/chat/trim", {
+            method: "POST",
+            body: JSON.stringify({ channel, count })
+          }),
+        `Die letzten ${count} Nachrichten wurden aus dem ${label} entfernt.`
+      );
+      break;
+    }
+
+    case "chat-clear": {
+      const channel = String(form.dataset.channel || "community");
+      const label = channel === "staff" ? "Staff-Chat" : "Community-Chat";
+      if (!window.confirm(`Den ${label} wirklich komplett leeren?`)) return;
+
+      await performAction(
+        () =>
+          api("/api/chat/clear", {
+            method: "POST",
+            body: JSON.stringify({ channel })
+          }),
+        `${label} wurde komplett geleert.`,
+        "warning"
+      );
+      break;
+    }
+
     case "direct-message": {
       const formData = new FormData(form);
       await performAction(
@@ -5619,6 +5916,83 @@ async function handleSubmit(event) {
             })
           }),
         "Direktnachricht wurde gesendet."
+      );
+      break;
+    }
+
+    case "direct-message-trim": {
+      const count = Number(event.submitter?.value || 0);
+      if (!CHAT_TRIM_OPTIONS.includes(count)) return;
+      if (!window.confirm(`Die letzten ${count} Direktnachrichten wirklich entfernen?`)) return;
+
+      await performAction(
+        () =>
+          api("/api/direct-messages/trim", {
+            method: "POST",
+            body: JSON.stringify({ count })
+          }),
+        `Die letzten ${count} Direktnachrichten wurden entfernt.`
+      );
+      break;
+    }
+
+    case "direct-message-clear": {
+      if (!window.confirm("Alle Direktnachrichten wirklich komplett leeren?")) return;
+
+      await performAction(
+        () =>
+          api("/api/direct-messages/clear", {
+            method: "POST",
+            body: "{}"
+          }),
+        "Alle Direktnachrichten wurden entfernt.",
+        "warning"
+      );
+      break;
+    }
+
+    case "feed-post": {
+      const formData = new FormData(form);
+      const imageUrl = await readImageFileInput(form.querySelector('input[name="imageFile"]'));
+      await performAction(
+        () =>
+          api("/api/feed-posts", {
+            method: "POST",
+            body: JSON.stringify({
+              content: formData.get("content"),
+              imageUrl: imageUrl || ""
+            })
+          }),
+        "Beitrag wurde im Feed veroeffentlicht."
+      );
+      break;
+    }
+
+    case "feed-reaction": {
+      const postId = form.dataset.postId;
+      const emoji = form.dataset.emoji;
+      await performAction(
+        () =>
+          api(`/api/feed-posts/${encodeURIComponent(postId)}/reactions`, {
+            method: "PATCH",
+            body: JSON.stringify({ emoji })
+          }),
+        "Reaktion wurde aktualisiert."
+      );
+      break;
+    }
+
+    case "feed-delete": {
+      const postId = form.dataset.postId;
+      if (!window.confirm("Diesen Feed-Beitrag wirklich loeschen?")) return;
+
+      await performAction(
+        () =>
+          api(`/api/feed-posts/${encodeURIComponent(postId)}`, {
+            method: "DELETE"
+          }),
+        "Feed-Beitrag wurde geloescht.",
+        "warning"
       );
       break;
     }
@@ -6101,6 +6475,9 @@ function renderCommunityTeamPanel() {
 
 function renderEventsPanel() {
   const events = getCommunityData().events || [];
+  const eventDraft = getPersistentFormDraft("event-create") || {};
+  const eventScheduleType = eventDraft.scheduleType === "weekly" ? "weekly" : "single";
+  const singleEvent = eventScheduleType === "single";
 
   return `
     <section class="panel span-12">
@@ -6771,7 +7148,7 @@ async function performAction(callback, successMessage = "", successTone = "succe
     const payload = await callback();
     if (payload?.session || payload?.data) applyPayload(payload);
     if (successMessage) setFlash(successMessage, successTone);
-    if (state.session?.role === "admin" && !state.vrchatOverview) {
+    if (canManagePortal() && !state.vrchatOverview) {
       void refreshVrchatOverview(false);
     }
     succeeded = true;
@@ -6785,6 +7162,7 @@ async function performAction(callback, successMessage = "", successTone = "succe
     }
   }
 
+  state.ui.lastActionSucceeded = succeeded;
   render();
   return succeeded;
 }
@@ -6816,11 +7194,22 @@ async function buildProfilePayload(form) {
   return { formData, payload, draftKey };
 }
 
+function handleInput(event) {
+  const form = event.target?.closest?.("form[data-form]");
+  if (!form) return;
+  rememberPersistentFormDraft(form);
+}
+
 async function handleChange(event) {
+  const form = event.target?.closest?.("form[data-form]");
   const fileInput = event.target.closest('input[type="file"][name="avatarFile"]');
   if (fileInput) {
     await captureAvatarDraft(fileInput);
     return;
+  }
+
+  if (form) {
+    rememberPersistentFormDraft(form);
   }
 
   const changeElement = event.target.closest("[data-change]");
@@ -6829,6 +7218,11 @@ async function handleChange(event) {
   switch (changeElement.dataset.change) {
     case "shift-preset":
       applyShiftPreset(changeElement);
+      if (form) rememberPersistentFormDraft(form);
+      break;
+
+    case "event-schedule-type":
+      render();
       break;
 
     default:
@@ -6864,6 +7258,17 @@ function renderProfilePanel(managerView) {
             ${renderCreatorLinkList(user, true)}
           </div>
         </div>
+
+        ${
+          showAvailabilityFields
+            ? `
+              <article class="mini-card">
+                <h3>Verfuegbarkeit fuer die Planung</h3>
+                <p class="helper-text">Hier tragen Moderatoren und Leitung ihre freien Stunden, Tage und konkreten Zeitfenster fuer die kommende Woche ein. Genau diese Angaben landen danach direkt in der Auslastung.</p>
+              </article>
+            `
+            : ""
+        }
 
         <form class="stack-form" data-form="profile-update">
           <div class="form-grid">
@@ -6906,7 +7311,7 @@ function renderProfilePanel(managerView) {
                   <div class="field span-all">
                     <label for="profileAvailabilitySchedule">Zeitfenster fuer diese Woche</label>
                     <textarea id="profileAvailabilitySchedule" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
-                    <p class="helper-text">Bitte bis Samstag deine Verfuegbarkeit fuer die naechste Woche eintragen. Ohne Rueckmeldung keine Einplanung; wiederholt fehlend kann zu Verwarnungen fuehren.</p>
+                    <p class="helper-text">Bitte trage hier moeglichst konkret ein, wann du Zeit hast. Die Leitung plant damit direkt weiter, deshalb bleiben deine Eingaben jetzt auch bei Hintergrund-Updates stabil stehen.</p>
                   </div>
                 `
                 : ""
@@ -7091,7 +7496,7 @@ function renderChatPanel(mode = "community", compact = false) {
         </div>
       </div>
 
-      <form class="stack-form" data-form="chat">
+      <form class="stack-form" data-form="chat" data-channel="${escapeHtml(mode)}">
         <input type="hidden" name="channel" value="${escapeHtml(mode)}">
         <div class="form-grid">
           ${
@@ -7552,7 +7957,7 @@ function renderManagerDashboard(activeTab) {
       return [renderSettingsPanel(), renderDiscordPanel(), renderVrchatAnalyticsPanel()].join("");
     case "overview":
     default:
-      return [renderNotificationsPanel(), renderFeedPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
+      return [renderNotificationsPanel(), renderFeedPanel(), renderAvailabilityReminderPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
   }
 }
 
@@ -7584,7 +7989,7 @@ function renderModeratorDashboard(activeTab) {
       return renderProfilePanel(false);
     case "overview":
     default:
-      return [renderNotificationsPanel(), renderFeedPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
+      return [renderNotificationsPanel(), renderFeedPanel(), renderAvailabilityReminderPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
   }
 }
 
@@ -7646,50 +8051,50 @@ function renderEventsPanel() {
               <div class="form-grid">
                 <div class="field">
                   <label for="eventTitle">Titel</label>
-                  <input id="eventTitle" name="title" type="text" required>
+                  <input id="eventTitle" name="title" type="text" value="${escapeHtml(String(eventDraft.title || ""))}" required>
                 </div>
                 <div class="field">
                   <label for="eventScheduleType">Rhythmus</label>
-                  <select id="eventScheduleType" name="scheduleType">
-                    <option value="single">Einmalig</option>
-                    <option value="weekly">Woechentlich</option>
+                  <select id="eventScheduleType" name="scheduleType" data-change="event-schedule-type">
+                    <option value="single" ${singleEvent ? "selected" : ""}>Einmalig</option>
+                    <option value="weekly" ${singleEvent ? "" : "selected"}>Woechentlich</option>
                   </select>
                 </div>
                 <div class="field">
-                  <label for="eventDate">Datum fuer einmalige Events</label>
-                  <input id="eventDate" name="eventDate" type="date">
+                  <label for="eventDate">${singleEvent ? "Datum fuer einmalige Events" : "Datum ist bei Wochenterminen nicht noetig"}</label>
+                  <input id="eventDate" name="eventDate" type="date" value="${escapeHtml(String(eventDraft.eventDate || ""))}" ${singleEvent ? "required" : "disabled"}>
                 </div>
                 <div class="field">
-                  <label for="eventWeekday">Wochentag fuer Wochentermine</label>
-                  <select id="eventWeekday" name="weekday">
-                    ${buildEventWeekdayOptions()}
+                  <label for="eventWeekday">${singleEvent ? "Wochentag optional" : "Wochentag fuer Wochentermine"}</label>
+                  <select id="eventWeekday" name="weekday" ${singleEvent ? "disabled" : "required"}>
+                    ${buildEventWeekdayOptions(String(eventDraft.weekday || ""))}
                   </select>
                 </div>
                 <div class="field">
                   <label for="eventTime">Uhrzeit</label>
-                  <input id="eventTime" name="eventTime" type="time" required>
+                  <input id="eventTime" name="eventTime" type="time" value="${escapeHtml(String(eventDraft.eventTime || ""))}" required>
                 </div>
                 <div class="field">
                   <label for="eventWorld">Welt</label>
-                  <input id="eventWorld" name="world" type="text" required>
+                  <input id="eventWorld" name="world" type="text" value="${escapeHtml(String(eventDraft.world || ""))}" required>
                 </div>
                 <div class="field">
                   <label for="eventHost">Host</label>
-                  <input id="eventHost" name="host" type="text" placeholder="Optional">
+                  <input id="eventHost" name="host" type="text" value="${escapeHtml(String(eventDraft.host || ""))}" placeholder="Optional">
                 </div>
                 <div class="field checkbox-field">
                   <label class="checkbox-row" for="eventReminderEnabled">
-                    <input id="eventReminderEnabled" name="reminderEnabled" type="checkbox" checked>
+                    <input id="eventReminderEnabled" name="reminderEnabled" type="checkbox" ${eventDraft.reminderEnabled === false ? "" : "checked"}>
                     <span>Erinnerungen aktivieren</span>
                   </label>
                   <p class="helper-text">Wird in Hinweisen und im Kalender sichtbar.</p>
                 </div>
                 <div class="field span-all">
                   <label for="eventSummary">Kurzbeschreibung</label>
-                  <textarea id="eventSummary" name="summary" required></textarea>
+                  <textarea id="eventSummary" name="summary" required>${escapeHtml(String(eventDraft.summary || ""))}</textarea>
                 </div>
               </div>
-              <p class="pill-note">Einmalige Events brauchen Datum und Uhrzeit. Wochentermine brauchen Wochentag und Uhrzeit und erscheinen dann jede Woche automatisch im Kalender und in den Hinweisen.</p>
+              <p class="pill-note">${singleEvent ? "Einmalige Events brauchen Datum und Uhrzeit. Deine Eingaben bleiben jetzt auch bei automatischen Updates erhalten." : "Wochentermine brauchen Wochentag und Uhrzeit und tauchen danach jede Woche automatisch im Kalender und in den Hinweisen auf."}</p>
               <button type="submit">Event speichern</button>
             </form>
           `
