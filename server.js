@@ -92,7 +92,9 @@ const DISCORD_MIN_INTERVAL_MS = normalizePositiveInteger(process.env.DISCORD_MIN
 const DISCORD_1015_COOLDOWN_MS = normalizePositiveInteger(process.env.DISCORD_1015_COOLDOWN_MS, 60 * 60 * 1000);
 const DISCORD_AUTO_NOTIFICATIONS_ENABLED = process.env.DISCORD_AUTO_NOTIFICATIONS_ENABLED !== "0";
 const MESSAGE_COOLDOWN_MS = 5000;
+const CREATOR_MIN_FOLLOWERS = normalizePositiveInteger(process.env.CREATOR_MIN_FOLLOWERS, 200);
 const CHAT_TRIM_COUNTS = new Set([20, 30, 40, 50]);
+const AVAILABILITY_DAY_IDS = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 let PortalPoolCtor = null;
 let portalPool = null;
 let portalStoreCache = null;
@@ -185,6 +187,14 @@ async function handleApi(req, res, url) {
       creatorBlurb: normalized.creatorBlurb,
       creatorLinks: normalized.creatorLinks,
       creatorVisible: normalized.creatorVisible,
+      creatorApplicationStatus: normalized.creatorApplicationStatus,
+      creatorFollowerCount: normalized.creatorFollowerCount,
+      creatorPrimaryPlatform: normalized.creatorPrimaryPlatform,
+      creatorProofUrl: normalized.creatorProofUrl,
+      creatorApplicationNote: normalized.creatorApplicationNote,
+      creatorReviewNote: normalized.creatorReviewNote,
+      creatorReviewedAt: normalized.creatorReviewedAt,
+      creatorReviewedBy: normalized.creatorReviewedBy,
       creatorCommunityName: normalized.creatorCommunityName,
       creatorCommunitySummary: normalized.creatorCommunitySummary,
       creatorCommunityInviteUrl: normalized.creatorCommunityInviteUrl,
@@ -195,6 +205,7 @@ async function handleApi(req, res, url) {
       weeklyHoursCapacity: normalized.weeklyHoursCapacity,
       weeklyDaysCapacity: normalized.weeklyDaysCapacity,
       availabilitySchedule: normalized.availabilitySchedule,
+      availabilitySlots: normalized.availabilitySlots,
       availabilityUpdatedAt: normalized.availabilityUpdatedAt,
       passwordHash: normalized.passwordHash
     };
@@ -251,6 +262,86 @@ async function handleApi(req, res, url) {
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "profile-updated" });
     sendPortalData(res, 200, target, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/creator-application") {
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+    const target = nextStore.users.find((entry) => entry.id === auth.user.id);
+
+    if (!target) {
+      sendJson(res, 404, { error: "Profil nicht gefunden." });
+      return;
+    }
+
+    const normalized = validateCreatorApplicationPayload(body);
+    applyCreatorApplication(target, normalized);
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "creator-application-submitted" });
+    sendPortalData(res, 200, target, savedStore);
+    return;
+  }
+
+  const creatorApplicationMatch = url.pathname.match(/^\/api\/admin\/creator-applications\/([^/]+)$/);
+  if (creatorApplicationMatch && req.method === "PATCH") {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const userId = decodeURIComponent(creatorApplicationMatch[1]);
+    const nextStore = structuredClone(auth.store);
+    const target = nextStore.users.find((entry) => entry.id === userId);
+
+    if (!target) {
+      sendJson(res, 404, { error: "Benutzer nicht gefunden." });
+      return;
+    }
+
+    const status = normalizeCreatorApplicationStatus(body.status);
+    const creatorFollowerCount =
+      body.creatorFollowerCount !== undefined ? normalizeCreatorFollowerCount(body.creatorFollowerCount) : normalizeCreatorFollowerCount(target.creatorFollowerCount);
+    const creatorPrimaryPlatform =
+      body.creatorPrimaryPlatform !== undefined ? normalizeCreatorPrimaryPlatform(body.creatorPrimaryPlatform) : normalizeCreatorPrimaryPlatform(target.creatorPrimaryPlatform);
+    const creatorProofUrl = body.creatorProofUrl !== undefined ? normalizeCreatorProofUrl(body.creatorProofUrl) : normalizeCreatorProofUrl(target.creatorProofUrl);
+    const creatorApplicationNote =
+      body.creatorApplicationNote !== undefined ? normalizeCreatorApplicationNote(body.creatorApplicationNote) : normalizeCreatorApplicationNote(target.creatorApplicationNote);
+    const creatorReviewNote =
+      body.creatorReviewNote !== undefined ? normalizeCreatorReviewNote(body.creatorReviewNote) : normalizeCreatorReviewNote(target.creatorReviewNote);
+    const overrideMinimum = normalizeBooleanInput(body.overrideMinimum);
+
+    if ((status === "pending" || status === "approved") && (!creatorPrimaryPlatform || !creatorProofUrl)) {
+      sendJson(res, 400, { error: "Fuer die Creator-Freigabe werden Plattform und ein sichtbarer Nachweis-Link gebraucht." });
+      return;
+    }
+
+    if (status === "pending" && !hasMinimumCreatorFollowers(creatorFollowerCount)) {
+      sendJson(res, 400, { error: `Offene Creator-Bewerbungen brauchen mindestens ${CREATOR_MIN_FOLLOWERS} Follower.` });
+      return;
+    }
+
+    if (status === "approved" && !overrideMinimum && !hasMinimumCreatorFollowers(creatorFollowerCount)) {
+      sendJson(res, 400, { error: `Fuer die Freigabe braucht dieses Profil mindestens ${CREATOR_MIN_FOLLOWERS} Follower oder eine bewusste Ueberschreibung.` });
+      return;
+    }
+
+    target.creatorFollowerCount = creatorFollowerCount;
+    target.creatorPrimaryPlatform = creatorPrimaryPlatform;
+    target.creatorProofUrl = creatorProofUrl;
+    target.creatorApplicationNote = creatorApplicationNote;
+    target.creatorReviewNote = creatorReviewNote;
+    target.creatorApplicationStatus = status;
+    target.creatorReviewedAt = status === "none" ? "" : new Date().toISOString();
+    target.creatorReviewedBy = status === "none" ? "" : auth.user.id;
+
+    if (status === "approved") {
+      target.creatorVisible = Boolean((target.creatorLinks || []).length || target.creatorBlurb);
+    } else if (status === "pending" || status === "rejected" || status === "none") {
+      target.creatorVisible = false;
+    }
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "creator-application-reviewed" });
+    sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
 
@@ -954,9 +1045,25 @@ async function handleApi(req, res, url) {
       creatorBlurb: normalized.creatorBlurb,
       creatorLinks: normalized.creatorLinks,
       creatorVisible: normalized.creatorVisible,
+      creatorApplicationStatus: normalized.creatorApplicationStatus,
+      creatorFollowerCount: normalized.creatorFollowerCount,
+      creatorPrimaryPlatform: normalized.creatorPrimaryPlatform,
+      creatorProofUrl: normalized.creatorProofUrl,
+      creatorApplicationNote: normalized.creatorApplicationNote,
+      creatorReviewNote: normalized.creatorReviewNote,
+      creatorReviewedAt: normalized.creatorReviewedAt,
+      creatorReviewedBy: normalized.creatorReviewedBy,
+      creatorCommunityName: normalized.creatorCommunityName,
+      creatorCommunitySummary: normalized.creatorCommunitySummary,
+      creatorCommunityInviteUrl: normalized.creatorCommunityInviteUrl,
+      creatorPresence: normalized.creatorPresence,
+      creatorPresenceText: normalized.creatorPresenceText,
+      creatorPresenceUrl: normalized.creatorPresenceUrl,
+      creatorPresenceUpdatedAt: normalized.creatorPresenceUpdatedAt,
       weeklyHoursCapacity: normalized.weeklyHoursCapacity,
       weeklyDaysCapacity: normalized.weeklyDaysCapacity,
       availabilitySchedule: normalized.availabilitySchedule,
+      availabilitySlots: normalized.availabilitySlots,
       availabilityUpdatedAt: normalized.availabilityUpdatedAt,
       passwordHash: normalized.passwordHash,
       isBlocked: blockedState.isBlocked,
@@ -1750,7 +1857,7 @@ function buildCommunityPayload(store) {
     .map(sanitizeUser);
 
   const creators = activeUsers
-    .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
+    .filter((entry) => hasVisibleCreatorProfile(entry))
     .slice()
     .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
     .map(sanitizeUser);
@@ -1864,7 +1971,8 @@ function sanitizeUser(user) {
     contactNote: user.contactNote || "",
     creatorBlurb: user.creatorBlurb || "",
     creatorLinks: Array.isArray(user.creatorLinks) ? user.creatorLinks : [],
-    creatorVisible: Boolean(user.creatorVisible)
+    creatorVisible: Boolean(user.creatorVisible),
+    availabilitySlots: normalizeAvailabilitySlots(user.availabilitySlots)
   };
 }
 
@@ -1874,11 +1982,20 @@ function sanitizeManagedUser(user) {
     weeklyHoursCapacity: normalizeWeeklyHoursCapacity(user.weeklyHoursCapacity),
     weeklyDaysCapacity: normalizeWeeklyDaysCapacity(user.weeklyDaysCapacity),
     availabilitySchedule: normalizeAvailabilitySchedule(user.availabilitySchedule),
+    availabilitySlots: normalizeAvailabilitySlots(user.availabilitySlots),
     availabilityUpdatedAt: isIsoDate(user.availabilityUpdatedAt) ? user.availabilityUpdatedAt : "",
     isBlocked: Boolean(user.isBlocked),
     blockReason: user.blockReason || "",
     blockedAt: user.blockedAt || "",
-    blockedBy: user.blockedBy || ""
+    blockedBy: user.blockedBy || "",
+    creatorApplicationStatus: normalizeCreatorApplicationStatus(user.creatorApplicationStatus),
+    creatorFollowerCount: normalizeCreatorFollowerCount(user.creatorFollowerCount),
+    creatorPrimaryPlatform: normalizeCreatorPrimaryPlatform(user.creatorPrimaryPlatform),
+    creatorProofUrl: normalizeCreatorProofUrl(user.creatorProofUrl),
+    creatorApplicationNote: normalizeCreatorApplicationNote(user.creatorApplicationNote),
+    creatorReviewNote: normalizeCreatorReviewNote(user.creatorReviewNote),
+    creatorReviewedAt: isIsoDate(user.creatorReviewedAt) ? user.creatorReviewedAt : "",
+    creatorReviewedBy: user.creatorReviewedBy || ""
   };
 }
 
@@ -1888,7 +2005,15 @@ function sanitizeSessionUser(user) {
     weeklyHoursCapacity: normalizeWeeklyHoursCapacity(user.weeklyHoursCapacity),
     weeklyDaysCapacity: normalizeWeeklyDaysCapacity(user.weeklyDaysCapacity),
     availabilitySchedule: normalizeAvailabilitySchedule(user.availabilitySchedule),
-    availabilityUpdatedAt: isIsoDate(user.availabilityUpdatedAt) ? user.availabilityUpdatedAt : ""
+    availabilitySlots: normalizeAvailabilitySlots(user.availabilitySlots),
+    availabilityUpdatedAt: isIsoDate(user.availabilityUpdatedAt) ? user.availabilityUpdatedAt : "",
+    creatorApplicationStatus: normalizeCreatorApplicationStatus(user.creatorApplicationStatus),
+    creatorFollowerCount: normalizeCreatorFollowerCount(user.creatorFollowerCount),
+    creatorPrimaryPlatform: normalizeCreatorPrimaryPlatform(user.creatorPrimaryPlatform),
+    creatorProofUrl: normalizeCreatorProofUrl(user.creatorProofUrl),
+    creatorApplicationNote: normalizeCreatorApplicationNote(user.creatorApplicationNote),
+    creatorReviewNote: normalizeCreatorReviewNote(user.creatorReviewNote),
+    creatorReviewedAt: isIsoDate(user.creatorReviewedAt) ? user.creatorReviewedAt : ""
   };
 }
 
@@ -2995,6 +3120,7 @@ function buildManagerNotifications(store) {
   const openRequests = store.requests.filter((entry) => entry.status === "offen");
   const todayShifts = store.shifts.filter((entry) => entry.date === today);
   const liveEntries = store.timeEntries.filter((entry) => !entry.checkOutAt);
+  const pendingCreatorApplications = store.users.filter((entry) => normalizeCreatorApplicationStatus(entry.creatorApplicationStatus) === "pending");
   const notifications = [];
 
   if (openRequests.length) {
@@ -3027,6 +3153,17 @@ function buildManagerNotifications(store) {
       tone: "sky",
       createdAt: new Date().toISOString(),
       category: "attendance"
+    });
+  }
+
+  if (pendingCreatorApplications.length) {
+    notifications.push({
+      id: `creator-pending-${pendingCreatorApplications.length}`,
+      title: `${pendingCreatorApplications.length} Creator-Bewerbungen warten`,
+      body: `Pruefe neue Creator-Anfragen ab ${CREATOR_MIN_FOLLOWERS} Followern.`,
+      tone: "amber",
+      createdAt: new Date().toISOString(),
+      category: "creator-review"
     });
   }
 
@@ -3075,13 +3212,48 @@ function normalizeCreatorCommunityInviteUrl(value) {
   return normalizeExternalLink(value);
 }
 
+function normalizeCreatorApplicationStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["pending", "approved", "rejected"].includes(normalized) ? normalized : "none";
+}
+
+function normalizeCreatorFollowerCount(value) {
+  const numeric = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(numeric) || numeric < 0) return 0;
+  return Math.min(numeric, 100000000);
+}
+
+function normalizeCreatorPrimaryPlatform(value) {
+  return String(value || "").trim().slice(0, 40);
+}
+
+function normalizeCreatorProofUrl(value) {
+  return normalizeExternalLink(value);
+}
+
+function normalizeCreatorApplicationNote(value) {
+  return String(value || "").trim().slice(0, 300);
+}
+
+function normalizeCreatorReviewNote(value) {
+  return String(value || "").trim().slice(0, 300);
+}
+
+function hasMinimumCreatorFollowers(value) {
+  return normalizeCreatorFollowerCount(value) >= CREATOR_MIN_FOLLOWERS;
+}
+
 function getCreatorPresenceTimestamp(user) {
   const timestamp = Date.parse(String(user?.creatorPresenceUpdatedAt || ""));
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function hasVisibleCreatorProfile(user) {
-  return Boolean(user?.creatorVisible && ((((user?.creatorLinks || []).length > 0) || user?.creatorBlurb)));
+  return Boolean(
+    normalizeCreatorApplicationStatus(user?.creatorApplicationStatus) === "approved" &&
+      user?.creatorVisible &&
+      (((user?.creatorLinks || []).length > 0) || user?.creatorBlurb)
+  );
 }
 
 function normalizeCreatorCommunityId(value, store, options = {}) {
@@ -3197,6 +3369,44 @@ function validateAdminUserPayload(body, store) {
   const normalized = validateRegistrationPayload(body, store);
   normalized.role = validateRole(body.role);
   return normalized;
+}
+
+function validateCreatorApplicationPayload(body) {
+  const creatorFollowerCount = normalizeCreatorFollowerCount(body.creatorFollowerCount);
+  const creatorPrimaryPlatform = normalizeCreatorPrimaryPlatform(body.creatorPrimaryPlatform);
+  const creatorProofUrl = normalizeCreatorProofUrl(body.creatorProofUrl);
+  const creatorApplicationNote = normalizeCreatorApplicationNote(body.creatorApplicationNote);
+
+  if (!creatorPrimaryPlatform || !creatorProofUrl) {
+    const error = new Error("Bitte Plattform und Nachweis fuer die Creator-Pruefung angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!hasMinimumCreatorFollowers(creatorFollowerCount)) {
+    const error = new Error(`Fuer eine Creator-Bewerbung sind aktuell mindestens ${CREATOR_MIN_FOLLOWERS} Follower noetig.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    creatorFollowerCount,
+    creatorPrimaryPlatform,
+    creatorProofUrl,
+    creatorApplicationNote
+  };
+}
+
+function applyCreatorApplication(target, payload) {
+  target.creatorFollowerCount = payload.creatorFollowerCount;
+  target.creatorPrimaryPlatform = payload.creatorPrimaryPlatform;
+  target.creatorProofUrl = payload.creatorProofUrl;
+  target.creatorApplicationNote = payload.creatorApplicationNote;
+  target.creatorApplicationStatus = "pending";
+  target.creatorReviewNote = "";
+  target.creatorReviewedAt = "";
+  target.creatorReviewedBy = "";
+  target.creatorVisible = false;
 }
 
 function validateShiftPayload(body, store) {
@@ -4027,6 +4237,68 @@ function normalizeAvailabilitySchedule(value) {
     .slice(0, 1200);
 }
 
+function normalizeAvailabilitySlotNote(value) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .trim()
+    .slice(0, 160);
+}
+
+function buildEmptyAvailabilitySlots() {
+  return AVAILABILITY_DAY_IDS.map((day) => ({
+    day,
+    enabled: false,
+    startTime: "",
+    endTime: "",
+    note: ""
+  }));
+}
+
+function normalizeAvailabilitySlots(value) {
+  let source = [];
+  if (Array.isArray(value)) {
+    source = value;
+  } else if (typeof value === "string" && String(value).trim()) {
+    try {
+      const parsed = JSON.parse(String(value));
+      source = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      source = [];
+    }
+  } else if (value && typeof value === "object") {
+    source = Object.entries(value).map(([day, slot]) => ({
+      ...(slot && typeof slot === "object" ? slot : {}),
+      day
+    }));
+  }
+
+  const byDay = new Map(
+    source
+      .map((entry) => [String(entry?.day || "").trim().toLowerCase(), entry])
+      .filter(([day]) => AVAILABILITY_DAY_IDS.includes(day))
+  );
+
+  return buildEmptyAvailabilitySlots().map((slot) => {
+    const raw = byDay.get(slot.day) || {};
+    const startTime = normalizeTimeValue(raw.startTime);
+    const endTime = normalizeTimeValue(raw.endTime);
+    const note = normalizeAvailabilitySlotNote(raw.note);
+    const enabled = Boolean(raw.enabled || startTime || endTime || note);
+
+    return {
+      day: slot.day,
+      enabled,
+      startTime,
+      endTime,
+      note
+    };
+  });
+}
+
+function hasAvailabilitySlots(value) {
+  return normalizeAvailabilitySlots(value).some((slot) => slot.enabled && (slot.startTime || slot.endTime || slot.note));
+}
+
 function normalizePositiveInteger(value, fallback) {
   const numeric = Number.parseInt(String(value || ""), 10);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
@@ -4634,10 +4906,27 @@ function normalizeUsers(users, legacyModeratorNames) {
     const contactNote = String(entry.contactNote || "").trim().slice(0, 600);
     const creatorBlurb = String(entry.creatorBlurb || "").trim().slice(0, 300);
     const creatorLinks = normalizeCreatorLinks(entry.creatorLinks);
-    const creatorVisible = Boolean(entry.creatorVisible && (creatorLinks.length || creatorBlurb));
+    const hasLegacyCreatorApproval =
+      entry?.creatorApplicationStatus === undefined &&
+      entry?.creatorFollowerCount === undefined &&
+      entry?.creatorPrimaryPlatform === undefined &&
+      entry?.creatorProofUrl === undefined &&
+      entry?.creatorReviewNote === undefined &&
+      entry?.creatorApplicationNote === undefined;
+    const creatorApplicationStatus = normalizeCreatorApplicationStatus(
+      hasLegacyCreatorApproval && entry.creatorVisible && (creatorLinks.length || creatorBlurb) ? "approved" : entry.creatorApplicationStatus
+    );
+    const creatorVisible = Boolean(creatorApplicationStatus === "approved" && entry.creatorVisible && (creatorLinks.length || creatorBlurb));
     const creatorCommunityName = normalizeCreatorCommunityName(entry.creatorCommunityName);
     const creatorCommunitySummary = normalizeCreatorCommunitySummary(entry.creatorCommunitySummary);
     const creatorCommunityInviteUrl = normalizeCreatorCommunityInviteUrl(entry.creatorCommunityInviteUrl);
+    const creatorFollowerCount = normalizeCreatorFollowerCount(entry.creatorFollowerCount);
+    const creatorPrimaryPlatform = normalizeCreatorPrimaryPlatform(entry.creatorPrimaryPlatform);
+    const creatorProofUrl = normalizeCreatorProofUrl(entry.creatorProofUrl);
+    const creatorApplicationNote = normalizeCreatorApplicationNote(entry.creatorApplicationNote);
+    const creatorReviewNote = normalizeCreatorReviewNote(entry.creatorReviewNote);
+    const creatorReviewedAt = isIsoDate(entry.creatorReviewedAt) ? entry.creatorReviewedAt : "";
+    const creatorReviewedBy = String(entry.creatorReviewedBy || "").trim();
     const creatorPresence = normalizeCreatorPresence(entry.creatorPresence);
     const creatorPresenceText = normalizeCreatorPresenceText(entry.creatorPresenceText);
     const creatorPresenceUrl = normalizeCreatorPresenceUrl(entry.creatorPresenceUrl);
@@ -4645,6 +4934,7 @@ function normalizeUsers(users, legacyModeratorNames) {
     const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(entry.weeklyHoursCapacity);
     const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(entry.weeklyDaysCapacity);
     const availabilitySchedule = normalizeAvailabilitySchedule(entry.availabilitySchedule);
+    const availabilitySlots = normalizeAvailabilitySlots(entry.availabilitySlots);
     const availabilityUpdatedAt = isIsoDate(entry.availabilityUpdatedAt) ? entry.availabilityUpdatedAt : "";
     const isBlocked = Boolean(entry.isBlocked);
     const blockReason = String(entry.blockReason || "").trim().slice(0, 500);
@@ -4670,6 +4960,14 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorBlurb,
       creatorLinks,
       creatorVisible,
+      creatorApplicationStatus,
+      creatorFollowerCount,
+      creatorPrimaryPlatform,
+      creatorProofUrl,
+      creatorApplicationNote,
+      creatorReviewNote,
+      creatorReviewedAt,
+      creatorReviewedBy,
       creatorCommunityName,
       creatorCommunitySummary,
       creatorCommunityInviteUrl,
@@ -4680,6 +4978,7 @@ function normalizeUsers(users, legacyModeratorNames) {
       weeklyHoursCapacity,
       weeklyDaysCapacity,
       availabilitySchedule,
+      availabilitySlots,
       availabilityUpdatedAt,
       isBlocked,
       blockReason,
@@ -4710,6 +5009,14 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorBlurb: "",
       creatorLinks: [],
       creatorVisible: false,
+      creatorApplicationStatus: "none",
+      creatorFollowerCount: 0,
+      creatorPrimaryPlatform: "",
+      creatorProofUrl: "",
+      creatorApplicationNote: "",
+      creatorReviewNote: "",
+      creatorReviewedAt: "",
+      creatorReviewedBy: "",
       creatorCommunityName: "",
       creatorCommunitySummary: "",
       creatorCommunityInviteUrl: "",
@@ -4720,6 +5027,7 @@ function normalizeUsers(users, legacyModeratorNames) {
       weeklyHoursCapacity: 0,
       weeklyDaysCapacity: 0,
       availabilitySchedule: "",
+      availabilitySlots: buildEmptyAvailabilitySlots(),
       availabilityUpdatedAt: "",
       isBlocked: false,
       blockReason: "",
@@ -4798,6 +5106,14 @@ function validateRegistrationPayload(body, store) {
   const creatorCommunityName = normalizeCreatorCommunityName(body.creatorCommunityName);
   const creatorCommunitySummary = normalizeCreatorCommunitySummary(body.creatorCommunitySummary);
   const creatorCommunityInviteUrl = normalizeCreatorCommunityInviteUrl(body.creatorCommunityInviteUrl);
+  const creatorApplicationStatus = normalizeCreatorApplicationStatus(body.creatorApplicationStatus);
+  const creatorFollowerCount = normalizeCreatorFollowerCount(body.creatorFollowerCount);
+  const creatorPrimaryPlatform = normalizeCreatorPrimaryPlatform(body.creatorPrimaryPlatform);
+  const creatorProofUrl = normalizeCreatorProofUrl(body.creatorProofUrl);
+  const creatorApplicationNote = normalizeCreatorApplicationNote(body.creatorApplicationNote);
+  const creatorReviewNote = normalizeCreatorReviewNote(body.creatorReviewNote);
+  const creatorReviewedAt = isIsoDate(body.creatorReviewedAt) ? body.creatorReviewedAt : "";
+  const creatorReviewedBy = String(body.creatorReviewedBy || "").trim();
   const creatorPresence = normalizeCreatorPresence(body.creatorPresence);
   const creatorPresenceText = normalizeCreatorPresenceText(body.creatorPresenceText);
   const creatorPresenceUrl = normalizeCreatorPresenceUrl(body.creatorPresenceUrl);
@@ -4806,7 +5122,9 @@ function validateRegistrationPayload(body, store) {
   const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(body.weeklyHoursCapacity);
   const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(body.weeklyDaysCapacity);
   const availabilitySchedule = normalizeAvailabilitySchedule(body.availabilitySchedule);
-  const availabilityUpdatedAt = availabilitySchedule || weeklyHoursCapacity || weeklyDaysCapacity ? new Date().toISOString() : "";
+  const availabilitySlots = normalizeAvailabilitySlots(body.availabilitySlots);
+  const availabilityUpdatedAt =
+    availabilitySchedule || weeklyHoursCapacity || weeklyDaysCapacity || hasAvailabilitySlots(availabilitySlots) ? new Date().toISOString() : "";
 
   if (!password || !vrchatName || !discordName) {
     const error = new Error("Bitte VRChat-Name, Discord-Name und Passwort ausfuellen.");
@@ -4834,6 +5152,14 @@ function validateRegistrationPayload(body, store) {
     creatorBlurb,
     creatorLinks,
     creatorVisible,
+    creatorApplicationStatus,
+    creatorFollowerCount,
+    creatorPrimaryPlatform,
+    creatorProofUrl,
+    creatorApplicationNote,
+    creatorReviewNote,
+    creatorReviewedAt,
+    creatorReviewedBy,
     creatorCommunityName,
     creatorCommunitySummary,
     creatorCommunityInviteUrl,
@@ -4844,6 +5170,7 @@ function validateRegistrationPayload(body, store) {
     weeklyHoursCapacity,
     weeklyDaysCapacity,
     availabilitySchedule,
+    availabilitySlots,
     availabilityUpdatedAt
   };
 }
@@ -4878,16 +5205,20 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   const currentWeeklyHoursCapacity = normalizeWeeklyHoursCapacity(target.weeklyHoursCapacity);
   const currentWeeklyDaysCapacity = normalizeWeeklyDaysCapacity(target.weeklyDaysCapacity);
   const currentAvailabilitySchedule = normalizeAvailabilitySchedule(target.availabilitySchedule);
+  const currentAvailabilitySlots = normalizeAvailabilitySlots(target.availabilitySlots);
   const nextWeeklyHoursCapacity =
     body.weeklyHoursCapacity !== undefined ? normalizeWeeklyHoursCapacity(body.weeklyHoursCapacity) : currentWeeklyHoursCapacity;
   const nextWeeklyDaysCapacity =
     body.weeklyDaysCapacity !== undefined ? normalizeWeeklyDaysCapacity(body.weeklyDaysCapacity) : currentWeeklyDaysCapacity;
   const nextAvailabilitySchedule =
     body.availabilitySchedule !== undefined ? normalizeAvailabilitySchedule(body.availabilitySchedule) : currentAvailabilitySchedule;
+  const nextAvailabilitySlots =
+    body.availabilitySlots !== undefined ? normalizeAvailabilitySlots(body.availabilitySlots) : currentAvailabilitySlots;
+  const creatorApproved = normalizeCreatorApplicationStatus(target.creatorApplicationStatus) === "approved";
   const nextCreatorVisible =
-    body.creatorVisible !== undefined
+    creatorApproved && body.creatorVisible !== undefined
       ? Boolean(body.creatorVisible && (nextCreatorLinks.length || nextCreatorBlurb))
-      : Boolean(target.creatorVisible && (nextCreatorLinks.length || nextCreatorBlurb));
+      : Boolean(creatorApproved && target.creatorVisible && (nextCreatorLinks.length || nextCreatorBlurb));
 
   if (!nextVrchatName) {
     const error = new Error("Der VRChat-Name darf nicht leer sein.");
@@ -4948,6 +5279,7 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   target.weeklyHoursCapacity = nextWeeklyHoursCapacity;
   target.weeklyDaysCapacity = nextWeeklyDaysCapacity;
   target.availabilitySchedule = nextAvailabilitySchedule;
+  target.availabilitySlots = nextAvailabilitySlots;
   if (
     nextCreatorPresence !== currentCreatorPresence ||
     nextCreatorPresenceText !== currentCreatorPresenceText ||
@@ -4959,10 +5291,13 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   if (
     nextWeeklyHoursCapacity !== currentWeeklyHoursCapacity ||
     nextWeeklyDaysCapacity !== currentWeeklyDaysCapacity ||
-    nextAvailabilitySchedule !== currentAvailabilitySchedule
+    nextAvailabilitySchedule !== currentAvailabilitySchedule ||
+    JSON.stringify(nextAvailabilitySlots) !== JSON.stringify(currentAvailabilitySlots)
   ) {
     target.availabilityUpdatedAt =
-      nextAvailabilitySchedule || nextWeeklyHoursCapacity || nextWeeklyDaysCapacity ? new Date().toISOString() : "";
+      nextAvailabilitySchedule || nextWeeklyHoursCapacity || nextWeeklyDaysCapacity || hasAvailabilitySlots(nextAvailabilitySlots)
+        ? new Date().toISOString()
+        : "";
   }
 }
 

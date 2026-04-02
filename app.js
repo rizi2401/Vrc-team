@@ -27,8 +27,18 @@ const SHIFT_WINDOW_PRESETS = [
   { value: "02:00|06:00", label: "Zwischenschicht 02:00 - 06:00" },
   { value: "06:00|10:00", label: "Zwischenschicht 06:00 - 10:00" }
 ];
+const AVAILABILITY_DAYS = [
+  { id: "mo", shortLabel: "Mo", fullLabel: "Montag" },
+  { id: "di", shortLabel: "Di", fullLabel: "Dienstag" },
+  { id: "mi", shortLabel: "Mi", fullLabel: "Mittwoch" },
+  { id: "do", shortLabel: "Do", fullLabel: "Donnerstag" },
+  { id: "fr", shortLabel: "Fr", fullLabel: "Freitag" },
+  { id: "sa", shortLabel: "Sa", fullLabel: "Samstag" },
+  { id: "so", shortLabel: "So", fullLabel: "Sonntag" }
+];
 const CHAT_TRIM_OPTIONS = [20, 30, 40, 50];
 const SONARA_ART_PATH = "/sonara-crest.png";
+const CREATOR_MIN_FOLLOWERS = 200;
 let portalRefreshTimer = 0;
 const pendingSubmitForms = new WeakSet();
 
@@ -53,7 +63,8 @@ const state = {
     pendingPortalRefresh: false,
     pendingRender: false,
     formEditingUntil: 0,
-    lastActionSucceeded: false
+    lastActionSucceeded: false,
+    selectedCreatorId: ""
   }
 };
 
@@ -527,6 +538,10 @@ function applyPayload(payload) {
   state.session = payload?.session || null;
   state.data = payload?.data || null;
   state.ui.activeTab = normalizeActiveTab(state.ui.activeTab);
+  const creatorIds = new Set((state.data?.community?.creators || []).map((entry) => entry.id));
+  if (state.ui.selectedCreatorId && !creatorIds.has(state.ui.selectedCreatorId)) {
+    state.ui.selectedCreatorId = state.data?.community?.creators?.[0]?.id || "";
+  }
   if (!canManagePortal()) {
     state.vrchatOverview = null;
     state.vrchatLoading = false;
@@ -2051,7 +2066,7 @@ function renderCapacityPanel() {
   const totalPlannedHours = rows.reduce((sum, entry) => sum + entry.plannedHours, 0);
   const totalCapacityHours = rows.reduce((sum, entry) => sum + entry.capacityHours, 0);
   const openHours = rows.reduce((sum, entry) => sum + Math.max(0, entry.capacityHours - entry.plannedHours), 0);
-  const missingRows = rows.filter((entry) => !entry.capacityHours && !entry.capacityDays && !entry.availabilitySchedule);
+  const missingRows = rows.filter((entry) => !entry.capacityHours && !entry.capacityDays && !entry.availabilitySchedule && !entry.hasAvailabilitySlots);
   const missingNames = missingRows.map((entry) => getPrimaryDisplayName(entry.user));
 
   return `
@@ -2108,15 +2123,16 @@ function renderCapacityCard(entry) {
       <p><strong>Heute:</strong> ${escapeHtml(formatHoursValue(entry.todayWorkedHours || 0))}</p>
       <p><strong>Geplant:</strong> ${escapeHtml(formatHoursValue(entry.plannedHours))} an ${escapeHtml(formatCapacityDays(entry.plannedDays))}</p>
       <p><strong>Verfuegbar:</strong> ${escapeHtml(formatCapacityHours(entry.capacityHours))} / ${escapeHtml(formatCapacityDays(entry.capacityDays))}</p>
+      ${renderAvailabilitySlotList(entry.availabilitySlots, "Noch keine festen Wochenslots eingetragen.")}
       ${
         entry.availabilitySchedule
-          ? `<p><strong>Zeitfenster:</strong> ${escapeHtml(entry.availabilitySchedule)}</p>`
-          : '<p class="helper-text">Noch kein konkretes Zeitfenster fuer diese Woche eingetragen.</p>'
+          ? `<p><strong>Hinweise:</strong> ${escapeHtml(entry.availabilitySchedule)}</p>`
+          : ""
       }
       ${entry.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(entry.availabilityUpdatedAt))}</p>` : ""}
       ${
         plannedDelta === null && dayDelta === null
-          ? entry.availabilitySchedule
+          ? entry.availabilitySchedule || entry.hasAvailabilitySlots
             ? '<p class="helper-text">Zeitfenster ist eingetragen, aber noch ohne Stunden- oder Tagesrahmen.</p>'
             : '<p class="helper-text">Diese Person hat noch keine Wochen-Kapazitaet im Profil hinterlegt.</p>'
           : `<p class="helper-text">${escapeHtml(buildCapacityDeltaText(plannedDelta, dayDelta))}</p>`
@@ -2130,6 +2146,9 @@ function renderAvailabilityReminderPanel() {
   if (!user || user.role === "member") return "";
 
   const hasAvailability = Boolean(user.availabilitySchedule || Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0));
+  const availabilitySlots = getAvailabilitySlots(user);
+  const hasStructuredAvailability = hasAvailabilitySlots(availabilitySlots);
+  const hasAnyAvailability = Boolean(hasAvailability || hasStructuredAvailability);
   const updatedLabel = user.availabilityUpdatedAt ? formatDateTime(user.availabilityUpdatedAt) : "";
 
   return `
@@ -2143,7 +2162,7 @@ function renderAvailabilityReminderPanel() {
         <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Zum Profil</button>
       </div>
 
-      <p class="pill-note">${escapeHtml(hasAvailability ? "Deine Verfuegbarkeit ist schon hinterlegt. Passe sie hier an, sobald sich fuer die kommende Woche etwas aendert." : "Aktuell fehlt deine Verfuegbarkeit noch. Bitte trage sie direkt hier ein, damit die Leitung dich sinnvoll einplanen kann.")}</p>
+      <p class="pill-note">${escapeHtml(hasAnyAvailability ? "Deine Verfuegbarkeit ist schon hinterlegt. Passe sie hier an, sobald sich fuer die kommende Woche etwas aendert." : "Aktuell fehlt deine Verfuegbarkeit noch. Bitte trage sie direkt hier ein, damit die Leitung dich sinnvoll einplanen kann.")}</p>
 
       <form class="stack-form" data-form="availability-update">
         <div class="availability-form-shell">
@@ -2151,9 +2170,9 @@ function renderAvailabilityReminderPanel() {
             <div>
               <p class="eyebrow">Staff-Planung</p>
               <h3>Dein Wochenrahmen</h3>
-              <p class="helper-text">Beispiel fuer Zeitfenster: Mo 18:00-22:00, Mi 20:00-00:00, Sa flexibel ab 16:00.</p>
+              <p class="helper-text">Trage deine Woche direkt pro Tag ein. Zusatztipps oder Sonderfaelle kannst du darunter noch als Freitext notieren.</p>
             </div>
-            <span class="pill ${hasAvailability ? "success" : "rose"}">${escapeHtml(hasAvailability ? "Eingetragen" : "Bitte ausfuellen")}</span>
+            <span class="pill ${hasAnyAvailability ? "success" : "rose"}">${escapeHtml(hasAnyAvailability ? "Eingetragen" : "Bitte ausfuellen")}</span>
           </div>
           <div class="availability-form-grid">
             <div class="field">
@@ -2165,9 +2184,14 @@ function renderAvailabilityReminderPanel() {
               <input id="dashboardWeeklyDaysCapacity" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}" placeholder="z. B. 3">
             </div>
             <div class="field span-all">
-              <label for="dashboardAvailabilitySchedule">Zeitfenster fuer diese Woche</label>
-              <textarea id="dashboardAvailabilitySchedule" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
-              <p class="helper-text">Wichtig ist, wann du wirklich kannst. Nur mit konkreten Zeiten wird die Auslastung fuer die Leitung brauchbar.</p>
+              <label>Wochen-Slots</label>
+              ${renderAvailabilitySlotsEditor(availabilitySlots, "dashboard-availability")}
+              <p class="helper-text">Das ist die eigentliche Verfuegbarkeit fuer die Leitung. So sieht man sauber pro Tag, wann du wirklich kannst.</p>
+            </div>
+            <div class="field span-all">
+              <label for="dashboardAvailabilitySchedule">Zusatzhinweise fuer diese Woche</label>
+              <textarea id="dashboardAvailabilitySchedule" name="availabilitySchedule" placeholder="z. B. Mittwoch eventuell spaeter, Samstag nur spontan oder Sonntag nur fuer kurze Absprachen.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+              <p class="helper-text">Hier kommen nur noch Sonderfaelle, Erlaeuterungen oder flexible Hinweise rein.</p>
             </div>
           </div>
         </div>
@@ -4248,6 +4272,16 @@ async function handleClick(event) {
       render();
       break;
 
+    case "set-creator-focus":
+      state.ui.selectedCreatorId = actionElement.dataset.creatorId || "";
+      render();
+      break;
+
+    case "clear-creator-focus":
+      state.ui.selectedCreatorId = "";
+      render();
+      break;
+
     case "enable-browser-notifications":
       await requestBrowserNotificationPermission();
       render();
@@ -4592,11 +4626,13 @@ function renderExpandableTextBlock(title, value) {
   `;
 }
 
-function renderCreatorCard(user) {
+function renderCreatorCard(user, options = {}) {
+  const { interactive = false, selected = false } = options;
   const creatorLinks = renderCreatorLinkList(user, true);
   const presence = getCreatorPresenceMeta(user);
+  const community = getCreatorCommunityMeta(user);
   return `
-    <article class="team-card creator-card">
+    <article class="team-card creator-card ${selected ? "creator-card-active" : ""}">
       <div class="status-row">
         <span class="pill ${presence.tone}">${escapeHtml(presence.title)}</span>
         ${presence.updatedLabel ? `<span class="timeline-meta">${escapeHtml(presence.updatedLabel)}</span>` : ""}
@@ -4604,12 +4640,12 @@ function renderCreatorCard(user) {
       <div class="profile-head">
         ${renderUserAvatar(user, "profile-avatar")}
         <div class="creator-card-copy">
-          <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
-          <p class="timeline-meta">${escapeHtml(user.creatorBlurb || user.contactNote || "Creator-Profil")}</p>
+          <h3>${escapeHtml(community.name)}</h3>
+          <p class="timeline-meta">${escapeHtml(getPrimaryDisplayName(user))}</p>
         </div>
       </div>
       <div class="creator-presence-copy">
-        <p class="helper-text">${escapeHtml(presence.summary)}</p>
+        <p class="helper-text">${escapeHtml(truncateText(community.summary, 150))}</p>
         ${
           presence.actionUrl
             ? `<a class="creator-action-link" href="${escapeHtml(presence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(presence.actionLabel)}</a>`
@@ -4622,6 +4658,17 @@ function renderCreatorCard(user) {
             <div class="creator-card-links">
               <p class="creator-links-label">Plattformen</p>
               ${creatorLinks}
+            </div>
+          `
+          : ""
+      }
+      ${
+        interactive
+          ? `
+            <div class="card-actions">
+              <button type="button" class="ghost small" data-action="set-creator-focus" data-creator-id="${escapeHtml(user.id)}">
+                ${selected ? "Gerade im Fokus" : "Creator-Hub oeffnen"}
+              </button>
             </div>
           `
           : ""
@@ -4886,6 +4933,7 @@ function renderForumPanel(managerView) {
 function renderTeamPanelV2() {
   const users = state.data?.users || [];
   const createDraftKey = "admin-user-create:";
+  const pendingCreatorEntries = getCreatorReviewEntries(["pending"]);
 
   return `
     <section class="panel span-12">
@@ -4924,7 +4972,7 @@ function renderTeamPanelV2() {
                   <input id="newPassword" name="password" type="password" required>
                 </div>
                 <div class="field">
-                  <label for="newCreatorVisible">Im Creator-Bereich zeigen</label>
+                  <label for="newCreatorVisible">Nach Freigabe im Creator-Bereich zeigen</label>
                   <input id="newCreatorVisible" name="creatorVisible" type="checkbox">
                 </div>
                 <div class="field span-all">
@@ -4950,20 +4998,33 @@ function renderTeamPanelV2() {
           : ""
       }
 
+      ${
+        pendingCreatorEntries.length
+          ? `
+            <div class="creator-review-grid">
+              ${pendingCreatorEntries.map((user) => renderCreatorReviewCard(user, "team-queue")).join("")}
+            </div>
+          `
+          : ""
+      }
+
       <div class="wide-team-grid">
         ${users
           .map((user) => {
             const updateDraftKey = `user-update:${user.id}`;
             const shiftCount = (state.data?.shifts || []).filter((entry) => entry.memberId === user.id).length;
             const requestCount = (state.data?.requests || []).filter((entry) => entry.userId === user.id && entry.status !== "beruecksichtigt").length;
+            const creatorApplication = getCreatorApplicationMeta(user);
+            const availabilitySlots = getAvailabilitySlots(user);
             const compactBio = truncateText(user.bio, 140);
             const compactContact = truncateText(user.contactNote, 140);
             const availabilitySummary =
-              user.role !== "member" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0) || user.availabilitySchedule)
+              user.role !== "member" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0) || user.availabilitySchedule || hasAvailabilitySlots(availabilitySlots))
                 ? `
                   <div class="team-user-availability">
                     ${(Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
-                    ${user.availabilitySchedule ? `<p class="helper-text"><strong>Diese Woche:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
+                    ${renderAvailabilitySlotList(availabilitySlots, "")}
+                    ${user.availabilitySchedule ? `<p class="helper-text"><strong>Hinweise:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
                   </div>
                 `
                 : "";
@@ -5000,6 +5061,7 @@ function renderTeamPanelV2() {
                   <div class="chip-list">
                     <span class="pill ${user.role === "admin" ? "amber" : user.role === "planner" ? "sky" : user.role === "moderator" ? "teal" : "neutral"}">${escapeHtml(ROLE_LABELS[user.role])}</span>
                     ${user.isBlocked ? '<span class="pill rose">Gesperrt</span>' : '<span class="pill success">Aktiv</span>'}
+                    <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
                   </div>
                   <span class="timeline-meta">${escapeHtml(String(shiftCount))} Schichten | ${escapeHtml(String(requestCount))} offen</span>
                 </div>
@@ -5015,6 +5077,19 @@ function renderTeamPanelV2() {
                   </div>
                 </div>
                 ${profileDetails}
+
+                ${
+                  creatorApplication.status !== "none" || user.creatorVisible
+                    ? `
+                      <details class="mystic-expander editor-expander">
+                        <summary>Creator-Pruefung ansehen</summary>
+                        <div class="mystic-expander-body">
+                          ${renderCreatorReviewCard(user, "team-card")}
+                        </div>
+                      </details>
+                    `
+                    : ""
+                }
 
                 <details class="mystic-expander editor-expander">
                   <summary>Account bearbeiten</summary>
@@ -5043,7 +5118,7 @@ function renderTeamPanelV2() {
                           <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen = behalten">
                         </div>
                         <div class="field">
-                          <label for="creatorVisible-${escapeHtml(user.id)}">Im Creator-Bereich zeigen</label>
+                          <label for="creatorVisible-${escapeHtml(user.id)}">Nach Freigabe im Creator-Bereich zeigen</label>
                           <input id="creatorVisible-${escapeHtml(user.id)}" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
                         </div>
                         <div class="field">
@@ -5078,9 +5153,13 @@ function renderTeamPanelV2() {
                                     <input id="weeklyDays-${escapeHtml(user.id)}" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
                                   </div>
                                   <div class="field span-all">
-                                    <label for="availability-${escapeHtml(user.id)}">Zeitfenster fuer diese Woche</label>
-                                    <textarea id="availability-${escapeHtml(user.id)}" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+                                    <label>Wochen-Slots</label>
+                                    ${renderAvailabilitySlotsEditor(availabilitySlots, `team-availability-${user.id}`)}
                                     <p class="helper-text">Bitte bis Samstag eintragen. Die Eingaben bleiben auch bei Live-Updates stabil bestehen.</p>
+                                  </div>
+                                  <div class="field span-all">
+                                    <label for="availability-${escapeHtml(user.id)}">Zusatzhinweise fuer diese Woche</label>
+                                    <textarea id="availability-${escapeHtml(user.id)}" name="availabilitySchedule" placeholder="z. B. Freitag spaeter oder Sonntag nur spontan.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
                                   </div>
                                 </div>
                               </div>
@@ -5442,13 +5521,15 @@ function buildCapacityRows() {
       const capacityHours = Number(user.weeklyHoursCapacity || 0);
       const capacityDays = Number(user.weeklyDaysCapacity || 0);
       const availabilitySchedule = String(user.availabilitySchedule || "").trim();
+      const availabilitySlots = getAvailabilitySlots(user);
+      const hasAvailabilitySlotData = hasAvailabilitySlots(availabilitySlots);
       const availabilityUpdatedAt = String(user.availabilityUpdatedAt || "").trim();
       const overHours = capacityHours > 0 && plannedHours > capacityHours;
       const overDays = capacityDays > 0 && plannedDays > capacityDays;
       const fullyPlanned =
         (capacityHours > 0 && plannedHours >= capacityHours) ||
         (capacityDays > 0 && plannedDays >= capacityDays);
-      const hasAvailability = Boolean(availabilitySchedule || capacityHours || capacityDays);
+      const hasAvailability = Boolean(availabilitySchedule || hasAvailabilitySlotData || capacityHours || capacityDays);
 
       let statusLabel = "Noch offen";
       let statusTone = "amber";
@@ -5473,6 +5554,8 @@ function buildCapacityRows() {
         capacityHours,
         capacityDays,
         availabilitySchedule,
+        availabilitySlots,
+        hasAvailabilitySlots: hasAvailabilitySlotData,
         availabilityUpdatedAt,
         statusLabel,
         statusTone
@@ -6234,7 +6317,8 @@ async function handleSubmit(event) {
             method: "POST",
             body: JSON.stringify({
               content: formData.get("content"),
-              imageUrl: imageUrl || ""
+              imageUrl: imageUrl || "",
+              creatorCommunityId: formData.get("creatorCommunityId")
             })
           }),
         "Beitrag wurde im Feed veroeffentlicht."
@@ -6349,6 +6433,46 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "creator-application": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/creator-application", {
+            method: "POST",
+            body: JSON.stringify({
+              creatorPrimaryPlatform: formData.get("creatorPrimaryPlatform"),
+              creatorFollowerCount: formData.get("creatorFollowerCount"),
+              creatorProofUrl: formData.get("creatorProofUrl"),
+              creatorApplicationNote: formData.get("creatorApplicationNote")
+            })
+          }),
+        "Creator-Bewerbung wurde eingereicht."
+      );
+      break;
+    }
+
+    case "creator-review": {
+      const userId = form.dataset.userId;
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api(`/api/admin/creator-applications/${encodeURIComponent(userId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              status: formData.get("status"),
+              creatorPrimaryPlatform: formData.get("creatorPrimaryPlatform"),
+              creatorFollowerCount: formData.get("creatorFollowerCount"),
+              creatorProofUrl: formData.get("creatorProofUrl"),
+              creatorApplicationNote: formData.get("creatorApplicationNote"),
+              creatorReviewNote: formData.get("creatorReviewNote"),
+              overrideMinimum: formData.get("overrideMinimum") === "on"
+            })
+          }),
+        "Creator-Freigabe wurde aktualisiert."
+      );
+      break;
+    }
+
     case "swap-decision": {
       const formData = new FormData(form);
       const swapRequestId = form.dataset.swapRequestId;
@@ -6385,6 +6509,12 @@ async function handleSubmit(event) {
               creatorBlurb: payload.creatorBlurb,
               creatorLinks: payload.creatorLinks,
               creatorVisible: payload.creatorVisible,
+              creatorCommunityName: payload.creatorCommunityName,
+              creatorCommunitySummary: payload.creatorCommunitySummary,
+              creatorCommunityInviteUrl: payload.creatorCommunityInviteUrl,
+              creatorPresence: payload.creatorPresence,
+              creatorPresenceText: payload.creatorPresenceText,
+              creatorPresenceUrl: payload.creatorPresenceUrl,
               password: formData.get("password"),
               role: formData.get("role")
             })
@@ -7457,6 +7587,7 @@ async function buildProfilePayload(form) {
     weeklyHoursCapacity: formData.get("weeklyHoursCapacity"),
     weeklyDaysCapacity: formData.get("weeklyDaysCapacity"),
     availabilitySchedule: formData.get("availabilitySchedule"),
+    availabilitySlots: readAvailabilitySlotsFromForm(form),
     creatorBlurb: formData.get("creatorBlurb"),
     creatorLinks: formData.get("creatorLinks"),
     creatorVisible: formData.get("creatorVisible") === "on",
@@ -7485,9 +7616,132 @@ function buildAvailabilityPayload(form) {
     payload: {
       weeklyHoursCapacity: formData.get("weeklyHoursCapacity"),
       weeklyDaysCapacity: formData.get("weeklyDaysCapacity"),
-      availabilitySchedule: formData.get("availabilitySchedule")
+      availabilitySchedule: formData.get("availabilitySchedule"),
+      availabilitySlots: readAvailabilitySlotsFromForm(form)
     }
   };
+}
+
+function getEmptyAvailabilitySlots() {
+  return AVAILABILITY_DAYS.map((day) => ({
+    day: day.id,
+    enabled: false,
+    startTime: "",
+    endTime: "",
+    note: ""
+  }));
+}
+
+function normalizeClientAvailabilitySlots(value) {
+  let source = [];
+  if (Array.isArray(value)) {
+    source = value;
+  } else if (value && typeof value === "object") {
+    source = Object.values(value);
+  }
+
+  const byDay = new Map(
+    source
+      .map((entry) => [String(entry?.day || "").trim().toLowerCase(), entry])
+      .filter(([day]) => AVAILABILITY_DAYS.some((entry) => entry.id === day))
+  );
+
+  return getEmptyAvailabilitySlots().map((slot) => {
+    const raw = byDay.get(slot.day) || {};
+    const startTime = normalizeTimeValue(raw.startTime);
+    const endTime = normalizeTimeValue(raw.endTime);
+    const note = String(raw.note || "").trim().slice(0, 160);
+    const enabled = Boolean(raw.enabled || startTime || endTime || note);
+    return {
+      day: slot.day,
+      enabled,
+      startTime,
+      endTime,
+      note
+    };
+  });
+}
+
+function getAvailabilitySlots(user) {
+  return normalizeClientAvailabilitySlots(user?.availabilitySlots);
+}
+
+function readAvailabilitySlotsFromForm(form) {
+  return AVAILABILITY_DAYS.map((day) => ({
+    day: day.id,
+    enabled: form.querySelector(`[name="availability-${day.id}-enabled"]`)?.checked || false,
+    startTime: normalizeTimeValue(form.querySelector(`[name="availability-${day.id}-start"]`)?.value || ""),
+    endTime: normalizeTimeValue(form.querySelector(`[name="availability-${day.id}-end"]`)?.value || ""),
+    note: String(form.querySelector(`[name="availability-${day.id}-note"]`)?.value || "").trim().slice(0, 160)
+  }));
+}
+
+function hasAvailabilitySlots(slots) {
+  return normalizeClientAvailabilitySlots(slots).some((slot) => slot.enabled && (slot.startTime || slot.endTime || slot.note));
+}
+
+function formatAvailabilitySlotValue(slot) {
+  const parts = [];
+  if (slot.startTime || slot.endTime) {
+    parts.push([slot.startTime || "--:--", slot.endTime || "--:--"].join(" - "));
+  }
+  if (slot.note) parts.push(slot.note);
+  return parts.join(" | ");
+}
+
+function renderAvailabilitySlotList(slots, emptyText = "Noch keine Zeitfenster eingetragen.") {
+  const activeSlots = normalizeClientAvailabilitySlots(slots).filter((slot) => slot.enabled && (slot.startTime || slot.endTime || slot.note));
+  if (!activeSlots.length) return emptyText ? `<p class="helper-text">${escapeHtml(emptyText)}</p>` : "";
+
+  return `
+    <div class="availability-slot-list">
+      ${activeSlots
+        .map((slot) => {
+          const day = AVAILABILITY_DAYS.find((entry) => entry.id === slot.day);
+          return `
+            <div class="availability-slot-pill">
+              <span class="availability-slot-day">${escapeHtml(day?.shortLabel || slot.day)}</span>
+              <span>${escapeHtml(formatAvailabilitySlotValue(slot))}</span>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderAvailabilitySlotsEditor(slots, idPrefix = "availability") {
+  const normalized = normalizeClientAvailabilitySlots(slots);
+
+  return `
+    <div class="availability-slot-editor">
+      ${normalized
+        .map((slot) => {
+          const day = AVAILABILITY_DAYS.find((entry) => entry.id === slot.day) || { shortLabel: slot.day, fullLabel: slot.day };
+          return `
+            <div class="availability-slot-row">
+              <label class="availability-slot-toggle" for="${escapeHtml(`${idPrefix}-${slot.day}-enabled`)}">
+                <input id="${escapeHtml(`${idPrefix}-${slot.day}-enabled`)}" name="availability-${slot.day}-enabled" type="checkbox" ${slot.enabled ? "checked" : ""}>
+                <span>${escapeHtml(day.fullLabel)}</span>
+              </label>
+              <div class="availability-slot-times">
+                <input id="${escapeHtml(`${idPrefix}-${slot.day}-start`)}" name="availability-${slot.day}-start" type="time" value="${escapeHtml(slot.startTime || "")}">
+                <span class="timeline-meta">bis</span>
+                <input id="${escapeHtml(`${idPrefix}-${slot.day}-end`)}" name="availability-${slot.day}-end" type="time" value="${escapeHtml(slot.endTime || "")}">
+              </div>
+              <input
+                id="${escapeHtml(`${idPrefix}-${slot.day}-note`)}"
+                name="availability-${slot.day}-note"
+                type="text"
+                value="${escapeHtml(slot.note || "")}"
+                placeholder="optional: flexibel, spaeter, nur kurz ..."
+              >
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
 }
 
 function handleInput(event) {
@@ -7534,6 +7788,8 @@ function renderProfilePanel(managerView) {
   const showAvailabilityFields = user.role !== "member";
   const creatorPresence = getCreatorPresenceMeta(user);
   const creatorCommunity = getCreatorCommunityMeta(user);
+  const creatorApplication = getCreatorApplicationMeta(user);
+  const availabilitySlots = getAvailabilitySlots(user);
 
   return `
     <section class="panel ${managerView ? "span-12" : "span-12"}">
@@ -7553,10 +7809,12 @@ function renderProfilePanel(managerView) {
             ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
             ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
             ${showAvailabilityFields && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
-            ${showAvailabilityFields && user.availabilitySchedule ? `<p class="helper-text"><strong>Diese Woche:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
+            ${showAvailabilityFields ? renderAvailabilitySlotList(availabilitySlots, "") : ""}
+            ${showAvailabilityFields && user.availabilitySchedule ? `<p class="helper-text"><strong>Hinweise:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
             ${showAvailabilityFields && user.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(user.availabilityUpdatedAt))}</p>` : ""}
             <div class="creator-presence-inline">
               <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
+              <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
               ${creatorPresence.updatedLabel ? `<span class="timeline-meta">${escapeHtml(creatorPresence.updatedLabel)}</span>` : ""}
             </div>
             <p class="timeline-meta">${escapeHtml(creatorCommunity.name)}</p>
@@ -7567,10 +7825,11 @@ function renderProfilePanel(managerView) {
                 : ""
             }
             <p class="helper-text">${escapeHtml(creatorPresence.summary)}</p>
+            <p class="helper-text">${escapeHtml(creatorApplication.summary)}</p>
             ${
               creatorPresence.actionUrl
                 ? `<a class="creator-action-link" href="${escapeHtml(creatorPresence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorPresence.actionLabel)}</a>`
-                : ""
+              : ""
             }
             ${renderCreatorLinkList(user, true)}
           </div>
@@ -7615,6 +7874,47 @@ function renderProfilePanel(managerView) {
               : '<p class="helper-text">Wenn du magst, kannst du deiner Community hier einen eigenen Eingang geben, etwa einen Discord-, Twitch- oder Sammellink.</p>'
           }
         </article>
+
+        <section class="availability-form-shell creator-application-shell">
+          <div class="availability-form-head">
+            <div>
+              <p class="eyebrow">Creator-Pruefung</p>
+              <h3>Freischaltung fuer deinen eigenen Creator-Hub</h3>
+              <p class="helper-text">Damit nicht jeder sich einfach selbst zum Creator macht, landet dein Bereich erst nach einer kurzen Pruefung im Netzwerk. Aktuell ist ${escapeHtml(String(CREATOR_MIN_FOLLOWERS))}+ Follower die grobe Einstiegsschwelle.</p>
+            </div>
+            <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
+          </div>
+          <div class="creator-application-copy">
+            <p class="helper-text">${escapeHtml(creatorApplication.summary)}</p>
+            <div class="chip-list">
+              <span class="pill ${creatorApplication.thresholdMet ? "success" : "rose"}">${escapeHtml(creatorApplication.thresholdLabel)}</span>
+              ${creatorApplication.primaryPlatform ? `<span class="pill neutral">${escapeHtml(creatorApplication.primaryPlatform)}</span>` : ""}
+              ${creatorApplication.reviewedLabel ? `<span class="timeline-meta">${escapeHtml(creatorApplication.reviewedLabel)}</span>` : ""}
+            </div>
+            ${creatorApplication.reviewNote ? `<p class="helper-text"><strong>Rueckmeldung:</strong> ${escapeHtml(creatorApplication.reviewNote)}</p>` : ""}
+          </div>
+          <form class="stack-form creator-application-form" data-form="creator-application">
+            <div class="creator-presence-form-grid">
+              <div class="field">
+                <label for="profileCreatorPrimaryPlatform">Hauptplattform</label>
+                <input id="profileCreatorPrimaryPlatform" name="creatorPrimaryPlatform" type="text" value="${escapeHtml(user.creatorPrimaryPlatform || "")}" placeholder="TikTok, Twitch, YouTube ...">
+              </div>
+              <div class="field">
+                <label for="profileCreatorFollowerCount">Follower</label>
+                <input id="profileCreatorFollowerCount" name="creatorFollowerCount" type="number" min="0" step="1" value="${escapeHtml(String(user.creatorFollowerCount || ""))}" placeholder="z. B. 520">
+              </div>
+              <div class="field span-all">
+                <label for="profileCreatorProofUrl">Nachweis-Link</label>
+                <input id="profileCreatorProofUrl" name="creatorProofUrl" type="url" value="${escapeHtml(user.creatorProofUrl || "")}" placeholder="Profil, Kanal oder Linktree mit sichtbaren Zahlen">
+              </div>
+              <div class="field span-all">
+                <label for="profileCreatorApplicationNote">Kurze Einordnung fuer die Leitung</label>
+                <textarea id="profileCreatorApplicationNote" name="creatorApplicationNote" placeholder="Worum geht es bei deinem Content und was soll dein Hub hier spaeter sammeln?">${escapeHtml(user.creatorApplicationNote || "")}</textarea>
+              </div>
+            </div>
+            <button type="submit">${creatorApplication.pending ? "Bewerbung aktualisieren" : creatorApplication.rejected ? "Erneut pruefen lassen" : "Creator-Pruefung absenden"}</button>
+          </form>
+        </section>
 
         <form class="stack-form" data-form="profile-update">
           <div class="form-grid">
@@ -7666,8 +7966,13 @@ function renderProfilePanel(managerView) {
                       </div>
                       <div class="field span-all">
                         <label for="profileAvailabilitySchedule">Zeitfenster fuer diese Woche</label>
-                        <textarea id="profileAvailabilitySchedule" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
-                        <p class="helper-text">Bitte trage hier moeglichst konkret ein, wann du Zeit hast. Die Leitung plant damit direkt weiter, deshalb bleiben deine Eingaben jetzt auch bei Hintergrund-Updates stabil stehen.</p>
+                        ${renderAvailabilitySlotsEditor(availabilitySlots, "profile-availability")}
+                        <p class="helper-text">Bitte trage hier moeglichst konkret pro Tag ein, wann du Zeit hast. Die Leitung plant damit direkt weiter, deshalb bleiben deine Eingaben jetzt auch bei Hintergrund-Updates stabil stehen.</p>
+                      </div>
+                      <div class="field span-all">
+                        <label for="profileAvailabilitySchedule">Zusatzhinweise fuer diese Woche</label>
+                        <textarea id="profileAvailabilitySchedule" name="availabilitySchedule" placeholder="z. B. Freitag eventuell spaeter oder Sonntag nur spontan erreichbar.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+                        <p class="helper-text">Hier kommen nur noch Hinweise dazu, nicht mehr die Haupt-Zeitfenster.</p>
                       </div>
                     </div>
                   </div>
@@ -7678,16 +7983,29 @@ function renderProfilePanel(managerView) {
               <label for="profileCreatorBlurb">Creator-Text</label>
               <input id="profileCreatorBlurb" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}" placeholder="z. B. Musik, Clips, Streams">
             </div>
-            <div class="field">
-              <label for="profileCreatorVisible">Im Creator-Bereich zeigen</label>
-              <input id="profileCreatorVisible" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
-            </div>
+            ${
+              creatorApplication.approved
+                ? `
+                  <div class="field">
+                    <label for="profileCreatorVisible">Im Creator-Bereich zeigen</label>
+                    <input id="profileCreatorVisible" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
+                  </div>
+                `
+                : `
+                  <div class="field">
+                    <label>Creator-Freigabe</label>
+                    <div class="input-like">
+                      <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
+                    </div>
+                  </div>
+                `
+            }
             <div class="span-all availability-form-shell creator-presence-shell">
               <div class="availability-form-head">
                 <div>
                   <p class="eyebrow">Creator Community</p>
                   <h3>Dein kleiner Bereich unter dem grossen Dach</h3>
-                  <p class="helper-text">Hier gibst du deiner Community innerhalb von SONARA einen eigenen Namen, ein eigenes Kurzprofil und optional einen eigenen Einstiegspunkt.</p>
+                  <p class="helper-text">Du kannst deinen Hub hier schon vorbereiten. Sichtbar fuer andere wird er aber erst, sobald die Creator-Pruefung durch ist.</p>
                 </div>
                 <span class="pill neutral">Creator Hub</span>
               </div>
@@ -7712,7 +8030,7 @@ function renderProfilePanel(managerView) {
                 <div>
                   <p class="eyebrow">Sonara Live</p>
                   <h3>Dein aktueller Creator-Moment</h3>
-                  <p class="helper-text">Hier setzt du manuell, ob du gerade live bist oder etwas Neues hochgeladen hast. Die Website erkennt deine Plattformen aus den Links und baut daraus die passenden Schnellwege.</p>
+                  <p class="helper-text">Hier setzt du manuell, ob du gerade live bist oder etwas Neues hochgeladen hast. Die Website erkennt deine Plattformen aus den Links und baut daraus die passenden Schnellwege. Oeffentlich spielt das aber erst nach der Freigabe eine Rolle.</p>
                 </div>
                 <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
               </div>
@@ -7849,6 +8167,8 @@ function getChatFeed(mode = "community") {
 function renderCreatorsPanel(managerView) {
   const creators = getCreatorEntries();
   const creatorActivity = getCreatorActivityEntries(4);
+  const selectedCreator = getSelectedCreatorEntry(creators);
+  const pendingApplications = canManagePortal() ? getCreatorReviewEntries(["pending"]) : [];
 
   return `
     <section class="panel span-12">
@@ -7856,10 +8176,18 @@ function renderCreatorsPanel(managerView) {
         <div>
           <p class="eyebrow">Creator</p>
           <h2>Content Creator aus SONARA</h2>
-          <p class="section-copy">Profile, Plattformen und aktuelle Live-Momente laufen hier zusammen.</p>
+          <p class="section-copy">Hier fuehlt sich der Creator-Bereich eher wie ein kleines Netzwerk unter einem Dach an, statt nur wie eine lose Liste.</p>
+        </div>
+        <div class="chip-list">
+          <span class="pill neutral">${escapeHtml(String(creators.length))} Creator-Hubs</span>
+          ${pendingApplications.length ? `<span class="pill amber">${escapeHtml(String(pendingApplications.length))} Pruefungen offen</span>` : ""}
         </div>
       </div>
-      ${managerView ? '<p class="helper-text">Creator pflegen ihre Links und ihren aktuellen Live-Status im Profil. Im Team-Bereich kannst du sie bei Bedarf mit bearbeiten.</p>' : ""}
+      ${
+        managerView
+          ? `<p class="helper-text">Creator pflegen ihre Hub-Daten weiterhin im Profil. Freigaben selbst laufen jetzt getrennt ueber die Creator-Pruefung, damit niemand sich den Bereich einfach selbst zuschalten kann.</p>`
+          : ""
+      }
       ${
         creatorActivity.length
           ? `
@@ -7869,17 +8197,63 @@ function renderCreatorsPanel(managerView) {
           `
           : ""
       }
-      <div class="team-grid">
-        ${creators.length ? creators.map((entry) => renderCreatorCard(entry)).join("") : renderEmptyState("Noch keine Creator", "Sobald Creator Profiltext oder Links hinterlegen, erscheinen sie hier.")}
-      </div>
       ${
-        creators.length
+        pendingApplications.length
           ? `
-            <div class="creator-community-stack">
-              ${creators.map((entry) => renderCreatorCommunityHub(entry)).join("")}
+            <div class="creator-review-grid">
+              ${pendingApplications.map((entry) => renderCreatorReviewCard(entry, "creator-tab")).join("")}
             </div>
           `
           : ""
+      }
+      ${
+        creators.length
+          ? `
+            <div class="creator-stage-shell">
+              <aside class="creator-rail">
+                <div class="section-head compact-section-head">
+                  <div>
+                    <p class="eyebrow">Creator-Navigation</p>
+                    <h3>Wen willst du gerade oeffnen?</h3>
+                  </div>
+                </div>
+                <div class="creator-rail-list">
+                  ${creators.map((entry) => renderCreatorRailButton(entry, entry.id === selectedCreator?.id)).join("")}
+                </div>
+              </aside>
+
+              <div class="creator-spotlight">
+                ${
+                  selectedCreator
+                    ? `
+                      <div class="creator-spotlight-shell">
+                        <div class="status-row">
+                          <div class="chip-list">
+                            <span class="pill neutral">Creator-Hub</span>
+                            <span class="pill ${getCreatorPresenceMeta(selectedCreator).tone}">${escapeHtml(getCreatorPresenceMeta(selectedCreator).title)}</span>
+                          </div>
+                          ${
+                            creators.length > 1
+                              ? `<button type="button" class="ghost small" data-action="clear-creator-focus">Zurueck auf Anfang</button>`
+                              : ""
+                          }
+                        </div>
+                        ${renderCreatorCommunityHub(selectedCreator)}
+                      </div>
+                    `
+                    : renderEmptyState("Noch kein Creator-Hub", "Sobald Creator freigegeben sind, kannst du ihre Bereiche hier fokussiert oeffnen.")
+                }
+              </div>
+            </div>
+
+            <div class="team-grid creator-network-grid">
+              ${creators.map((entry) => renderCreatorCard(entry, { interactive: true, selected: entry.id === selectedCreator?.id })).join("")}
+            </div>
+          `
+          : renderEmptyState(
+              "Noch keine freigegebenen Creator",
+              `Creator tauchen hier erst nach einer Pruefung auf. Aktuell liegt die Einstiegsschwelle bei ${CREATOR_MIN_FOLLOWERS}+ Followern.`
+            )
       }
     </section>
   `;
@@ -8228,6 +8602,95 @@ function getCreatorCommunityMeta(user) {
   };
 }
 
+function getCreatorApplicationMeta(user) {
+  const status = String(user?.creatorApplicationStatus || "none").trim().toLowerCase();
+  const followerCount = Number(user?.creatorFollowerCount || 0);
+  const thresholdMet = followerCount >= CREATOR_MIN_FOLLOWERS;
+  const primaryPlatform = String(user?.creatorPrimaryPlatform || "").trim();
+  const proofUrl = String(user?.creatorProofUrl || "").trim();
+  const applicationNote = String(user?.creatorApplicationNote || "").trim();
+  const reviewNote = String(user?.creatorReviewNote || "").trim();
+  const reviewedLabel = user?.creatorReviewedAt ? `Zuletzt geprueft ${formatDateTime(user.creatorReviewedAt)}` : "";
+
+  const variants = {
+    approved: {
+      title: "Creator freigeschaltet",
+      tone: "success",
+      summary: "Dein Creator-Hub ist fuer die Community freigegeben und kann jetzt sichtbar wachsen."
+    },
+    pending: {
+      title: "Creator-Pruefung laeuft",
+      tone: "amber",
+      summary: "Deine Creator-Bewerbung liegt gerade bei Leitung oder Admin zur Pruefung."
+    },
+    rejected: {
+      title: "Creator-Bewerbung pausiert",
+      tone: "rose",
+      summary: "Die Bewerbung braucht noch etwas Nacharbeit, bevor sie freigeschaltet werden kann."
+    },
+    none: {
+      title: "Noch nicht als Creator freigegeben",
+      tone: "neutral",
+      summary: `Reiche hier erst deine Creator-Pruefung ein. Aktuell sind mindestens ${CREATOR_MIN_FOLLOWERS} Follower vorgesehen.`
+    }
+  };
+
+  const variant = variants[status] || variants.none;
+
+  return {
+    status,
+    followerCount,
+    thresholdMet,
+    primaryPlatform,
+    proofUrl,
+    applicationNote,
+    reviewNote,
+    reviewedLabel,
+    ...variant,
+    thresholdLabel: `${followerCount || 0} / ${CREATOR_MIN_FOLLOWERS}+ Follower`,
+    approved: status === "approved",
+    pending: status === "pending",
+    rejected: status === "rejected"
+  };
+}
+
+function getManagedUsers() {
+  const users = state.data?.users || [];
+  return Array.isArray(users) ? users : [];
+}
+
+function getCreatorReviewEntries(statuses = ["pending"]) {
+  const statusSet = new Set((Array.isArray(statuses) ? statuses : [statuses]).map((entry) => String(entry || "").trim().toLowerCase()));
+  return getManagedUsers()
+    .filter((user) => statusSet.has(String(user?.creatorApplicationStatus || "none").trim().toLowerCase()))
+    .slice()
+    .sort((left, right) => getPrimaryDisplayName(left).localeCompare(getPrimaryDisplayName(right), "de"));
+}
+
+function getSelectedCreatorEntry(creators) {
+  const selectedId = String(state.ui.selectedCreatorId || "").trim();
+  return creators.find((entry) => entry.id === selectedId) || creators[0] || null;
+}
+
+function renderCreatorRailButton(user, selected = false) {
+  const community = getCreatorCommunityMeta(user);
+  const presence = getCreatorPresenceMeta(user);
+
+  return `
+    <button
+      type="button"
+      class="creator-rail-button ${selected ? "active" : ""}"
+      data-action="set-creator-focus"
+      data-creator-id="${escapeHtml(user.id)}"
+    >
+      <span class="creator-rail-eyebrow">${escapeHtml(getPrimaryDisplayName(user))}</span>
+      <strong>${escapeHtml(community.name)}</strong>
+      <span class="creator-rail-summary">${escapeHtml(truncateText(community.summary, 88))}</span>
+      <span class="pill ${presence.tone}">${escapeHtml(presence.title)}</span>
+    </button>
+  `;
+}
+
 function buildCreatorCommunityOptions(selectedId = "", includeGeneral = true) {
   const options = [];
   const creators = getCreatorEntries();
@@ -8366,6 +8829,77 @@ function renderCreatorCommunityHub(user) {
           </div>
         </div>
       </div>
+    </article>
+  `;
+}
+
+function renderCreatorReviewCard(user, scope = "review") {
+  const application = getCreatorApplicationMeta(user);
+  const prefix = `${scope}-${user.id}`;
+
+  return `
+    <article class="mini-card creator-review-card">
+      <div class="status-row">
+        <div class="chip-list">
+          <span class="pill ${application.tone}">${escapeHtml(application.title)}</span>
+          <span class="pill ${application.thresholdMet ? "success" : "rose"}">${escapeHtml(application.thresholdLabel)}</span>
+        </div>
+        ${application.reviewedLabel ? `<span class="timeline-meta">${escapeHtml(application.reviewedLabel)}</span>` : ""}
+      </div>
+      <div class="profile-head">
+        ${renderUserAvatar(user, "profile-avatar")}
+        <div class="creator-card-copy">
+          <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+          <p class="timeline-meta">${escapeHtml(application.primaryPlatform || "Plattform noch offen")}</p>
+        </div>
+      </div>
+      <p class="helper-text">${escapeHtml(application.summary)}</p>
+      ${application.applicationNote ? `<p class="helper-text"><strong>Bewerbung:</strong> ${escapeHtml(application.applicationNote)}</p>` : ""}
+      ${application.reviewNote ? `<p class="helper-text"><strong>Review:</strong> ${escapeHtml(application.reviewNote)}</p>` : ""}
+      ${
+        application.proofUrl
+          ? `<a class="creator-action-link" href="${escapeHtml(application.proofUrl)}" target="_blank" rel="noreferrer">Nachweis oeffnen</a>`
+          : ""
+      }
+
+      <form class="stack-form creator-review-form" data-form="creator-review" data-user-id="${escapeHtml(user.id)}">
+        <div class="form-grid">
+          <div class="field">
+            <label for="creatorStatus-${escapeHtml(prefix)}">Status</label>
+            <select id="creatorStatus-${escapeHtml(prefix)}" name="status">
+              <option value="pending" ${application.pending ? "selected" : ""}>In Pruefung</option>
+              <option value="approved" ${application.approved ? "selected" : ""}>Freigeben</option>
+              <option value="rejected" ${application.rejected ? "selected" : ""}>Ablehnen</option>
+              <option value="none" ${application.status === "none" ? "selected" : ""}>Zuruecksetzen</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="creatorFollowers-${escapeHtml(prefix)}">Follower</label>
+            <input id="creatorFollowers-${escapeHtml(prefix)}" name="creatorFollowerCount" type="number" min="0" step="1" value="${escapeHtml(String(application.followerCount || ""))}">
+          </div>
+          <div class="field">
+            <label for="creatorPlatform-${escapeHtml(prefix)}">Plattform</label>
+            <input id="creatorPlatform-${escapeHtml(prefix)}" name="creatorPrimaryPlatform" type="text" value="${escapeHtml(application.primaryPlatform || "")}" placeholder="TikTok, Twitch, YouTube ...">
+          </div>
+          <div class="field">
+            <label for="creatorProof-${escapeHtml(prefix)}">Nachweis-Link</label>
+            <input id="creatorProof-${escapeHtml(prefix)}" name="creatorProofUrl" type="url" value="${escapeHtml(application.proofUrl || "")}" placeholder="Profil oder Kanal-Link">
+          </div>
+          <div class="field span-all">
+            <label for="creatorNote-${escapeHtml(prefix)}">Notiz aus der Bewerbung</label>
+            <textarea id="creatorNote-${escapeHtml(prefix)}" name="creatorApplicationNote" placeholder="Kurze Einordnung zur Creator-Ecke">${escapeHtml(application.applicationNote || "")}</textarea>
+          </div>
+          <div class="field span-all">
+            <label for="creatorReviewNote-${escapeHtml(prefix)}">Review-Notiz</label>
+            <textarea id="creatorReviewNote-${escapeHtml(prefix)}" name="creatorReviewNote" placeholder="Kurze Rueckmeldung fuer die Creator-Pruefung">${escapeHtml(application.reviewNote || "")}</textarea>
+          </div>
+          <div class="field creator-review-override">
+            <label for="creatorOverride-${escapeHtml(prefix)}">Unter ${escapeHtml(String(CREATOR_MIN_FOLLOWERS))} trotzdem freigeben</label>
+            <input id="creatorOverride-${escapeHtml(prefix)}" name="overrideMinimum" type="checkbox">
+          </div>
+        </div>
+        <button type="submit" class="ghost small">Creator-Review speichern</button>
+      </form>
     </article>
   `;
 }
