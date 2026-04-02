@@ -185,6 +185,13 @@ async function handleApi(req, res, url) {
       creatorBlurb: normalized.creatorBlurb,
       creatorLinks: normalized.creatorLinks,
       creatorVisible: normalized.creatorVisible,
+      creatorCommunityName: normalized.creatorCommunityName,
+      creatorCommunitySummary: normalized.creatorCommunitySummary,
+      creatorCommunityInviteUrl: normalized.creatorCommunityInviteUrl,
+      creatorPresence: normalized.creatorPresence,
+      creatorPresenceText: normalized.creatorPresenceText,
+      creatorPresenceUrl: normalized.creatorPresenceUrl,
+      creatorPresenceUpdatedAt: normalized.creatorPresenceUpdatedAt,
       weeklyHoursCapacity: normalized.weeklyHoursCapacity,
       weeklyDaysCapacity: normalized.weeklyDaysCapacity,
       availabilitySchedule: normalized.availabilitySchedule,
@@ -629,7 +636,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && url.pathname === "/api/forum-threads") {
     const body = await readJson(req);
-    const normalized = validateForumThreadPayload(body);
+    const normalized = validateForumThreadPayload(body, auth.store);
     const nextStore = structuredClone(auth.store);
 
     nextStore.forumThreads.unshift({
@@ -638,6 +645,7 @@ async function handleApi(req, res, url) {
       title: normalized.title,
       body: normalized.body,
       category: normalized.category,
+      creatorCommunityId: normalized.creatorCommunityId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       replies: []
@@ -1049,7 +1057,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && url.pathname === "/api/feed-posts") {
     const body = await readJson(req);
-    const normalized = validateFeedPostPayload(body);
+    const normalized = validateFeedPostPayload(body, auth.store);
     if (hasRecentDuplicateFeedPost(auth.store, auth.user.id, normalized)) {
       sendPortalData(res, 200, auth.user, auth.store);
       return;
@@ -1063,6 +1071,7 @@ async function handleApi(req, res, url) {
       authorId: auth.user.id,
       content: normalized.content,
       imageUrl: normalized.imageUrl,
+      creatorCommunityId: normalized.creatorCommunityId,
       createdAt: new Date().toISOString(),
       reactions: buildEmptyFeedReactions()
     });
@@ -2342,6 +2351,7 @@ function normalizeFeedReactionMap(value) {
 
 function normalizeFeedPosts(entries, users) {
   const validUserIds = new Set(users.map((entry) => entry.id));
+  const validCreatorCommunityIds = new Set(users.filter((entry) => hasVisibleCreatorProfile(entry)).map((entry) => entry.id));
 
   return (Array.isArray(entries) ? entries : [])
     .map((entry) => ({
@@ -2349,6 +2359,7 @@ function normalizeFeedPosts(entries, users) {
       authorId: String(entry.authorId || "").trim(),
       content: String(entry.content || "").trim().slice(0, 1200),
       imageUrl: normalizeOptionalUrl(entry.imageUrl),
+      creatorCommunityId: validCreatorCommunityIds.has(String(entry.creatorCommunityId || "").trim()) ? String(entry.creatorCommunityId).trim() : "",
       createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
       reactions: normalizeFeedReactionMap(entry.reactions)
     }))
@@ -2421,10 +2432,14 @@ function decorateRequest(entry, store) {
 }
 
 function decorateFeedPost(entry, store) {
+  const creatorCommunity = (store.users || []).find((user) => user.id === entry.creatorCommunityId && hasVisibleCreatorProfile(user));
   return {
     ...entry,
     authorName: findUserName(store.users, entry.authorId),
     authorAvatarUrl: store.users.find((user) => user.id === entry.authorId)?.avatarUrl || "",
+    creatorCommunityId: creatorCommunity?.id || "",
+    creatorCommunityName: creatorCommunity ? normalizeCreatorCommunityName(creatorCommunity.creatorCommunityName) || `${findUserName(store.users, creatorCommunity.id)} Community` : "",
+    creatorCommunityOwnerName: creatorCommunity ? findUserName(store.users, creatorCommunity.id) : "",
     reactions: normalizeFeedReactionMap(entry.reactions)
   };
 }
@@ -2474,9 +2489,10 @@ function validateEventPayload(body, user) {
   };
 }
 
-function validateFeedPostPayload(body) {
+function validateFeedPostPayload(body, store) {
   const content = String(body.content || "").trim().slice(0, 1200);
   const imageUrl = normalizeOptionalUrl(body.imageUrl);
+  const creatorCommunityId = normalizeCreatorCommunityId(body.creatorCommunityId, store, { throwIfInvalid: true });
 
   if (!content && !imageUrl) {
     const error = new Error("Bitte Text oder Bild fuer den Feed-Beitrag angeben.");
@@ -2490,7 +2506,7 @@ function validateFeedPostPayload(body) {
     throw error;
   }
 
-  return { content, imageUrl };
+  return { content, imageUrl, creatorCommunityId };
 }
 
 function validateFeedReaction(value) {
@@ -2692,6 +2708,7 @@ function hasRecentDuplicateFeedPost(store, userId, payload) {
       entry.authorId === userId &&
       String(entry.content || "").trim() === payload.content &&
       String(entry.imageUrl || "").trim() === String(payload.imageUrl || "").trim() &&
+      String(entry.creatorCommunityId || "").trim() === String(payload.creatorCommunityId || "").trim() &&
       isRecentTimestamp(entry.createdAt)
   );
 }
@@ -3046,6 +3063,18 @@ function normalizeCreatorPresenceUrl(value) {
   return normalizeExternalLink(value);
 }
 
+function normalizeCreatorCommunityName(value) {
+  return String(value || "").trim().slice(0, 80);
+}
+
+function normalizeCreatorCommunitySummary(value) {
+  return String(value || "").trim().slice(0, 500);
+}
+
+function normalizeCreatorCommunityInviteUrl(value) {
+  return normalizeExternalLink(value);
+}
+
 function getCreatorPresenceTimestamp(user) {
   const timestamp = Date.parse(String(user?.creatorPresenceUpdatedAt || ""));
   return Number.isFinite(timestamp) ? timestamp : 0;
@@ -3053,6 +3082,22 @@ function getCreatorPresenceTimestamp(user) {
 
 function hasVisibleCreatorProfile(user) {
   return Boolean(user?.creatorVisible && ((((user?.creatorLinks || []).length > 0) || user?.creatorBlurb)));
+}
+
+function normalizeCreatorCommunityId(value, store, options = {}) {
+  const creatorCommunityId = String(value || "").trim();
+  if (!creatorCommunityId) return "";
+
+  const creator = (store?.users || []).find((entry) => entry.id === creatorCommunityId && !entry.isBlocked && hasVisibleCreatorProfile(entry));
+  if (creator) return creator.id;
+
+  if (options.throwIfInvalid) {
+    const error = new Error("Die ausgewaehlte Creator-Community ist nicht gueltig.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return "";
 }
 
 function isFreshCreatorRelease(user, windowHours = 72) {
@@ -4155,6 +4200,7 @@ function normalizeDirectMessages(messages, users) {
 
 function normalizeForumThreads(threads, users) {
   const validUserIds = new Set(users.map((entry) => entry.id));
+  const validCreatorCommunityIds = new Set(users.filter((entry) => hasVisibleCreatorProfile(entry)).map((entry) => entry.id));
 
   return (threads || [])
     .map((entry) => ({
@@ -4163,6 +4209,7 @@ function normalizeForumThreads(threads, users) {
       title: String(entry.title || "").trim(),
       body: String(entry.body || "").trim(),
       category: String(entry.category || "Allgemein").trim() || "Allgemein",
+      creatorCommunityId: validCreatorCommunityIds.has(String(entry.creatorCommunityId || "").trim()) ? String(entry.creatorCommunityId).trim() : "",
       createdAt: isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
       updatedAt: isIsoDate(entry.updatedAt) ? entry.updatedAt : isIsoDate(entry.createdAt) ? entry.createdAt : new Date().toISOString(),
       replies: Array.isArray(entry.replies)
@@ -4588,6 +4635,9 @@ function normalizeUsers(users, legacyModeratorNames) {
     const creatorBlurb = String(entry.creatorBlurb || "").trim().slice(0, 300);
     const creatorLinks = normalizeCreatorLinks(entry.creatorLinks);
     const creatorVisible = Boolean(entry.creatorVisible && (creatorLinks.length || creatorBlurb));
+    const creatorCommunityName = normalizeCreatorCommunityName(entry.creatorCommunityName);
+    const creatorCommunitySummary = normalizeCreatorCommunitySummary(entry.creatorCommunitySummary);
+    const creatorCommunityInviteUrl = normalizeCreatorCommunityInviteUrl(entry.creatorCommunityInviteUrl);
     const creatorPresence = normalizeCreatorPresence(entry.creatorPresence);
     const creatorPresenceText = normalizeCreatorPresenceText(entry.creatorPresenceText);
     const creatorPresenceUrl = normalizeCreatorPresenceUrl(entry.creatorPresenceUrl);
@@ -4620,6 +4670,9 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorBlurb,
       creatorLinks,
       creatorVisible,
+      creatorCommunityName,
+      creatorCommunitySummary,
+      creatorCommunityInviteUrl,
       creatorPresence,
       creatorPresenceText,
       creatorPresenceUrl,
@@ -4657,6 +4710,9 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorBlurb: "",
       creatorLinks: [],
       creatorVisible: false,
+      creatorCommunityName: "",
+      creatorCommunitySummary: "",
+      creatorCommunityInviteUrl: "",
       creatorPresence: "offline",
       creatorPresenceText: "",
       creatorPresenceUrl: "",
@@ -4690,6 +4746,9 @@ function sanitizeUser(user) {
     creatorBlurb: user.creatorBlurb || "",
     creatorLinks: Array.isArray(user.creatorLinks) ? user.creatorLinks : [],
     creatorVisible: Boolean(user.creatorVisible),
+    creatorCommunityName: normalizeCreatorCommunityName(user.creatorCommunityName),
+    creatorCommunitySummary: normalizeCreatorCommunitySummary(user.creatorCommunitySummary),
+    creatorCommunityInviteUrl: user.creatorCommunityInviteUrl || "",
     creatorPresence: normalizeCreatorPresence(user.creatorPresence),
     creatorPresenceText: normalizeCreatorPresenceText(user.creatorPresenceText),
     creatorPresenceUrl: user.creatorPresenceUrl || "",
@@ -4736,6 +4795,9 @@ function validateRegistrationPayload(body, store) {
   const creatorBlurb = String(body.creatorBlurb || "").trim().slice(0, 300);
   const creatorLinks = normalizeCreatorLinks(body.creatorLinks);
   const creatorVisible = Boolean(body.creatorVisible && (creatorLinks.length || creatorBlurb));
+  const creatorCommunityName = normalizeCreatorCommunityName(body.creatorCommunityName);
+  const creatorCommunitySummary = normalizeCreatorCommunitySummary(body.creatorCommunitySummary);
+  const creatorCommunityInviteUrl = normalizeCreatorCommunityInviteUrl(body.creatorCommunityInviteUrl);
   const creatorPresence = normalizeCreatorPresence(body.creatorPresence);
   const creatorPresenceText = normalizeCreatorPresenceText(body.creatorPresenceText);
   const creatorPresenceUrl = normalizeCreatorPresenceUrl(body.creatorPresenceUrl);
@@ -4772,6 +4834,9 @@ function validateRegistrationPayload(body, store) {
     creatorBlurb,
     creatorLinks,
     creatorVisible,
+    creatorCommunityName,
+    creatorCommunitySummary,
+    creatorCommunityInviteUrl,
     creatorPresence,
     creatorPresenceText,
     creatorPresenceUrl,
@@ -4791,6 +4856,16 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   const nextContactNote = body.contactNote !== undefined ? String(body.contactNote || "").trim().slice(0, 600) : target.contactNote || "";
   const nextCreatorBlurb = body.creatorBlurb !== undefined ? String(body.creatorBlurb || "").trim().slice(0, 300) : target.creatorBlurb || "";
   const nextCreatorLinks = body.creatorLinks !== undefined ? normalizeCreatorLinks(body.creatorLinks) : Array.isArray(target.creatorLinks) ? target.creatorLinks : [];
+  const nextCreatorCommunityName =
+    body.creatorCommunityName !== undefined ? normalizeCreatorCommunityName(body.creatorCommunityName) : normalizeCreatorCommunityName(target.creatorCommunityName);
+  const nextCreatorCommunitySummary =
+    body.creatorCommunitySummary !== undefined
+      ? normalizeCreatorCommunitySummary(body.creatorCommunitySummary)
+      : normalizeCreatorCommunitySummary(target.creatorCommunitySummary);
+  const nextCreatorCommunityInviteUrl =
+    body.creatorCommunityInviteUrl !== undefined
+      ? normalizeCreatorCommunityInviteUrl(body.creatorCommunityInviteUrl)
+      : normalizeCreatorCommunityInviteUrl(target.creatorCommunityInviteUrl);
   const currentCreatorPresence = normalizeCreatorPresence(target.creatorPresence);
   const currentCreatorPresenceText = normalizeCreatorPresenceText(target.creatorPresenceText);
   const currentCreatorPresenceUrl = normalizeCreatorPresenceUrl(target.creatorPresenceUrl);
@@ -4844,6 +4919,12 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
     throw error;
   }
 
+  if (body.creatorCommunityInviteUrl !== undefined && body.creatorCommunityInviteUrl && !nextCreatorCommunityInviteUrl) {
+    const error = new Error("Der Creator-Community-Link ist nicht gueltig.");
+    error.statusCode = 400;
+    throw error;
+  }
+
   ensureUserIdentityUnique(users, target.id, {
     vrchatName: nextVrchatName,
     discordName: nextDiscordName
@@ -4858,6 +4939,9 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   target.creatorBlurb = nextCreatorBlurb;
   target.creatorLinks = nextCreatorLinks;
   target.creatorVisible = nextCreatorVisible;
+  target.creatorCommunityName = nextCreatorCommunityName;
+  target.creatorCommunitySummary = nextCreatorCommunitySummary;
+  target.creatorCommunityInviteUrl = nextCreatorCommunityInviteUrl;
   target.creatorPresence = nextCreatorPresence;
   target.creatorPresenceText = nextCreatorPresenceText;
   target.creatorPresenceUrl = nextCreatorPresenceUrl;
@@ -5011,10 +5095,11 @@ function validateDirectMessagePayload(body, user, store) {
   return { recipientId, content };
 }
 
-function validateForumThreadPayload(body) {
+function validateForumThreadPayload(body, store) {
   const title = String(body.title || "").trim();
   const category = String(body.category || "Allgemein").trim() || "Allgemein";
   const threadBody = String(body.body || "").trim();
+  const creatorCommunityId = normalizeCreatorCommunityId(body.creatorCommunityId, store, { throwIfInvalid: true });
 
   if (!title || !threadBody) {
     const error = new Error("Bitte Titel und Beitrag angeben.");
@@ -5022,7 +5107,7 @@ function validateForumThreadPayload(body) {
     throw error;
   }
 
-  return { title, body: threadBody, category };
+  return { title, body: threadBody, category, creatorCommunityId };
 }
 
 function validateForumReplyPayload(body) {
@@ -5063,9 +5148,13 @@ function decorateDirectMessage(entry, store) {
 }
 
 function decorateForumThread(entry, store) {
+  const creatorCommunity = (store.users || []).find((user) => user.id === entry.creatorCommunityId && hasVisibleCreatorProfile(user));
   return {
     ...entry,
     authorName: findUserName(store.users, entry.authorId),
+    creatorCommunityId: creatorCommunity?.id || "",
+    creatorCommunityName: creatorCommunity ? normalizeCreatorCommunityName(creatorCommunity.creatorCommunityName) || `${findUserName(store.users, creatorCommunity.id)} Community` : "",
+    creatorCommunityOwnerName: creatorCommunity ? findUserName(store.users, creatorCommunity.id) : "",
     replies: (entry.replies || [])
       .slice()
       .sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt))

@@ -191,7 +191,8 @@ function shouldClearFormDraftAfterSuccess(formName) {
     "warning-create",
     "admin-user-create",
     "user-update",
-    "profile-update"
+    "profile-update",
+    "availability-update"
   ].includes(String(formName || ""));
 }
 
@@ -2050,6 +2051,8 @@ function renderCapacityPanel() {
   const totalPlannedHours = rows.reduce((sum, entry) => sum + entry.plannedHours, 0);
   const totalCapacityHours = rows.reduce((sum, entry) => sum + entry.capacityHours, 0);
   const openHours = rows.reduce((sum, entry) => sum + Math.max(0, entry.capacityHours - entry.plannedHours), 0);
+  const missingRows = rows.filter((entry) => !entry.capacityHours && !entry.capacityDays && !entry.availabilitySchedule);
+  const missingNames = missingRows.map((entry) => getPrimaryDisplayName(entry.user));
 
   return `
     <section class="panel span-12">
@@ -2069,6 +2072,15 @@ function renderCapacityPanel() {
         ${renderStatCard("Kapazitaet", totalCapacityHours ? formatHoursValue(totalCapacityHours) : "-", totalCapacityHours ? "Gemeldete Wochenstunden aus Profilen" : "Noch keine Profilangaben", "sky")}
         ${renderStatCard("Noch offen", totalCapacityHours ? formatHoursValue(openHours) : "-", totalCapacityHours ? "Noch nicht verplante gemeldete Stunden" : "Keine Kapazitaet hinterlegt", "rose")}
       </div>
+
+      ${
+        missingRows.length
+          ? `
+            <p class="pill-note">Rueckmeldung fehlt aktuell bei ${escapeHtml(String(missingRows.length))} Person${missingRows.length === 1 ? "" : "en"}: ${escapeHtml(missingNames.join(", "))}.</p>
+            <p class="helper-text">Diese Staff-Mitglieder haben noch keine Stunden, Tage oder Zeitfenster fuer diese Woche eingetragen.</p>
+          `
+          : '<p class="pill-note">Alle Staff-Rueckmeldungen fuer die aktuelle Woche sind vorhanden.</p>'
+      }
 
       <div class="calendar-members">
         ${
@@ -2118,18 +2130,53 @@ function renderAvailabilityReminderPanel() {
   if (!user || user.role === "member") return "";
 
   const hasAvailability = Boolean(user.availabilitySchedule || Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0));
+  const updatedLabel = user.availabilityUpdatedAt ? formatDateTime(user.availabilityUpdatedAt) : "";
 
   return `
     <section class="panel span-12">
       <div class="section-head">
         <div>
           <p class="eyebrow">Verfuegbarkeit</p>
-          <h2>Wo Moderatoren ihre freien Zeiten eintragen</h2>
-          <p class="section-copy">Die Verfuegbarkeit wird im Profil gepflegt. Dort traegst du Stunden, Tage und konkrete Zeitfenster fuer die kommende Woche ein.</p>
+          <h2>Trage deine freien Zeiten direkt hier ein</h2>
+          <p class="section-copy">Damit die Auslastung funktioniert, brauchen wir nicht nur Stunden, sondern auch konkrete Zeitfenster. Du kannst das hier direkt speichern, ohne erst ins Profil wechseln zu muessen.</p>
         </div>
         <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Zum Profil</button>
       </div>
-      <p class="pill-note">${escapeHtml(hasAvailability ? "Deine aktuelle Verfuegbarkeit ist hinterlegt und kann jederzeit im Profil angepasst werden." : "Aktuell ist noch keine Verfuegbarkeit hinterlegt. Bitte im Profil eintragen, damit die Planung sauber funktioniert.")}</p>
+
+      <p class="pill-note">${escapeHtml(hasAvailability ? "Deine Verfuegbarkeit ist schon hinterlegt. Passe sie hier an, sobald sich fuer die kommende Woche etwas aendert." : "Aktuell fehlt deine Verfuegbarkeit noch. Bitte trage sie direkt hier ein, damit die Leitung dich sinnvoll einplanen kann.")}</p>
+
+      <form class="stack-form" data-form="availability-update">
+        <div class="availability-form-shell">
+          <div class="availability-form-head">
+            <div>
+              <p class="eyebrow">Staff-Planung</p>
+              <h3>Dein Wochenrahmen</h3>
+              <p class="helper-text">Beispiel fuer Zeitfenster: Mo 18:00-22:00, Mi 20:00-00:00, Sa flexibel ab 16:00.</p>
+            </div>
+            <span class="pill ${hasAvailability ? "success" : "rose"}">${escapeHtml(hasAvailability ? "Eingetragen" : "Bitte ausfuellen")}</span>
+          </div>
+          <div class="availability-form-grid">
+            <div class="field">
+              <label for="dashboardWeeklyHoursCapacity">Verfuegbare Stunden pro Woche</label>
+              <input id="dashboardWeeklyHoursCapacity" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}" placeholder="z. B. 12">
+            </div>
+            <div class="field">
+              <label for="dashboardWeeklyDaysCapacity">Verfuegbare Tage pro Woche</label>
+              <input id="dashboardWeeklyDaysCapacity" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}" placeholder="z. B. 3">
+            </div>
+            <div class="field span-all">
+              <label for="dashboardAvailabilitySchedule">Zeitfenster fuer diese Woche</label>
+              <textarea id="dashboardAvailabilitySchedule" name="availabilitySchedule" placeholder="Mo 18:00-22:00, Di frei, Mi 20:00-00:00">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+              <p class="helper-text">Wichtig ist, wann du wirklich kannst. Nur mit konkreten Zeiten wird die Auslastung fuer die Leitung brauchbar.</p>
+            </div>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button type="submit">Verfuegbarkeit speichern</button>
+          <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Vollstaendiges Profil oeffnen</button>
+        </div>
+        ${updatedLabel ? `<p class="timeline-meta">Zuletzt gespeichert: ${escapeHtml(updatedLabel)}</p>` : ""}
+      </form>
     </section>
   `;
 }
@@ -2994,7 +3041,8 @@ async function handleSubmit(event) {
             method: "POST",
             body: JSON.stringify({
               content: formData.get("content"),
-              imageUrl: imageUrl || ""
+              imageUrl: imageUrl || "",
+              creatorCommunityId: formData.get("creatorCommunityId")
             })
           }),
         "Beitrag wurde im Feed veroeffentlicht."
@@ -3213,6 +3261,19 @@ async function handleSubmit(event) {
             body: JSON.stringify(payload)
           }),
         "Profil wurde aktualisiert."
+      );
+      break;
+    }
+
+    case "availability-update": {
+      const { payload } = buildAvailabilityPayload(form);
+      await performAction(
+        () =>
+          api("/api/profile", {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          }),
+        "Verfuegbarkeit wurde aktualisiert."
       );
       break;
     }
@@ -4745,21 +4806,25 @@ function renderForumReply(reply) {
         <strong>${escapeHtml(reply.authorName)}</strong>
         <span>${escapeHtml(formatDateTime(reply.createdAt))}</span>
       </div>
-      <p>${escapeHtml(reply.content)}</p>
+      <p>${escapeHtml(reply.content || reply.body || "")}</p>
     </article>
   `;
 }
 
 function renderForumThreadCard(thread) {
+  const body = thread.content || thread.body || "";
   return `
     <article class="forum-thread-card">
       <div class="status-row">
-        <span class="pill sky">${escapeHtml(thread.category || "Allgemein")}</span>
+        <div class="chip-list">
+          <span class="pill sky">${escapeHtml(thread.category || "Allgemein")}</span>
+          ${renderCreatorCommunityBadge(thread.creatorCommunityName)}
+        </div>
         <span class="timeline-meta">${escapeHtml(formatDateTime(thread.createdAt))}</span>
       </div>
       <h3>${escapeHtml(thread.title)}</h3>
       <p class="timeline-meta">von ${escapeHtml(thread.authorName)}</p>
-      <p>${escapeHtml(thread.content)}</p>
+      <p>${escapeHtml(body)}</p>
       <div class="forum-replies">
         ${(thread.replies || []).length ? thread.replies.map((reply) => renderForumReply(reply)).join("") : '<p class="helper-text">Noch keine Antworten.</p>'}
       </div>
@@ -4783,6 +4848,7 @@ function renderForumPanel(managerView) {
         <div>
           <p class="eyebrow">Forum</p>
           <h2>Fragen, Ideen und Anfragen</h2>
+          <p class="section-copy">Themen koennen allgemein bleiben oder direkt einer Creator-Community zugeordnet werden.</p>
         </div>
       </div>
 
@@ -4795,6 +4861,12 @@ function renderForumPanel(managerView) {
           <div class="field">
             <label for="forumCategory">Kategorie</label>
             <input id="forumCategory" name="category" type="text" placeholder="${managerView ? "z. B. Event, Feedback, Hilfe" : "z. B. Hilfe, Idee, Event"}">
+          </div>
+          <div class="field">
+            <label for="forumCreatorCommunityId">Creator-Community</label>
+            <select id="forumCreatorCommunityId" name="creatorCommunityId">
+              ${buildCreatorCommunityOptions("", true)}
+            </select>
           </div>
           <div class="field span-all">
             <label for="forumContent">Beitrag</label>
@@ -6208,7 +6280,8 @@ async function handleSubmit(event) {
             body: JSON.stringify({
               title: formData.get("title"),
               category: formData.get("category"),
-              body: formData.get("content")
+              body: formData.get("content"),
+              creatorCommunityId: formData.get("creatorCommunityId")
             })
           }),
         "Thread wurde erstellt."
@@ -7387,6 +7460,9 @@ async function buildProfilePayload(form) {
     creatorBlurb: formData.get("creatorBlurb"),
     creatorLinks: formData.get("creatorLinks"),
     creatorVisible: formData.get("creatorVisible") === "on",
+    creatorCommunityName: formData.get("creatorCommunityName"),
+    creatorCommunitySummary: formData.get("creatorCommunitySummary"),
+    creatorCommunityInviteUrl: formData.get("creatorCommunityInviteUrl"),
     creatorPresence: formData.get("creatorPresence"),
     creatorPresenceText: formData.get("creatorPresenceText"),
     creatorPresenceUrl: formData.get("creatorPresenceUrl")
@@ -7400,6 +7476,18 @@ async function buildProfilePayload(form) {
   }
 
   return { formData, payload, draftKey };
+}
+
+function buildAvailabilityPayload(form) {
+  const formData = new FormData(form);
+  return {
+    formData,
+    payload: {
+      weeklyHoursCapacity: formData.get("weeklyHoursCapacity"),
+      weeklyDaysCapacity: formData.get("weeklyDaysCapacity"),
+      availabilitySchedule: formData.get("availabilitySchedule")
+    }
+  };
 }
 
 function handleInput(event) {
@@ -7445,6 +7533,7 @@ function renderProfilePanel(managerView) {
   const draftKey = "profile-update:";
   const showAvailabilityFields = user.role !== "member";
   const creatorPresence = getCreatorPresenceMeta(user);
+  const creatorCommunity = getCreatorCommunityMeta(user);
 
   return `
     <section class="panel ${managerView ? "span-12" : "span-12"}">
@@ -7470,6 +7559,13 @@ function renderProfilePanel(managerView) {
               <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
               ${creatorPresence.updatedLabel ? `<span class="timeline-meta">${escapeHtml(creatorPresence.updatedLabel)}</span>` : ""}
             </div>
+            <p class="timeline-meta">${escapeHtml(creatorCommunity.name)}</p>
+            <p class="helper-text">${escapeHtml(creatorCommunity.summary)}</p>
+            ${
+              creatorCommunity.inviteUrl
+                ? `<a class="creator-action-link" href="${escapeHtml(creatorCommunity.inviteUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorCommunity.inviteLabel)}</a>`
+                : ""
+            }
             <p class="helper-text">${escapeHtml(creatorPresence.summary)}</p>
             ${
               creatorPresence.actionUrl
@@ -7503,6 +7599,20 @@ function renderProfilePanel(managerView) {
             creatorPresence.actionUrl
               ? `<a class="creator-action-link" href="${escapeHtml(creatorPresence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorPresence.actionLabel)}</a>`
               : '<p class="helper-text">Noch kein direkter Creator-Link aktiv. Sobald du unten einen Status und Link pflegst, tauchst du im Sonara-Live-Bereich auf.</p>'
+          }
+        </article>
+
+        <article class="mini-card creator-presence-preview">
+          <div class="status-row">
+            <span class="pill neutral">Creator Hub</span>
+            ${creatorCommunity.inviteUrl ? '<span class="timeline-meta">Mit Einstieg</span>' : '<span class="timeline-meta">Unter einem Dach</span>'}
+          </div>
+          <h3>${escapeHtml(creatorCommunity.name)}</h3>
+          <p class="helper-text">${escapeHtml(creatorCommunity.summary)}</p>
+          ${
+            creatorCommunity.inviteUrl
+              ? `<a class="creator-action-link" href="${escapeHtml(creatorCommunity.inviteUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorCommunity.inviteLabel)}</a>`
+              : '<p class="helper-text">Wenn du magst, kannst du deiner Community hier einen eigenen Eingang geben, etwa einen Discord-, Twitch- oder Sammellink.</p>'
           }
         </article>
 
@@ -7571,6 +7681,31 @@ function renderProfilePanel(managerView) {
             <div class="field">
               <label for="profileCreatorVisible">Im Creator-Bereich zeigen</label>
               <input id="profileCreatorVisible" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
+            </div>
+            <div class="span-all availability-form-shell creator-presence-shell">
+              <div class="availability-form-head">
+                <div>
+                  <p class="eyebrow">Creator Community</p>
+                  <h3>Dein kleiner Bereich unter dem grossen Dach</h3>
+                  <p class="helper-text">Hier gibst du deiner Community innerhalb von SONARA einen eigenen Namen, ein eigenes Kurzprofil und optional einen eigenen Einstiegspunkt.</p>
+                </div>
+                <span class="pill neutral">Creator Hub</span>
+              </div>
+              <div class="creator-presence-form-grid">
+                <div class="field">
+                  <label for="profileCreatorCommunityName">Name deiner Community</label>
+                  <input id="profileCreatorCommunityName" name="creatorCommunityName" type="text" value="${escapeHtml(user.creatorCommunityName || "")}" placeholder="z. B. House of Mika">
+                </div>
+                <div class="field">
+                  <label for="profileCreatorCommunityInviteUrl">Einstiegslink</label>
+                  <input id="profileCreatorCommunityInviteUrl" name="creatorCommunityInviteUrl" type="url" value="${escapeHtml(user.creatorCommunityInviteUrl || "")}" placeholder="Discord, Linktree, TikTok oder eigener Sammellink">
+                </div>
+                <div class="field span-all">
+                  <label for="profileCreatorCommunitySummary">Kurzbeschreibung deiner Community</label>
+                  <textarea id="profileCreatorCommunitySummary" name="creatorCommunitySummary" placeholder="Worum geht es bei dir, was erwartet Leute in deinem Bereich und weshalb sollten sie dort mitlesen?">${escapeHtml(user.creatorCommunitySummary || "")}</textarea>
+                  <p class="helper-text">Dieser Text erscheint spaeter direkt im Creator-Hub und macht aus deinem Profil eine kleine eigene Community-Ecke.</p>
+                </div>
+              </div>
             </div>
             <div class="span-all availability-form-shell creator-presence-shell">
               <div class="availability-form-head">
@@ -7649,7 +7784,7 @@ function dedupeRecentEntries(entries, buildFingerprint, timeWindowMs = 15000) {
 function getFeedPosts() {
   return dedupeRecentEntries(
     state.data?.feedPosts || [],
-    (entry) => `${entry.authorId || ""}|${entry.content || ""}|${entry.imageUrl || ""}`
+    (entry) => `${entry.authorId || ""}|${entry.creatorCommunityId || ""}|${entry.content || ""}|${entry.imageUrl || ""}`
   );
 }
 
@@ -7737,6 +7872,15 @@ function renderCreatorsPanel(managerView) {
       <div class="team-grid">
         ${creators.length ? creators.map((entry) => renderCreatorCard(entry)).join("") : renderEmptyState("Noch keine Creator", "Sobald Creator Profiltext oder Links hinterlegen, erscheinen sie hier.")}
       </div>
+      ${
+        creators.length
+          ? `
+            <div class="creator-community-stack">
+              ${creators.map((entry) => renderCreatorCommunityHub(entry)).join("")}
+            </div>
+          `
+          : ""
+      }
     </section>
   `;
 }
@@ -8067,6 +8211,165 @@ function getCreatorPresenceMeta(user) {
   };
 }
 
+function getCreatorCommunityMeta(user) {
+  const communityName = String(user?.creatorCommunityName || "").trim() || `${getPrimaryDisplayName(user)} Community`;
+  const summary =
+    String(user?.creatorCommunitySummary || "").trim() ||
+    String(user?.creatorBlurb || "").trim() ||
+    String(user?.contactNote || "").trim() ||
+    "Ein eigener Bereich fuer Updates, Posts und Themen dieser Creator-Community.";
+  const inviteUrl = String(user?.creatorCommunityInviteUrl || "").trim();
+
+  return {
+    name: communityName,
+    summary,
+    inviteUrl,
+    inviteLabel: inviteUrl ? "Community oeffnen" : ""
+  };
+}
+
+function buildCreatorCommunityOptions(selectedId = "", includeGeneral = true) {
+  const options = [];
+  const creators = getCreatorEntries();
+
+  if (includeGeneral) {
+    options.push(`<option value="">Allgemeine Community</option>`);
+  }
+
+  for (const creator of creators) {
+    options.push(
+      `<option value="${escapeHtml(creator.id)}" ${creator.id === selectedId ? "selected" : ""}>${escapeHtml(getCreatorCommunityMeta(creator).name)}</option>`
+    );
+  }
+
+  return options.join("");
+}
+
+function getCreatorCommunityFeedPosts(creatorId, limit = 3) {
+  const posts = getFeedPosts().filter((post) => post.creatorCommunityId === creatorId || post.authorId === creatorId);
+  return Number.isFinite(limit) ? posts.slice(0, limit) : posts;
+}
+
+function getCreatorCommunityThreads(creatorId, limit = 3) {
+  const threads = (state.data?.forumThreads || []).filter((thread) => thread.creatorCommunityId === creatorId || thread.authorId === creatorId);
+  return Number.isFinite(limit) ? threads.slice(0, limit) : threads;
+}
+
+function renderCreatorCommunityBadge(name) {
+  return name ? `<span class="pill neutral">${escapeHtml(name)}</span>` : "";
+}
+
+function renderCompactCreatorFeedPost(post) {
+  const body = truncateText(post.content || "", 180);
+  return `
+    <article class="mini-card creator-community-activity-card">
+      <div class="status-row">
+        <span class="pill sky">Feed</span>
+        <span class="timeline-meta">${escapeHtml(formatDateTime(post.createdAt))}</span>
+      </div>
+      <h3>${escapeHtml(post.authorName)}</h3>
+      ${post.creatorCommunityName ? `<p class="timeline-meta">${escapeHtml(post.creatorCommunityName)}</p>` : ""}
+      ${body ? `<p class="helper-text">${escapeHtml(body)}</p>` : ""}
+      ${post.imageUrl ? `<img src="${escapeHtml(post.imageUrl)}" alt="Beitrag von ${escapeHtml(post.authorName)}" class="feed-image">` : ""}
+    </article>
+  `;
+}
+
+function renderCompactCreatorForumThread(thread) {
+  const body = truncateText(thread.content || thread.body || "", 200);
+  return `
+    <article class="mini-card creator-community-activity-card">
+      <div class="status-row">
+        <span class="pill amber">${escapeHtml(thread.category || "Thema")}</span>
+        <span class="timeline-meta">${escapeHtml(formatDateTime(thread.createdAt))}</span>
+      </div>
+      <h3>${escapeHtml(thread.title)}</h3>
+      <p class="timeline-meta">von ${escapeHtml(thread.authorName)} | ${(thread.replies || []).length} Antworten</p>
+      ${thread.creatorCommunityName ? `<p class="timeline-meta">${escapeHtml(thread.creatorCommunityName)}</p>` : ""}
+      <p class="helper-text">${escapeHtml(body)}</p>
+    </article>
+  `;
+}
+
+function renderCreatorCommunityHub(user) {
+  const presence = getCreatorPresenceMeta(user);
+  const community = getCreatorCommunityMeta(user);
+  const feedPosts = getCreatorCommunityFeedPosts(user.id, 2);
+  const forumThreads = getCreatorCommunityThreads(user.id, 2);
+
+  return `
+    <article class="request-card creator-community-hub">
+      <div class="creator-community-shell">
+        <div class="creator-community-head">
+          <div class="profile-head">
+            ${renderUserAvatar(user, "profile-avatar")}
+            <div class="creator-card-copy">
+              <h3>${escapeHtml(community.name)}</h3>
+              <p class="timeline-meta">${escapeHtml(getPrimaryDisplayName(user))}</p>
+            </div>
+          </div>
+          <div class="chip-list">
+            <span class="pill ${presence.tone}">${escapeHtml(presence.title)}</span>
+            <span class="pill neutral">${escapeHtml(String(feedPosts.length))} Feed</span>
+            <span class="pill neutral">${escapeHtml(String(forumThreads.length))} Threads</span>
+          </div>
+        </div>
+
+        <div class="creator-community-copy">
+          <p class="helper-text">${escapeHtml(community.summary)}</p>
+          <div class="creator-community-actions">
+            ${
+              community.inviteUrl
+                ? `<a class="creator-action-link" href="${escapeHtml(community.inviteUrl)}" target="_blank" rel="noreferrer">${escapeHtml(community.inviteLabel)}</a>`
+                : ""
+            }
+            ${
+              presence.actionUrl
+                ? `<a class="creator-action-link" href="${escapeHtml(presence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(presence.actionLabel)}</a>`
+                : ""
+            }
+          </div>
+          ${renderCreatorLinkList(user, true)}
+        </div>
+
+        <div class="creator-community-activity-grid">
+          <div class="creator-community-column">
+            <div class="section-head compact-section-head">
+              <div>
+                <p class="eyebrow">Community Feed</p>
+                <h3>Letzte Momente</h3>
+              </div>
+            </div>
+            <div class="stack-list compact-stack">
+              ${
+                feedPosts.length
+                  ? feedPosts.map((post) => renderCompactCreatorFeedPost(post)).join("")
+                  : renderEmptyState("Noch keine Feed-Beitraege", "Sobald in dieser Creator-Community etwas gepostet wird, erscheint es hier.")
+              }
+            </div>
+          </div>
+
+          <div class="creator-community-column">
+            <div class="section-head compact-section-head">
+              <div>
+                <p class="eyebrow">Themenraum</p>
+                <h3>Letzte Threads</h3>
+              </div>
+            </div>
+            <div class="stack-list compact-stack">
+              ${
+                forumThreads.length
+                  ? forumThreads.map((thread) => renderCompactCreatorForumThread(thread)).join("")
+                  : renderEmptyState("Noch keine Themen", "Sobald jemand dieser Creator-Community ein Thema gibt, landet es hier.")
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
 function compareCreatorActivityEntries(left, right) {
   const rank = (entry) => {
     const status = getCreatorPresenceMeta(entry).status;
@@ -8311,6 +8614,7 @@ function renderFeedPostCard(post) {
           <p class="timeline-meta">${escapeHtml(formatDateTime(post.createdAt))}</p>
         </div>
       </div>
+      ${post.creatorCommunityName ? `<div class="chip-list">${renderCreatorCommunityBadge(post.creatorCommunityName)}</div>` : ""}
       ${post.content ? `<p>${escapeHtml(post.content)}</p>` : ""}
       ${post.imageUrl ? `<img src="${escapeHtml(post.imageUrl)}" alt="Feed Bild von ${escapeHtml(post.authorName)}" class="feed-image">` : ""}
       <div class="card-actions reaction-row">
@@ -8342,7 +8646,7 @@ function renderFeedPanel() {
         <div>
           <p class="eyebrow">Community Feed</p>
           <h2>Bilder, Momente und Reaktionen</h2>
-          <p class="section-copy">Mitglieder koennen hier Bilder oder kurze Posts teilen, durchscrollen und direkt reagieren.</p>
+          <p class="section-copy">Mitglieder koennen hier allgemein posten oder gezielt in die kleinen Creator-Communities hinein schreiben.</p>
         </div>
       </div>
 
@@ -8351,6 +8655,12 @@ function renderFeedPanel() {
           <div class="field span-all">
             <label for="feedContent">Beitrag</label>
             <textarea id="feedContent" name="content" placeholder="Was moechtest du mit der Community teilen?"></textarea>
+          </div>
+          <div class="field">
+            <label for="feedCreatorCommunityId">Creator-Community</label>
+            <select id="feedCreatorCommunityId" name="creatorCommunityId">
+              ${buildCreatorCommunityOptions("", true)}
+            </select>
           </div>
           <div class="field">
             <label for="feedImageFile">Bild</label>
