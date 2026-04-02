@@ -576,7 +576,8 @@ function renderSonaraHero({ eyebrow, title, intro, chips = [] }) {
 }
 
 function render() {
-  root.innerHTML = state.session ? renderDashboard() : renderPublicPortal();
+  const route = getPublicRouteState();
+  root.innerHTML = state.session && route.kind !== "creator" ? renderDashboard() : renderPublicPortal();
   restoreFormDrafts();
   restoreTabBarState();
   restorePlannerFocus();
@@ -665,6 +666,12 @@ async function performAction(callback, successMessage = "", successTone = "succe
 }
 
 function renderPublicPortal() {
+  const route = getPublicRouteState();
+  if (route.kind === "creator") {
+    const creator = getPublicCreatorBySlug(route.slug);
+    return creator ? renderCreatorPublicPage(creator) : renderCreatorPublicNotFound(route.slug);
+  }
+
   const community = getCommunityData();
   const stats = community.stats || {};
   const eyebrow = "SONARA Community Portal";
@@ -4631,6 +4638,7 @@ function renderCreatorCard(user, options = {}) {
   const creatorLinks = renderCreatorLinkList(user, true);
   const presence = getCreatorPresenceMeta(user);
   const community = getCreatorCommunityMeta(user);
+  const publicPath = buildCreatorPublicPath(user);
   return `
     <article class="team-card creator-card ${selected ? "creator-card-active" : ""}">
       <div class="status-row">
@@ -4669,9 +4677,14 @@ function renderCreatorCard(user, options = {}) {
               <button type="button" class="ghost small" data-action="set-creator-focus" data-creator-id="${escapeHtml(user.id)}">
                 ${selected ? "Gerade im Fokus" : "Creator-Hub oeffnen"}
               </button>
+              <a class="creator-action-link" href="${escapeHtml(publicPath)}">Slash-Seite</a>
             </div>
           `
-          : ""
+          : `
+            <div class="card-actions">
+              <a class="creator-action-link" href="${escapeHtml(publicPath)}">Slash-Seite</a>
+            </div>
+          `
       }
     </article>
   `;
@@ -6631,6 +6644,189 @@ function getAnnouncementFeed() {
   return state.data?.announcements || state.publicData?.announcements || [];
 }
 
+function getPublicRouteState() {
+  const pathname = String(window.location.pathname || "/").trim() || "/";
+  const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  const creatorMatch = normalizedPath.match(/^\/creator\/([^/]+)$/);
+  if (creatorMatch) {
+    return {
+      kind: "creator",
+      slug: decodeURIComponent(creatorMatch[1] || "").trim().toLowerCase()
+    };
+  }
+
+  return {
+    kind: "home",
+    slug: ""
+  };
+}
+
+function buildCreatorPublicPath(user) {
+  const slug = String(user?.creatorSlug || user?.creatorCommunityName || user?.vrchatName || "").trim().toLowerCase();
+  return slug ? `/creator/${encodeURIComponent(slug)}` : "/";
+}
+
+function getPublicCreatorBySlug(slug) {
+  const normalized = String(slug || "").trim().toLowerCase();
+  if (!normalized) return null;
+  return getCreatorEntries().find((entry) => String(entry.creatorSlug || "").trim().toLowerCase() === normalized) || null;
+}
+
+function getPublicCreatorFeedPosts(creatorId, limit = 6) {
+  const source = (state.data?.feedPosts || state.publicData?.feedPosts || []).filter(
+    (post) => post.creatorCommunityId === creatorId || post.authorId === creatorId
+  );
+  return Number.isFinite(limit) ? source.slice(0, limit) : source;
+}
+
+function getPublicCreatorThreads(creatorId, limit = 6) {
+  const source = (state.data?.forumThreads || state.publicData?.forumThreads || []).filter(
+    (thread) => thread.creatorCommunityId === creatorId || thread.authorId === creatorId
+  );
+  return Number.isFinite(limit) ? source.slice(0, limit) : source;
+}
+
+function renderCreatorPublicPage(creator) {
+  const community = getCreatorCommunityMeta(creator);
+  const presence = getCreatorPresenceMeta(creator);
+  const feedPosts = getPublicCreatorFeedPosts(creator.id, 4);
+  const forumThreads = getPublicCreatorThreads(creator.id, 4);
+  const announcements = getAnnouncementFeed().slice(0, 3);
+
+  return `
+    <div class="app-shell">
+      ${renderSonaraHero({
+        eyebrow: "SONARA Creator",
+        title: community.name,
+        intro: community.summary,
+        chips: [getPrimaryDisplayName(creator), presence.title, creator.creatorSlug ? `/creator/${creator.creatorSlug}` : ""].filter(Boolean)
+      })}
+
+      ${renderFlash()}
+
+      <div class="dashboard-shell creator-public-shell">
+        <section class="panel creator-public-summary">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Creator Seite</p>
+              <h2>${escapeHtml(community.name)}</h2>
+              <p class="section-copy">Das ist die eigene kleine Creator-Seite innerhalb von SONARA. Hier landen Einstieg, Status und die letzten Inhalte an einem festen Ort.</p>
+            </div>
+            <div class="chip-list">
+              <span class="pill ${presence.tone}">${escapeHtml(presence.title)}</span>
+              ${creator.creatorSlug ? `<span class="pill neutral">/creator/${escapeHtml(creator.creatorSlug)}</span>` : ""}
+            </div>
+          </div>
+
+          <div class="creator-public-grid">
+            <article class="mini-card">
+              <div class="profile-head">
+                ${renderUserAvatar(creator, "hero-avatar")}
+                <div class="creator-card-copy">
+                  <h3>${escapeHtml(getPrimaryDisplayName(creator))}</h3>
+                  <p class="timeline-meta">${escapeHtml(creator.creatorBlurb || creator.contactNote || "Creator aus SONARA")}</p>
+                </div>
+              </div>
+              <p class="helper-text">${escapeHtml(presence.summary)}</p>
+              ${renderCreatorLinkList(creator, true)}
+              <div class="creator-community-actions">
+                ${
+                  community.inviteUrl
+                    ? `<a class="creator-action-link" href="${escapeHtml(community.inviteUrl)}" target="_blank" rel="noreferrer">${escapeHtml(community.inviteLabel)}</a>`
+                    : ""
+                }
+                ${
+                  presence.actionUrl
+                    ? `<a class="creator-action-link" href="${escapeHtml(presence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(presence.actionLabel)}</a>`
+                    : ""
+                }
+                <a class="creator-action-link" href="/">Zurueck zu Sonara</a>
+              </div>
+            </article>
+
+            <article class="mini-card">
+              <p class="eyebrow">Creator Feed</p>
+              <h3>Letzte Momente</h3>
+              <div class="stack-list compact-stack">
+                ${
+                  feedPosts.length
+                    ? feedPosts.map((post) => renderCompactCreatorFeedPost(post)).join("")
+                    : renderEmptyState("Noch keine Feed-Momente", "Sobald dieser Creator etwas teilt, landet es hier auf der Seite.")
+                }
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel span-12">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Themenraum</p>
+              <h2>Threads aus dieser Creator-Ecke</h2>
+            </div>
+          </div>
+          <div class="creator-public-columns">
+            <div class="stack-list compact-stack">
+              ${
+                forumThreads.length
+                  ? forumThreads.map((thread) => renderCompactCreatorForumThread(thread)).join("")
+                  : renderEmptyState("Noch keine Themen", "Sobald diese Creator-Community eigene Themen bekommt, tauchen sie hier auf.")
+              }
+            </div>
+            <div class="stack-list compact-stack">
+              <div class="section-head compact-section-head">
+                <div>
+                  <p class="eyebrow">Sonara News</p>
+                  <h3>Was rundherum laeuft</h3>
+                </div>
+              </div>
+              ${
+                announcements.length
+                  ? announcements
+                      .map(
+                        (entry) => `
+                          <article class="mini-card creator-community-activity-card">
+                            <div class="status-row">
+                              <span class="pill ${entry.pinned ? "amber" : "neutral"}">${entry.pinned ? "Wichtig" : "News"}</span>
+                              <span class="timeline-meta">${escapeHtml(formatDateTime(entry.createdAt))}</span>
+                            </div>
+                            <h3>${escapeHtml(entry.title)}</h3>
+                            <p class="helper-text">${escapeHtml(truncateText(entry.body, 220))}</p>
+                          </article>
+                        `
+                      )
+                      .join("")
+                  : renderEmptyState("Noch keine News", "Sobald SONARA neue Hinweise veroeffentlicht, tauchen sie hier auf.")
+              }
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+}
+
+function renderCreatorPublicNotFound(slug) {
+  return `
+    <div class="app-shell">
+      ${renderSonaraHero({
+        eyebrow: "Creator Seite",
+        title: "Creator nicht gefunden",
+        intro: "Entweder ist dieser Creator noch nicht freigegeben oder der Slash-Link stimmt noch nicht.",
+        chips: slug ? [`/creator/${slug}`] : []
+      })}
+      <div class="auth-layout public-grid">
+        <section class="panel">
+          ${renderEmptyState("Diese Creator-Seite gibt es noch nicht", "Pruefe den Slug, warte auf die Creator-Freigabe oder geh zur Hauptseite zurueck.")}
+          <div class="card-actions">
+            <a class="creator-action-link" href="/">Zur Sonara Startseite</a>
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+}
+
 function getChatFeed(mode = "community") {
   if (mode === "staff") {
     return state.data?.staffChatMessages || state.data?.chatMessages || [];
@@ -7591,6 +7787,7 @@ async function buildProfilePayload(form) {
     creatorBlurb: formData.get("creatorBlurb"),
     creatorLinks: formData.get("creatorLinks"),
     creatorVisible: formData.get("creatorVisible") === "on",
+    creatorSlug: formData.get("creatorSlug"),
     creatorCommunityName: formData.get("creatorCommunityName"),
     creatorCommunitySummary: formData.get("creatorCommunitySummary"),
     creatorCommunityInviteUrl: formData.get("creatorCommunityInviteUrl"),
@@ -7868,11 +8065,13 @@ function renderProfilePanel(managerView) {
           </div>
           <h3>${escapeHtml(creatorCommunity.name)}</h3>
           <p class="helper-text">${escapeHtml(creatorCommunity.summary)}</p>
+          ${user.creatorSlug ? `<p class="timeline-meta">Seite: ${escapeHtml(`/creator/${user.creatorSlug}`)}</p>` : ""}
           ${
             creatorCommunity.inviteUrl
               ? `<a class="creator-action-link" href="${escapeHtml(creatorCommunity.inviteUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorCommunity.inviteLabel)}</a>`
               : '<p class="helper-text">Wenn du magst, kannst du deiner Community hier einen eigenen Eingang geben, etwa einen Discord-, Twitch- oder Sammellink.</p>'
           }
+          ${user.creatorSlug ? `<a class="creator-action-link" href="${escapeHtml(buildCreatorPublicPath(user))}">Slash-Seite ansehen</a>` : ""}
         </article>
 
         <section class="availability-form-shell creator-application-shell">
@@ -8015,13 +8214,17 @@ function renderProfilePanel(managerView) {
                   <input id="profileCreatorCommunityName" name="creatorCommunityName" type="text" value="${escapeHtml(user.creatorCommunityName || "")}" placeholder="z. B. House of Mika">
                 </div>
                 <div class="field">
+                  <label for="profileCreatorSlug">Slash-Adresse</label>
+                  <input id="profileCreatorSlug" name="creatorSlug" type="text" value="${escapeHtml(user.creatorSlug || "")}" placeholder="z. B. house-of-mika">
+                </div>
+                <div class="field">
                   <label for="profileCreatorCommunityInviteUrl">Einstiegslink</label>
                   <input id="profileCreatorCommunityInviteUrl" name="creatorCommunityInviteUrl" type="url" value="${escapeHtml(user.creatorCommunityInviteUrl || "")}" placeholder="Discord, Linktree, TikTok oder eigener Sammellink">
                 </div>
                 <div class="field span-all">
                   <label for="profileCreatorCommunitySummary">Kurzbeschreibung deiner Community</label>
                   <textarea id="profileCreatorCommunitySummary" name="creatorCommunitySummary" placeholder="Worum geht es bei dir, was erwartet Leute in deinem Bereich und weshalb sollten sie dort mitlesen?">${escapeHtml(user.creatorCommunitySummary || "")}</textarea>
-                  <p class="helper-text">Dieser Text erscheint spaeter direkt im Creator-Hub und macht aus deinem Profil eine kleine eigene Community-Ecke.</p>
+                  <p class="helper-text">Dieser Text erscheint spaeter direkt im Creator-Hub und auf deiner Slash-Seite. Die URL wird automatisch auf `/creator/dein-slug` gebaut.</p>
                 </div>
               </div>
             </div>
@@ -8759,6 +8962,7 @@ function renderCreatorCommunityHub(user) {
   const community = getCreatorCommunityMeta(user);
   const feedPosts = getCreatorCommunityFeedPosts(user.id, 2);
   const forumThreads = getCreatorCommunityThreads(user.id, 2);
+  const publicPath = buildCreatorPublicPath(user);
 
   return `
     <article class="request-card creator-community-hub">
@@ -8791,6 +8995,7 @@ function renderCreatorCommunityHub(user) {
                 ? `<a class="creator-action-link" href="${escapeHtml(presence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(presence.actionLabel)}</a>`
                 : ""
             }
+            <a class="creator-action-link" href="${escapeHtml(publicPath)}">Slash-Seite oeffnen</a>
           </div>
           ${renderCreatorLinkList(user, true)}
         </div>

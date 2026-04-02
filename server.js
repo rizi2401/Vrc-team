@@ -124,6 +124,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname.startsWith("/creator/")) {
+      serveStatic(res, staticFiles["/"]);
+      return;
+    }
+
     sendJson(res, 404, { error: "Nicht gefunden." });
   } catch (error) {
     sendJson(res, error.statusCode || 500, { error: error.message || "Serverfehler." });
@@ -187,6 +192,7 @@ async function handleApi(req, res, url) {
       creatorBlurb: normalized.creatorBlurb,
       creatorLinks: normalized.creatorLinks,
       creatorVisible: normalized.creatorVisible,
+      creatorSlug: normalized.creatorSlug,
       creatorApplicationStatus: normalized.creatorApplicationStatus,
       creatorFollowerCount: normalized.creatorFollowerCount,
       creatorPrimaryPlatform: normalized.creatorPrimaryPlatform,
@@ -1045,6 +1051,7 @@ async function handleApi(req, res, url) {
       creatorBlurb: normalized.creatorBlurb,
       creatorLinks: normalized.creatorLinks,
       creatorVisible: normalized.creatorVisible,
+      creatorSlug: normalized.creatorSlug,
       creatorApplicationStatus: normalized.creatorApplicationStatus,
       creatorFollowerCount: normalized.creatorFollowerCount,
       creatorPrimaryPlatform: normalized.creatorPrimaryPlatform,
@@ -1525,6 +1532,7 @@ function normalizeSwapRequests(entries, users, shifts) {
 function normalizeUsers(users, legacyModeratorNames) {
   const normalized = [];
   const usedUsernames = new Set();
+  const usedCreatorSlugs = new Set();
 
   for (const entry of users) {
     const username = normalizeUsername(entry.username);
@@ -2026,7 +2034,7 @@ function buildCommunityPayload(store) {
     .map(sanitizeUser);
 
   const creators = activeUsers
-    .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
+    .filter((entry) => hasVisibleCreatorProfile(entry))
     .slice()
     .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
     .map(sanitizeUser);
@@ -2992,8 +3000,20 @@ function sendPortalData(res, statusCode, user, store, headers = {}) {
 }
 
 function buildPublicPortalData(store) {
+  const visibleCreatorIds = new Set((store.users || []).filter((entry) => hasVisibleCreatorProfile(entry)).map((entry) => entry.id));
+  const publicFeedPosts = (store.feedPosts || [])
+    .map((entry) => decorateFeedPost(entry, store))
+    .filter((entry) => entry.creatorCommunityId || visibleCreatorIds.has(entry.authorId))
+    .slice(0, 60);
+  const publicForumThreads = (store.forumThreads || [])
+    .map((entry) => decorateForumThread(entry, store))
+    .filter((entry) => entry.creatorCommunityId || visibleCreatorIds.has(entry.authorId))
+    .slice(0, 60);
+
   return {
     community: buildCommunityPayload(store),
+    feedPosts: publicFeedPosts,
+    forumThreads: publicForumThreads,
     announcements: store.announcements
       .slice()
       .sort((left, right) => {
@@ -3777,6 +3797,36 @@ function createUniqueUsername(value, existingUsernames) {
   }
 
   return candidate;
+}
+
+function normalizeCreatorSlugValue(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+function createUniqueCreatorSlug(value, existingSlugs) {
+  const used = new Set((existingSlugs || []).map((entry) => String(entry || "").toLowerCase()).filter(Boolean));
+  const base = normalizeCreatorSlugValue(value) || "creator";
+
+  let candidate = base;
+  let counter = 2;
+  while (used.has(candidate)) {
+    candidate = `${base}-${counter}`;
+    counter += 1;
+  }
+
+  return candidate;
+}
+
+function resolveUniqueCreatorSlug(users, targetId, desiredSlug, fallbackValue = "creator") {
+  const existingSlugs = (users || [])
+    .filter((entry) => entry.id !== targetId)
+    .map((entry) => normalizeCreatorSlugValue(entry.creatorSlug || entry.creatorCommunityName || entry.displayName));
+
+  return createUniqueCreatorSlug(desiredSlug || fallbackValue, existingSlugs);
 }
 
 function uniqueStrings(values) {
@@ -4920,6 +4970,7 @@ function normalizeUsers(users, legacyModeratorNames) {
     const creatorCommunityName = normalizeCreatorCommunityName(entry.creatorCommunityName);
     const creatorCommunitySummary = normalizeCreatorCommunitySummary(entry.creatorCommunitySummary);
     const creatorCommunityInviteUrl = normalizeCreatorCommunityInviteUrl(entry.creatorCommunityInviteUrl);
+    const creatorSlug = createUniqueCreatorSlug(entry.creatorSlug || creatorCommunityName || displayName, [...usedCreatorSlugs]);
     const creatorFollowerCount = normalizeCreatorFollowerCount(entry.creatorFollowerCount);
     const creatorPrimaryPlatform = normalizeCreatorPrimaryPlatform(entry.creatorPrimaryPlatform);
     const creatorProofUrl = normalizeCreatorProofUrl(entry.creatorProofUrl);
@@ -4947,6 +4998,7 @@ function normalizeUsers(users, legacyModeratorNames) {
     if (!username || !displayName || !vrchatName || !discordName || !passwordHash || usedUsernames.has(username)) continue;
 
     usedUsernames.add(username);
+    usedCreatorSlugs.add(creatorSlug);
     normalized.push({
       id: String(entry.id || crypto.randomUUID()),
       username,
@@ -4960,6 +5012,7 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorBlurb,
       creatorLinks,
       creatorVisible,
+      creatorSlug,
       creatorApplicationStatus,
       creatorFollowerCount,
       creatorPrimaryPlatform,
@@ -4996,6 +5049,8 @@ function normalizeUsers(users, legacyModeratorNames) {
     if (normalized.some((entry) => entry.displayName.toLowerCase() === name.toLowerCase())) continue;
 
     const username = createUniqueUsername(name, normalized.map((entry) => entry.username));
+    const creatorSlug = createUniqueCreatorSlug(name, [...usedCreatorSlugs]);
+    usedCreatorSlugs.add(creatorSlug);
     normalized.push({
       id: crypto.randomUUID(),
       username,
@@ -5009,6 +5064,7 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorBlurb: "",
       creatorLinks: [],
       creatorVisible: false,
+      creatorSlug,
       creatorApplicationStatus: "none",
       creatorFollowerCount: 0,
       creatorPrimaryPlatform: "",
@@ -5054,6 +5110,7 @@ function sanitizeUser(user) {
     creatorBlurb: user.creatorBlurb || "",
     creatorLinks: Array.isArray(user.creatorLinks) ? user.creatorLinks : [],
     creatorVisible: Boolean(user.creatorVisible),
+    creatorSlug: normalizeCreatorSlugValue(user.creatorSlug || user.creatorCommunityName || user.displayName),
     creatorCommunityName: normalizeCreatorCommunityName(user.creatorCommunityName),
     creatorCommunitySummary: normalizeCreatorCommunitySummary(user.creatorCommunitySummary),
     creatorCommunityInviteUrl: user.creatorCommunityInviteUrl || "",
@@ -5103,6 +5160,7 @@ function validateRegistrationPayload(body, store) {
   const creatorBlurb = String(body.creatorBlurb || "").trim().slice(0, 300);
   const creatorLinks = normalizeCreatorLinks(body.creatorLinks);
   const creatorVisible = Boolean(body.creatorVisible && (creatorLinks.length || creatorBlurb));
+  const creatorSlug = resolveUniqueCreatorSlug(store.users, null, body.creatorSlug || body.creatorCommunityName || vrchatName, vrchatName);
   const creatorCommunityName = normalizeCreatorCommunityName(body.creatorCommunityName);
   const creatorCommunitySummary = normalizeCreatorCommunitySummary(body.creatorCommunitySummary);
   const creatorCommunityInviteUrl = normalizeCreatorCommunityInviteUrl(body.creatorCommunityInviteUrl);
@@ -5152,6 +5210,7 @@ function validateRegistrationPayload(body, store) {
     creatorBlurb,
     creatorLinks,
     creatorVisible,
+    creatorSlug,
     creatorApplicationStatus,
     creatorFollowerCount,
     creatorPrimaryPlatform,
@@ -5219,6 +5278,12 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
     creatorApproved && body.creatorVisible !== undefined
       ? Boolean(body.creatorVisible && (nextCreatorLinks.length || nextCreatorBlurb))
       : Boolean(creatorApproved && target.creatorVisible && (nextCreatorLinks.length || nextCreatorBlurb));
+  const nextCreatorSlug = resolveUniqueCreatorSlug(
+    users,
+    target.id,
+    body.creatorSlug !== undefined ? body.creatorSlug || nextCreatorCommunityName || nextVrchatName : target.creatorSlug || nextCreatorCommunityName || nextVrchatName,
+    nextVrchatName
+  );
 
   if (!nextVrchatName) {
     const error = new Error("Der VRChat-Name darf nicht leer sein.");
@@ -5270,6 +5335,7 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   target.creatorBlurb = nextCreatorBlurb;
   target.creatorLinks = nextCreatorLinks;
   target.creatorVisible = nextCreatorVisible;
+  target.creatorSlug = nextCreatorSlug;
   target.creatorCommunityName = nextCreatorCommunityName;
   target.creatorCommunitySummary = nextCreatorCommunitySummary;
   target.creatorCommunityInviteUrl = nextCreatorCommunityInviteUrl;
