@@ -4533,14 +4533,27 @@ function renderExpandableTextBlock(title, value) {
 
 function renderCreatorCard(user) {
   const creatorLinks = renderCreatorLinkList(user, true);
+  const presence = getCreatorPresenceMeta(user);
   return `
     <article class="team-card creator-card">
+      <div class="status-row">
+        <span class="pill ${presence.tone}">${escapeHtml(presence.title)}</span>
+        ${presence.updatedLabel ? `<span class="timeline-meta">${escapeHtml(presence.updatedLabel)}</span>` : ""}
+      </div>
       <div class="profile-head">
         ${renderUserAvatar(user, "profile-avatar")}
         <div class="creator-card-copy">
           <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
           <p class="timeline-meta">${escapeHtml(user.creatorBlurb || user.contactNote || "Creator-Profil")}</p>
         </div>
+      </div>
+      <div class="creator-presence-copy">
+        <p class="helper-text">${escapeHtml(presence.summary)}</p>
+        ${
+          presence.actionUrl
+            ? `<a class="creator-action-link" href="${escapeHtml(presence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(presence.actionLabel)}</a>`
+            : ""
+        }
       </div>
       ${
         creatorLinks
@@ -6996,7 +7009,7 @@ function renderPublicPortal() {
         eyebrow: "SONARA Community Portal",
         title: "Community, Team und Creator an einem Ort",
         intro: "News, Events, Creator-Links und der Mitgliederbereich liegen hier kompakt zusammen.",
-        chips: [`${stats.members || 0} Mitglieder`, `${stats.creators || 0} Creator`, `${(community.events || []).length} Events`]
+        chips: [`${stats.members || 0} Mitglieder`, `${stats.liveCreators || 0} live`, `${(community.events || []).length} Events`]
       })}
 
       ${renderFlash()}
@@ -7040,6 +7053,8 @@ function renderPublicPortal() {
               `
               : ""
           }
+
+          ${renderLivePreviewPanel(4)}
         </section>
 
         <div class="auth-stack public-auth-stack">
@@ -7371,7 +7386,10 @@ async function buildProfilePayload(form) {
     availabilitySchedule: formData.get("availabilitySchedule"),
     creatorBlurb: formData.get("creatorBlurb"),
     creatorLinks: formData.get("creatorLinks"),
-    creatorVisible: formData.get("creatorVisible") === "on"
+    creatorVisible: formData.get("creatorVisible") === "on",
+    creatorPresence: formData.get("creatorPresence"),
+    creatorPresenceText: formData.get("creatorPresenceText"),
+    creatorPresenceUrl: formData.get("creatorPresenceUrl")
   };
 
   if (draft?.dataUrl) {
@@ -7426,6 +7444,7 @@ function renderProfilePanel(managerView) {
   const user = state.session;
   const draftKey = "profile-update:";
   const showAvailabilityFields = user.role !== "member";
+  const creatorPresence = getCreatorPresenceMeta(user);
 
   return `
     <section class="panel ${managerView ? "span-12" : "span-12"}">
@@ -7447,6 +7466,16 @@ function renderProfilePanel(managerView) {
             ${showAvailabilityFields && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
             ${showAvailabilityFields && user.availabilitySchedule ? `<p class="helper-text"><strong>Diese Woche:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
             ${showAvailabilityFields && user.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(user.availabilityUpdatedAt))}</p>` : ""}
+            <div class="creator-presence-inline">
+              <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
+              ${creatorPresence.updatedLabel ? `<span class="timeline-meta">${escapeHtml(creatorPresence.updatedLabel)}</span>` : ""}
+            </div>
+            <p class="helper-text">${escapeHtml(creatorPresence.summary)}</p>
+            ${
+              creatorPresence.actionUrl
+                ? `<a class="creator-action-link" href="${escapeHtml(creatorPresence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorPresence.actionLabel)}</a>`
+                : ""
+            }
             ${renderCreatorLinkList(user, true)}
           </div>
         </div>
@@ -7461,6 +7490,21 @@ function renderProfilePanel(managerView) {
             `
             : ""
         }
+
+        <article class="mini-card creator-presence-preview">
+          <div class="status-row">
+            <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
+            ${creatorPresence.actionPlatform ? `<span class="timeline-meta">${escapeHtml(creatorPresence.actionPlatform.name)}</span>` : ""}
+          </div>
+          <h3>Sonara Live Status</h3>
+          <p class="helper-text">Wenn du streamst oder etwas Neues droppst, erscheint es hier fuer die Community. Plattformen erkennt das Portal direkt aus deinen Creator-Links.</p>
+          <p class="helper-text">${escapeHtml(creatorPresence.summary)}</p>
+          ${
+            creatorPresence.actionUrl
+              ? `<a class="creator-action-link" href="${escapeHtml(creatorPresence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorPresence.actionLabel)}</a>`
+              : '<p class="helper-text">Noch kein direkter Creator-Link aktiv. Sobald du unten einen Status und Link pflegst, tauchst du im Sonara-Live-Bereich auf.</p>'
+          }
+        </article>
 
         <form class="stack-form" data-form="profile-update">
           <div class="form-grid">
@@ -7528,9 +7572,38 @@ function renderProfilePanel(managerView) {
               <label for="profileCreatorVisible">Im Creator-Bereich zeigen</label>
               <input id="profileCreatorVisible" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
             </div>
+            <div class="span-all availability-form-shell creator-presence-shell">
+              <div class="availability-form-head">
+                <div>
+                  <p class="eyebrow">Sonara Live</p>
+                  <h3>Dein aktueller Creator-Moment</h3>
+                  <p class="helper-text">Hier setzt du manuell, ob du gerade live bist oder etwas Neues hochgeladen hast. Die Website erkennt deine Plattformen aus den Links und baut daraus die passenden Schnellwege.</p>
+                </div>
+                <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
+              </div>
+              <div class="creator-presence-form-grid">
+                <div class="field">
+                  <label for="profileCreatorPresence">Status</label>
+                  <select id="profileCreatorPresence" name="creatorPresence">
+                    <option value="offline" ${creatorPresence.status === "offline" ? "selected" : ""}>Zurzeit ruhig</option>
+                    <option value="live" ${creatorPresence.status === "live" ? "selected" : ""}>Ich bin gerade live</option>
+                    <option value="new-release" ${creatorPresence.status === "new-release" ? "selected" : ""}>Ich habe etwas Neues hochgeladen</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="profileCreatorPresenceUrl">Direkter Link</label>
+                  <input id="profileCreatorPresenceUrl" name="creatorPresenceUrl" type="url" value="${escapeHtml(user.creatorPresenceUrl || "")}" placeholder="TikTok Live, Twitch, neues Video oder Profil-Link">
+                </div>
+                <div class="field span-all">
+                  <label for="profileCreatorPresenceText">Kurztext fuer Sonara Live</label>
+                  <textarea id="profileCreatorPresenceText" name="creatorPresenceText" placeholder="z. B. Heute Abend TikTok Live ab 20 Uhr oder neuer Clip ist online.">${escapeHtml(user.creatorPresenceText || "")}</textarea>
+                  <p class="helper-text">Das ist die kurze Notiz, die Mitglieder bei Sonara Live und in ihren Benachrichtigungen sehen.</p>
+                </div>
+              </div>
+            </div>
             <div class="field span-all">
               <label for="profileCreatorLinks">Creator-Links</label>
-              <textarea id="profileCreatorLinks" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...&#10;Spotify | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
+              <textarea id="profileCreatorLinks" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...&#10;Twitch | https://...&#10;YouTube | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
             </div>
           </div>
           <button type="submit">Profil speichern</button>
@@ -7598,16 +7671,26 @@ function getCreatorEntries() {
 function getCommunityData() {
   const community = state.data?.community || state.publicData?.community || {};
   const creators = getCreatorEntries();
+  const creatorActivity = Array.isArray(community.creatorActivity)
+    ? community.creatorActivity
+    : creators.filter((entry) => getCreatorPresenceMeta(entry).status !== "offline");
+  const liveCreators = Array.isArray(community.liveCreators)
+    ? community.liveCreators
+    : creatorActivity.filter((entry) => getCreatorPresenceMeta(entry).status === "live");
 
   return {
     team: Array.isArray(community.team) ? community.team : [],
     creators,
+    creatorActivity,
+    liveCreators,
     events: Array.isArray(community.events) ? community.events : [],
     rules: Array.isArray(community.rules) ? community.rules : [],
     faq: Array.isArray(community.faq) ? community.faq : [],
     stats: {
       ...(community.stats || {}),
-      creators: creators.length
+      creators: creators.length,
+      liveCreators: liveCreators.length,
+      creatorActivity: creatorActivity.length
     }
   };
 }
@@ -7630,6 +7713,7 @@ function getChatFeed(mode = "community") {
 
 function renderCreatorsPanel(managerView) {
   const creators = getCreatorEntries();
+  const creatorActivity = getCreatorActivityEntries(4);
 
   return `
     <section class="panel span-12">
@@ -7637,11 +7721,115 @@ function renderCreatorsPanel(managerView) {
         <div>
           <p class="eyebrow">Creator</p>
           <h2>Content Creator aus SONARA</h2>
+          <p class="section-copy">Profile, Plattformen und aktuelle Live-Momente laufen hier zusammen.</p>
         </div>
       </div>
-      ${managerView ? '<p class="helper-text">Creator pflegen ihre Links im Profil. Im Team-Bereich kannst du sie bei Bedarf mit bearbeiten.</p>' : ""}
+      ${managerView ? '<p class="helper-text">Creator pflegen ihre Links und ihren aktuellen Live-Status im Profil. Im Team-Bereich kannst du sie bei Bedarf mit bearbeiten.</p>' : ""}
+      ${
+        creatorActivity.length
+          ? `
+            <div class="live-creator-grid compact-live-grid">
+              ${creatorActivity.map((entry) => renderLiveCreatorCard(entry)).join("")}
+            </div>
+          `
+          : ""
+      }
       <div class="team-grid">
         ${creators.length ? creators.map((entry) => renderCreatorCard(entry)).join("") : renderEmptyState("Noch keine Creator", "Sobald Creator Profiltext oder Links hinterlegen, erscheinen sie hier.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderLivePreviewPanel(limit = 4, spanClass = "span-12") {
+  const activityEntries = getCreatorActivityEntries(limit);
+  const liveCount = activityEntries.filter((entry) => getCreatorPresenceMeta(entry).status === "live").length;
+  const releaseCount = activityEntries.filter((entry) => getCreatorPresenceMeta(entry).status === "new-release").length;
+
+  return `
+    <section class="panel ${spanClass} live-preview-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Sonara Live</p>
+          <h2>Was bei den Creatorn gerade laeuft</h2>
+          <p class="section-copy">Streams und frische Uploads tauchen hier direkt auf, sobald Creator ihren Status im Profil setzen.</p>
+        </div>
+        <div class="chip-list">
+          <span class="pill amber">${escapeHtml(String(liveCount))} live</span>
+          <span class="pill sky">${escapeHtml(String(releaseCount))} neu</span>
+        </div>
+      </div>
+      ${
+        activityEntries.length
+          ? `<div class="live-creator-grid">${activityEntries.map((entry) => renderLiveCreatorCard(entry)).join("")}</div>`
+          : renderEmptyState("Noch kein Creator aktiv", "Sobald jemand streamt oder einen neuen Upload teilt, erscheint der Hinweis hier fuer die Community.")
+      }
+    </section>
+  `;
+}
+
+function renderLivePanel() {
+  const creators = getCreatorEntries();
+  const activityEntries = getCreatorActivityEntries();
+  const liveEntries = activityEntries.filter((entry) => getCreatorPresenceMeta(entry).status === "live");
+  const releaseEntries = activityEntries.filter((entry) => getCreatorPresenceMeta(entry).status === "new-release");
+  const leadLive = liveEntries[0] || null;
+  const leadRelease = releaseEntries[0] || null;
+  const leadLiveMeta = leadLive ? getCreatorPresenceMeta(leadLive) : null;
+  const leadReleaseMeta = leadRelease ? getCreatorPresenceMeta(leadRelease) : null;
+
+  return `
+    <section class="panel span-12 live-stage-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Sonara Live</p>
+          <h2>Streams, Uploads und Creator-Signale</h2>
+          <p class="section-copy">Hier buendelt SONARA alle aktuellen Creator-Momente. Plattformen werden aus den Creator-Links erkannt, waehrend Creator ihren Live- oder Upload-Status gezielt selbst setzen.</p>
+        </div>
+        <div class="chip-list">
+          <span class="pill amber">${escapeHtml(String(liveEntries.length))} live</span>
+          <span class="pill sky">${escapeHtml(String(releaseEntries.length))} neu</span>
+          <span class="pill neutral">${escapeHtml(String(creators.length))} Creator</span>
+        </div>
+      </div>
+
+      <div class="live-stage-grid">
+        <article class="mini-card live-stage-card live-stage-card-sun">
+          <p class="eyebrow">Gerade offen</p>
+          <h3>${escapeHtml(leadLive ? `${getPrimaryDisplayName(leadLive)} sendet gerade` : "Gerade kein Stream aktiv")}</h3>
+          <p class="helper-text">${escapeHtml(leadLiveMeta ? leadLiveMeta.summary : "Sobald jemand live geht, landet der Stream hier direkt als schneller Einstieg fuer die Community.")}</p>
+          ${
+            leadLiveMeta?.actionUrl
+              ? `<a class="creator-action-link" href="${escapeHtml(leadLiveMeta.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(leadLiveMeta.actionLabel)}</a>`
+              : ""
+          }
+        </article>
+
+        <article class="mini-card live-stage-card live-stage-card-moon">
+          <p class="eyebrow">Frisch erschienen</p>
+          <h3>${escapeHtml(leadRelease ? `Neu von ${getPrimaryDisplayName(leadRelease)}` : "Noch kein neuer Upload markiert")}</h3>
+          <p class="helper-text">${escapeHtml(leadReleaseMeta ? leadReleaseMeta.summary : "Creator koennen hier neue Videos, Musik oder Clips direkt mit einem Link in den Fokus setzen.")}</p>
+          ${
+            leadReleaseMeta?.actionUrl
+              ? `<a class="creator-action-link" href="${escapeHtml(leadReleaseMeta.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(leadReleaseMeta.actionLabel)}</a>`
+              : ""
+          }
+        </article>
+      </div>
+    </section>
+
+    ${renderLivePreviewPanel(6)}
+
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Creator Radar</p>
+          <h2>Alle Creator auf einen Blick</h2>
+          <p class="section-copy">Hier bleiben Profile, Plattformen und Status dauerhaft sichtbar, auch wenn gerade niemand live ist.</p>
+        </div>
+      </div>
+      <div class="team-grid">
+        ${creators.length ? creators.map((entry) => renderCreatorCard(entry)).join("") : renderEmptyState("Noch keine Creator", "Sobald Creator Links oder einen Kurztext im Profil pflegen, erscheinen sie hier.")}
       </div>
     </section>
   `;
@@ -7840,6 +8028,96 @@ function getCreatorPlatformMeta(entry) {
   if (haystack.includes("patreon")) return { name: "Patreon", badge: "PT" };
   if (haystack.includes("vrchat")) return { name: "VRChat", badge: "VR" };
   return { name: rawLabel || "Website", badge: "WB" };
+}
+
+function getCreatorPresenceTimestamp(user) {
+  const timestamp = Date.parse(String(user?.creatorPresenceUpdatedAt || ""));
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getCreatorPresenceMeta(user) {
+  const status = user?.creatorPresence === "live" ? "live" : user?.creatorPresence === "new-release" ? "new-release" : "offline";
+  const linkEntries = (user?.creatorLinks || []).map((entry) => ({
+    ...entry,
+    platform: getCreatorPlatformMeta(entry)
+  }));
+  const preferredPlatforms =
+    status === "live"
+      ? ["Twitch", "TikTok", "YouTube", "Instagram", "Discord"]
+      : ["YouTube", "TikTok", "Spotify", "SoundCloud", "Instagram", "X", "Discord"];
+  const matchedLink = linkEntries.find((entry) => preferredPlatforms.includes(entry.platform.name)) || linkEntries[0] || null;
+  const explicitActionUrl = String(user?.creatorPresenceUrl || "").trim();
+  const actionPlatform = explicitActionUrl ? getCreatorPlatformMeta({ label: "", url: explicitActionUrl }) : matchedLink?.platform || null;
+  const summary =
+    String(user?.creatorPresenceText || "").trim() ||
+    String(user?.creatorBlurb || "").trim() ||
+    String(user?.contactNote || "").trim() ||
+    "Creator-Profil";
+
+  return {
+    status,
+    title: status === "live" ? "Jetzt live" : status === "new-release" ? "Neu hochgeladen" : "Zurzeit ruhig",
+    tone: status === "live" ? "amber" : status === "new-release" ? "sky" : "neutral",
+    summary,
+    actionUrl: explicitActionUrl || matchedLink?.url || "",
+    actionLabel: status === "live" ? "Live oeffnen" : status === "new-release" ? "Neuen Upload ansehen" : matchedLink ? "Creator oeffnen" : "",
+    actionPlatform,
+    updatedLabel: user?.creatorPresenceUpdatedAt ? `Aktualisiert ${formatDateTime(user.creatorPresenceUpdatedAt)}` : "",
+    linkEntries
+  };
+}
+
+function compareCreatorActivityEntries(left, right) {
+  const rank = (entry) => {
+    const status = getCreatorPresenceMeta(entry).status;
+    if (status === "live") return 0;
+    if (status === "new-release") return 1;
+    return 2;
+  };
+
+  const rankDiff = rank(left) - rank(right);
+  if (rankDiff !== 0) return rankDiff;
+
+  const timeDiff = getCreatorPresenceTimestamp(right) - getCreatorPresenceTimestamp(left);
+  if (timeDiff !== 0) return timeDiff;
+
+  return getPrimaryDisplayName(left).localeCompare(getPrimaryDisplayName(right), "de");
+}
+
+function getCreatorActivityEntries(limit = Number.POSITIVE_INFINITY) {
+  const entries = getCreatorEntries()
+    .filter((entry) => getCreatorPresenceMeta(entry).status !== "offline")
+    .slice()
+    .sort(compareCreatorActivityEntries);
+
+  return Number.isFinite(limit) ? entries.slice(0, limit) : entries;
+}
+
+function renderLiveCreatorCard(user) {
+  const presence = getCreatorPresenceMeta(user);
+
+  return `
+    <article class="mini-card live-creator-card live-creator-card-${escapeHtml(presence.status)}">
+      <div class="status-row">
+        <span class="pill ${presence.tone}">${escapeHtml(presence.title)}</span>
+        ${presence.actionPlatform ? `<span class="timeline-meta">${escapeHtml(presence.actionPlatform.name)}</span>` : ""}
+      </div>
+      <div class="profile-head">
+        ${renderUserAvatar(user, "profile-avatar")}
+        <div class="creator-card-copy">
+          <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+          ${presence.updatedLabel ? `<p class="timeline-meta">${escapeHtml(presence.updatedLabel)}</p>` : ""}
+        </div>
+      </div>
+      <p class="helper-text">${escapeHtml(presence.summary)}</p>
+      ${renderCreatorLinkList(user, true)}
+      ${
+        presence.actionUrl
+          ? `<a class="creator-action-link" href="${escapeHtml(presence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(presence.actionLabel)}</a>`
+          : ""
+      }
+    </article>
+  `;
 }
 
 function renderCreatorLinkList(user, compact = false) {
@@ -8098,6 +8376,7 @@ function renderDashboardTabs(activeTab) {
     { id: "events", label: "Events" },
     { id: "news", label: "News" },
     { id: "creators", label: "Creator" },
+    { id: "live", label: "Sonara Live" },
     { id: "forum", label: "Forum" },
     { id: "chat", label: "Chat" },
     { id: "profile", label: "Profil" }
@@ -8141,6 +8420,8 @@ function renderManagerDashboard(activeTab) {
       return renderNewsPanel(true);
     case "creators":
       return renderCreatorsPanel(true);
+    case "live":
+      return renderLivePanel();
     case "forum":
       return renderForumPanel(true);
     case "feedback":
@@ -8161,7 +8442,7 @@ function renderManagerDashboard(activeTab) {
       return [renderSettingsPanel(), renderDiscordPanel(), renderVrchatAnalyticsPanel()].join("");
     case "overview":
     default:
-      return [renderNotificationsPanel(), renderFeedPanel(), renderAvailabilityReminderPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
+      return [renderNotificationsPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderAvailabilityReminderPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
   }
 }
 
@@ -8179,6 +8460,8 @@ function renderModeratorDashboard(activeTab) {
       return renderNewsPanel(false);
     case "creators":
       return renderCreatorsPanel(false);
+    case "live":
+      return renderLivePanel();
     case "forum":
       return renderForumPanel(false);
     case "schedule":
@@ -8193,7 +8476,7 @@ function renderModeratorDashboard(activeTab) {
       return renderProfilePanel(false);
     case "overview":
     default:
-      return [renderNotificationsPanel(), renderFeedPanel(), renderAvailabilityReminderPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
+      return [renderNotificationsPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderAvailabilityReminderPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
   }
 }
 
@@ -8211,6 +8494,8 @@ function renderMemberDashboard(activeTab) {
       return renderNewsPanel(false);
     case "creators":
       return renderCreatorsPanel(false);
+    case "live":
+      return renderLivePanel();
     case "forum":
       return renderForumPanel(false);
     case "feedback":
@@ -8221,16 +8506,16 @@ function renderMemberDashboard(activeTab) {
       return renderProfilePanel(false);
     case "overview":
     default:
-      return [renderNotificationsPanel(), renderFeedPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderCommunityOverviewPanel()].join("");
+      return [renderNotificationsPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderCommunityOverviewPanel()].join("");
   }
 }
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "forum", "feedback", "planning", "capacity", "team", "chat", "time", "profile", "settings"]
+    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "feedback", "planning", "capacity", "team", "chat", "time", "profile", "settings"]
     : canAccessStaffArea()
-      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "forum", "schedule", "feedback", "chat", "time", "profile"]
-      : ["overview", "feed", "community", "calendar", "events", "news", "creators", "forum", "feedback", "chat", "profile"];
+      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "schedule", "feedback", "chat", "time", "profile"]
+      : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "feedback", "chat", "profile"];
 
   return allowed.includes(tab) ? tab : "overview";
 }

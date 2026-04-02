@@ -2915,8 +2915,9 @@ function buildCommunityNotifications(store) {
     }));
 
   const eventNotifications = buildUpcomingEventNotifications(store, 2);
+  const creatorNotifications = buildCreatorPresenceNotifications(store, 2);
 
-  return [...notifications, ...eventNotifications].slice(0, 6);
+  return [...creatorNotifications, ...notifications, ...eventNotifications].slice(0, 6);
 }
 
 function buildViewerNotifications(user, store) {
@@ -2965,8 +2966,9 @@ function buildViewerNotifications(user, store) {
     }));
 
   const eventNotifications = buildUpcomingEventNotifications(store, 2);
+  const creatorNotifications = buildCreatorPresenceNotifications(store, 2);
 
-  return [...notifications, ...pinnedAnnouncements, ...eventNotifications]
+  return [...creatorNotifications, ...notifications, ...pinnedAnnouncements, ...eventNotifications]
     .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
     .slice(0, 6);
 }
@@ -3024,9 +3026,85 @@ function buildManagerNotifications(store) {
   }
 
   const upcomingEvents = buildUpcomingEventNotifications(store, 2);
+  const creatorNotifications = buildCreatorPresenceNotifications(store, 2);
+  notifications.push(...creatorNotifications);
   notifications.push(...upcomingEvents);
 
   return notifications.slice(0, 6);
+}
+
+function normalizeCreatorPresence(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["live", "new-release"].includes(normalized) ? normalized : "offline";
+}
+
+function normalizeCreatorPresenceText(value) {
+  return String(value || "").trim().slice(0, 180);
+}
+
+function normalizeCreatorPresenceUrl(value) {
+  return normalizeExternalLink(value);
+}
+
+function getCreatorPresenceTimestamp(user) {
+  const timestamp = Date.parse(String(user?.creatorPresenceUpdatedAt || ""));
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function hasVisibleCreatorProfile(user) {
+  return Boolean(user?.creatorVisible && ((((user?.creatorLinks || []).length > 0) || user?.creatorBlurb)));
+}
+
+function isFreshCreatorRelease(user, windowHours = 72) {
+  if (normalizeCreatorPresence(user?.creatorPresence) !== "new-release") return false;
+  const timestamp = getCreatorPresenceTimestamp(user);
+  return Boolean(timestamp && timestamp >= Date.now() - windowHours * 60 * 60 * 1000);
+}
+
+function getCreatorPresenceUsers(store, options = {}) {
+  const { includeOffline = false } = options;
+  const activeUsers = (store.users || []).filter((entry) => !entry.isBlocked && hasVisibleCreatorProfile(entry));
+
+  return activeUsers
+    .filter((entry) => includeOffline || normalizeCreatorPresence(entry.creatorPresence) === "live" || isFreshCreatorRelease(entry))
+    .slice()
+    .sort((left, right) => {
+      const rank = (entry) => {
+        const status = normalizeCreatorPresence(entry?.creatorPresence);
+        if (status === "live") return 0;
+        if (status === "new-release") return 1;
+        return 2;
+      };
+
+      const rankDiff = rank(left) - rank(right);
+      if (rankDiff !== 0) return rankDiff;
+
+      const timeDiff = getCreatorPresenceTimestamp(right) - getCreatorPresenceTimestamp(left);
+      if (timeDiff !== 0) return timeDiff;
+
+      return findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de");
+    });
+}
+
+function buildCreatorPresenceNotifications(store, limit = 2) {
+  return getCreatorPresenceUsers(store)
+    .slice(0, limit)
+    .map((entry) => {
+      const name = findUserName(store.users, entry.id);
+      const live = normalizeCreatorPresence(entry.creatorPresence) === "live";
+      const platformHint = entry.creatorPresenceUrl ? deriveCreatorLabel(entry.creatorPresenceUrl) : deriveCreatorLabel(entry.creatorLinks?.[0]?.url || "");
+
+      return {
+        id: `creator-${entry.id}-${entry.creatorPresence}-${entry.creatorPresenceUpdatedAt || "now"}`,
+        title: live ? `${name} ist gerade live` : `Neu von ${name}`,
+        body:
+          entry.creatorPresenceText ||
+          (live ? `Direkt zu ${platformHint} wechseln.` : `Es gibt frischen Content auf ${platformHint}.`),
+        tone: live ? "amber" : "sky",
+        createdAt: entry.creatorPresenceUpdatedAt || new Date().toISOString(),
+        category: "creator"
+      };
+    });
 }
 
 function compareShifts(left, right) {
@@ -4510,6 +4588,10 @@ function normalizeUsers(users, legacyModeratorNames) {
     const creatorBlurb = String(entry.creatorBlurb || "").trim().slice(0, 300);
     const creatorLinks = normalizeCreatorLinks(entry.creatorLinks);
     const creatorVisible = Boolean(entry.creatorVisible && (creatorLinks.length || creatorBlurb));
+    const creatorPresence = normalizeCreatorPresence(entry.creatorPresence);
+    const creatorPresenceText = normalizeCreatorPresenceText(entry.creatorPresenceText);
+    const creatorPresenceUrl = normalizeCreatorPresenceUrl(entry.creatorPresenceUrl);
+    const creatorPresenceUpdatedAt = isIsoDate(entry.creatorPresenceUpdatedAt) ? entry.creatorPresenceUpdatedAt : "";
     const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(entry.weeklyHoursCapacity);
     const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(entry.weeklyDaysCapacity);
     const availabilitySchedule = normalizeAvailabilitySchedule(entry.availabilitySchedule);
@@ -4538,6 +4620,10 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorBlurb,
       creatorLinks,
       creatorVisible,
+      creatorPresence,
+      creatorPresenceText,
+      creatorPresenceUrl,
+      creatorPresenceUpdatedAt,
       weeklyHoursCapacity,
       weeklyDaysCapacity,
       availabilitySchedule,
@@ -4571,6 +4657,10 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorBlurb: "",
       creatorLinks: [],
       creatorVisible: false,
+      creatorPresence: "offline",
+      creatorPresenceText: "",
+      creatorPresenceUrl: "",
+      creatorPresenceUpdatedAt: "",
       weeklyHoursCapacity: 0,
       weeklyDaysCapacity: 0,
       availabilitySchedule: "",
@@ -4599,7 +4689,11 @@ function sanitizeUser(user) {
     contactNote: user.contactNote || "",
     creatorBlurb: user.creatorBlurb || "",
     creatorLinks: Array.isArray(user.creatorLinks) ? user.creatorLinks : [],
-    creatorVisible: Boolean(user.creatorVisible)
+    creatorVisible: Boolean(user.creatorVisible),
+    creatorPresence: normalizeCreatorPresence(user.creatorPresence),
+    creatorPresenceText: normalizeCreatorPresenceText(user.creatorPresenceText),
+    creatorPresenceUrl: user.creatorPresenceUrl || "",
+    creatorPresenceUpdatedAt: isIsoDate(user.creatorPresenceUpdatedAt) ? user.creatorPresenceUpdatedAt : ""
   };
 }
 
@@ -4642,6 +4736,11 @@ function validateRegistrationPayload(body, store) {
   const creatorBlurb = String(body.creatorBlurb || "").trim().slice(0, 300);
   const creatorLinks = normalizeCreatorLinks(body.creatorLinks);
   const creatorVisible = Boolean(body.creatorVisible && (creatorLinks.length || creatorBlurb));
+  const creatorPresence = normalizeCreatorPresence(body.creatorPresence);
+  const creatorPresenceText = normalizeCreatorPresenceText(body.creatorPresenceText);
+  const creatorPresenceUrl = normalizeCreatorPresenceUrl(body.creatorPresenceUrl);
+  const creatorPresenceUpdatedAt =
+    creatorPresence !== "offline" || creatorPresenceText || creatorPresenceUrl ? new Date().toISOString() : "";
   const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(body.weeklyHoursCapacity);
   const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(body.weeklyDaysCapacity);
   const availabilitySchedule = normalizeAvailabilitySchedule(body.availabilitySchedule);
@@ -4673,6 +4772,10 @@ function validateRegistrationPayload(body, store) {
     creatorBlurb,
     creatorLinks,
     creatorVisible,
+    creatorPresence,
+    creatorPresenceText,
+    creatorPresenceUrl,
+    creatorPresenceUpdatedAt,
     weeklyHoursCapacity,
     weeklyDaysCapacity,
     availabilitySchedule,
@@ -4688,6 +4791,15 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   const nextContactNote = body.contactNote !== undefined ? String(body.contactNote || "").trim().slice(0, 600) : target.contactNote || "";
   const nextCreatorBlurb = body.creatorBlurb !== undefined ? String(body.creatorBlurb || "").trim().slice(0, 300) : target.creatorBlurb || "";
   const nextCreatorLinks = body.creatorLinks !== undefined ? normalizeCreatorLinks(body.creatorLinks) : Array.isArray(target.creatorLinks) ? target.creatorLinks : [];
+  const currentCreatorPresence = normalizeCreatorPresence(target.creatorPresence);
+  const currentCreatorPresenceText = normalizeCreatorPresenceText(target.creatorPresenceText);
+  const currentCreatorPresenceUrl = normalizeCreatorPresenceUrl(target.creatorPresenceUrl);
+  const nextCreatorPresence =
+    body.creatorPresence !== undefined ? normalizeCreatorPresence(body.creatorPresence) : currentCreatorPresence;
+  const nextCreatorPresenceText =
+    body.creatorPresenceText !== undefined ? normalizeCreatorPresenceText(body.creatorPresenceText) : currentCreatorPresenceText;
+  const nextCreatorPresenceUrl =
+    body.creatorPresenceUrl !== undefined ? normalizeCreatorPresenceUrl(body.creatorPresenceUrl) : currentCreatorPresenceUrl;
   const currentWeeklyHoursCapacity = normalizeWeeklyHoursCapacity(target.weeklyHoursCapacity);
   const currentWeeklyDaysCapacity = normalizeWeeklyDaysCapacity(target.weeklyDaysCapacity);
   const currentAvailabilitySchedule = normalizeAvailabilitySchedule(target.availabilitySchedule);
@@ -4726,6 +4838,12 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
     throw error;
   }
 
+  if (body.creatorPresenceUrl !== undefined && body.creatorPresenceUrl && !nextCreatorPresenceUrl) {
+    const error = new Error("Der Sonara-Live-Link ist nicht gueltig.");
+    error.statusCode = 400;
+    throw error;
+  }
+
   ensureUserIdentityUnique(users, target.id, {
     vrchatName: nextVrchatName,
     discordName: nextDiscordName
@@ -4740,9 +4858,20 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   target.creatorBlurb = nextCreatorBlurb;
   target.creatorLinks = nextCreatorLinks;
   target.creatorVisible = nextCreatorVisible;
+  target.creatorPresence = nextCreatorPresence;
+  target.creatorPresenceText = nextCreatorPresenceText;
+  target.creatorPresenceUrl = nextCreatorPresenceUrl;
   target.weeklyHoursCapacity = nextWeeklyHoursCapacity;
   target.weeklyDaysCapacity = nextWeeklyDaysCapacity;
   target.availabilitySchedule = nextAvailabilitySchedule;
+  if (
+    nextCreatorPresence !== currentCreatorPresence ||
+    nextCreatorPresenceText !== currentCreatorPresenceText ||
+    nextCreatorPresenceUrl !== currentCreatorPresenceUrl
+  ) {
+    target.creatorPresenceUpdatedAt =
+      nextCreatorPresence !== "offline" || nextCreatorPresenceText || nextCreatorPresenceUrl ? new Date().toISOString() : "";
+  }
   if (
     nextWeeklyHoursCapacity !== currentWeeklyHoursCapacity ||
     nextWeeklyDaysCapacity !== currentWeeklyDaysCapacity ||
@@ -5273,10 +5402,14 @@ function buildCommunityPayload(store) {
     .slice()
     .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
     .map(sanitizeUser);
+  const creatorActivity = getCreatorPresenceUsers(store).map(sanitizeUser);
+  const liveCreators = creatorActivity.filter((entry) => normalizeCreatorPresence(entry.creatorPresence) === "live");
 
   return {
     team,
     creators,
+    liveCreators,
+    creatorActivity,
     events: (store.events || []).slice().sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)),
     rules: COMMUNITY_RULES,
     faq: COMMUNITY_FAQ,
@@ -5285,7 +5418,9 @@ function buildCommunityPayload(store) {
       moderators: activeUsers.filter((entry) => entry.role === "moderator").length,
       planners: activeUsers.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
       news: store.announcements.length,
-      creators: creators.length
+      creators: creators.length,
+      liveCreators: liveCreators.length,
+      creatorActivity: creatorActivity.length
     }
   };
 }
