@@ -3,6 +3,7 @@ const root = document.getElementById("app");
 const ROLE_LABELS = {
   member: "Mitglied",
   moderator: "Moderator",
+  moderation_lead: "Moderationsleitung",
   planner: "Leitung",
   admin: "Admin"
 };
@@ -2640,6 +2641,7 @@ function renderNewsPanel(managerView) {
 
 function renderProfilePanel(managerView) {
   const user = state.session;
+  const showAvailabilityFields = user.role !== "member";
 
   return `
     <section class="panel ${managerView ? "span-5" : "span-12"}">
@@ -4510,6 +4512,14 @@ function canManagePortal() {
   return state.session?.role === "planner" || state.session?.role === "admin";
 }
 
+function isModerationLead() {
+  return state.session?.role === "moderation_lead";
+}
+
+function canCoordinateStaff() {
+  return canManagePortal() || isModerationLead();
+}
+
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
     ? ["overview", "planning", "team", "news", "feedback", "chat", "time", "profile", "settings"]
@@ -4539,7 +4549,7 @@ function renderWarningOverlay() {
 }
 
 function renderWarningAdminPanel() {
-  if (!canManagePortal()) return "";
+  if (!canCoordinateStaff()) return "";
   const warnings = (state.data?.managedWarnings || []).filter((entry) => entry.status === "active").slice(0, 8);
 
   return `
@@ -5072,7 +5082,7 @@ function renderTeamPanelV2() {
               <article class="request-card team-user-card">
                 <div class="status-row">
                   <div class="chip-list">
-                    <span class="pill ${user.role === "admin" ? "amber" : user.role === "planner" ? "sky" : user.role === "moderator" ? "teal" : "neutral"}">${escapeHtml(ROLE_LABELS[user.role])}</span>
+                    <span class="pill ${user.role === "admin" ? "amber" : user.role === "planner" ? "sky" : user.role === "moderation_lead" ? "amber" : user.role === "moderator" ? "teal" : "neutral"}">${escapeHtml(ROLE_LABELS[user.role])}</span>
                     ${user.isBlocked ? '<span class="pill rose">Gesperrt</span>' : '<span class="pill success">Aktiv</span>'}
                     <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
                   </div>
@@ -5092,7 +5102,7 @@ function renderTeamPanelV2() {
                 ${profileDetails}
 
                 ${
-                  creatorApplication.status !== "none" || user.creatorVisible
+                  canManagePortal() && (creatorApplication.status !== "none" || user.creatorVisible)
                     ? `
                       <details class="mystic-expander editor-expander">
                         <summary>Creator-Pruefung ansehen</summary>
@@ -5104,108 +5114,114 @@ function renderTeamPanelV2() {
                     : ""
                 }
 
-                <details class="mystic-expander editor-expander">
-                  <summary>Account bearbeiten</summary>
-                  <div class="mystic-expander-body">
-                    <form data-form="user-update" data-user-id="${escapeHtml(user.id)}">
-                      <div class="form-grid">
-                        <div class="field">
-                          <label for="vrchat-${escapeHtml(user.id)}">VRChat-Name</label>
-                          <input id="vrchat-${escapeHtml(user.id)}" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}" required>
-                        </div>
-                        <div class="field">
-                          <label for="discord-${escapeHtml(user.id)}">Discord-Name</label>
-                          <input id="discord-${escapeHtml(user.id)}" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
-                        </div>
-                        <div class="field">
-                          <label for="role-${escapeHtml(user.id)}">Rolle</label>
-                          <select id="role-${escapeHtml(user.id)}" name="role">${buildRoleOptions(user.role)}</select>
-                        </div>
-                        <div class="field">
-                          <label for="avatar-${escapeHtml(user.id)}">Profilbild</label>
-                          <input id="avatar-${escapeHtml(user.id)}" name="avatarFile" type="file" accept="image/*">
-                          ${renderAvatarDraftHint(updateDraftKey, Boolean(user.avatarUrl))}
-                        </div>
-                        <div class="field">
-                          <label for="password-${escapeHtml(user.id)}">Neues Passwort</label>
-                          <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen = behalten">
-                        </div>
-                        <div class="field">
-                          <label for="creatorVisible-${escapeHtml(user.id)}">Nach Freigabe im Creator-Bereich zeigen</label>
-                          <input id="creatorVisible-${escapeHtml(user.id)}" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
-                        </div>
-                        <div class="field">
-                          <label for="blocked-${escapeHtml(user.id)}">Account sperren</label>
-                          <input id="blocked-${escapeHtml(user.id)}" name="blocked" type="checkbox" ${user.isBlocked ? "checked" : ""}>
-                        </div>
-                        <div class="field span-all">
-                          <label for="bio-${escapeHtml(user.id)}">Kurzprofil</label>
-                          <textarea id="bio-${escapeHtml(user.id)}" name="bio">${escapeHtml(user.bio || "")}</textarea>
-                        </div>
-                        <div class="field span-all">
-                          <label for="contact-${escapeHtml(user.id)}">Kontakt / Hinweise</label>
-                          <textarea id="contact-${escapeHtml(user.id)}" name="contactNote">${escapeHtml(user.contactNote || "")}</textarea>
-                        </div>
-                        ${
-                          user.role !== "member"
-                            ? `
-                              <div class="span-all availability-form-shell compact">
-                                <div class="availability-form-head">
-                                  <div>
-                                    <p class="eyebrow">Verfuegbarkeit</p>
-                                    <h3>Wochenrahmen fuer die Planung</h3>
-                                  </div>
-                                </div>
-                                <div class="availability-form-grid">
-                                  <div class="field">
-                                    <label for="weeklyHours-${escapeHtml(user.id)}">Stunden pro Woche</label>
-                                    <input id="weeklyHours-${escapeHtml(user.id)}" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}">
-                                  </div>
-                                  <div class="field">
-                                    <label for="weeklyDays-${escapeHtml(user.id)}">Tage pro Woche</label>
-                                    <input id="weeklyDays-${escapeHtml(user.id)}" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
-                                  </div>
-                                  <div class="field span-all">
-                                    <label>Wochen-Slots</label>
-                                    ${renderAvailabilitySlotsEditor(availabilitySlots, `team-availability-${user.id}`)}
-                                    <p class="helper-text">Bitte bis Samstag eintragen. Die Eingaben bleiben auch bei Live-Updates stabil bestehen.</p>
-                                  </div>
-                                  <div class="field span-all">
-                                    <label for="availability-${escapeHtml(user.id)}">Zusatzhinweise fuer diese Woche</label>
-                                    <textarea id="availability-${escapeHtml(user.id)}" name="availabilitySchedule" placeholder="z. B. Freitag spaeter oder Sonntag nur spontan.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
-                                  </div>
-                                </div>
+                ${
+                  canManagePortal()
+                    ? `
+                      <details class="mystic-expander editor-expander">
+                        <summary>Account bearbeiten</summary>
+                        <div class="mystic-expander-body">
+                          <form data-form="user-update" data-user-id="${escapeHtml(user.id)}">
+                            <div class="form-grid">
+                              <div class="field">
+                                <label for="vrchat-${escapeHtml(user.id)}">VRChat-Name</label>
+                                <input id="vrchat-${escapeHtml(user.id)}" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}" required>
                               </div>
-                            `
-                            : ""
-                        }
-                        <div class="field">
-                          <label for="creatorBlurb-${escapeHtml(user.id)}">Creator-Text</label>
-                          <input id="creatorBlurb-${escapeHtml(user.id)}" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}">
+                              <div class="field">
+                                <label for="discord-${escapeHtml(user.id)}">Discord-Name</label>
+                                <input id="discord-${escapeHtml(user.id)}" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
+                              </div>
+                              <div class="field">
+                                <label for="role-${escapeHtml(user.id)}">Rolle</label>
+                                <select id="role-${escapeHtml(user.id)}" name="role">${buildRoleOptions(user.role)}</select>
+                              </div>
+                              <div class="field">
+                                <label for="avatar-${escapeHtml(user.id)}">Profilbild</label>
+                                <input id="avatar-${escapeHtml(user.id)}" name="avatarFile" type="file" accept="image/*">
+                                ${renderAvatarDraftHint(updateDraftKey, Boolean(user.avatarUrl))}
+                              </div>
+                              <div class="field">
+                                <label for="password-${escapeHtml(user.id)}">Neues Passwort</label>
+                                <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen = behalten">
+                              </div>
+                              <div class="field">
+                                <label for="creatorVisible-${escapeHtml(user.id)}">Nach Freigabe im Creator-Bereich zeigen</label>
+                                <input id="creatorVisible-${escapeHtml(user.id)}" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
+                              </div>
+                              <div class="field">
+                                <label for="blocked-${escapeHtml(user.id)}">Account sperren</label>
+                                <input id="blocked-${escapeHtml(user.id)}" name="blocked" type="checkbox" ${user.isBlocked ? "checked" : ""}>
+                              </div>
+                              <div class="field span-all">
+                                <label for="bio-${escapeHtml(user.id)}">Kurzprofil</label>
+                                <textarea id="bio-${escapeHtml(user.id)}" name="bio">${escapeHtml(user.bio || "")}</textarea>
+                              </div>
+                              <div class="field span-all">
+                                <label for="contact-${escapeHtml(user.id)}">Kontakt / Hinweise</label>
+                                <textarea id="contact-${escapeHtml(user.id)}" name="contactNote">${escapeHtml(user.contactNote || "")}</textarea>
+                              </div>
+                              ${
+                                user.role !== "member"
+                                  ? `
+                                    <div class="span-all availability-form-shell compact">
+                                      <div class="availability-form-head">
+                                        <div>
+                                          <p class="eyebrow">Verfuegbarkeit</p>
+                                          <h3>Wochenrahmen fuer die Planung</h3>
+                                        </div>
+                                      </div>
+                                      <div class="availability-form-grid">
+                                        <div class="field">
+                                          <label for="weeklyHours-${escapeHtml(user.id)}">Stunden pro Woche</label>
+                                          <input id="weeklyHours-${escapeHtml(user.id)}" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}">
+                                        </div>
+                                        <div class="field">
+                                          <label for="weeklyDays-${escapeHtml(user.id)}">Tage pro Woche</label>
+                                          <input id="weeklyDays-${escapeHtml(user.id)}" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
+                                        </div>
+                                        <div class="field span-all">
+                                          <label>Wochen-Slots</label>
+                                          ${renderAvailabilitySlotsEditor(availabilitySlots, `team-availability-${user.id}`)}
+                                          <p class="helper-text">Bitte bis Samstag eintragen. Die Eingaben bleiben auch bei Live-Updates stabil bestehen.</p>
+                                        </div>
+                                        <div class="field span-all">
+                                          <label for="availability-${escapeHtml(user.id)}">Zusatzhinweise fuer diese Woche</label>
+                                          <textarea id="availability-${escapeHtml(user.id)}" name="availabilitySchedule" placeholder="z. B. Freitag spaeter oder Sonntag nur spontan.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  `
+                                  : ""
+                              }
+                              <div class="field">
+                                <label for="creatorBlurb-${escapeHtml(user.id)}">Creator-Text</label>
+                                <input id="creatorBlurb-${escapeHtml(user.id)}" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}">
+                              </div>
+                              <div class="field">
+                                <label for="blockReason-${escapeHtml(user.id)}">Sperrgrund</label>
+                                <input id="blockReason-${escapeHtml(user.id)}" name="blockReason" type="text" value="${escapeHtml(user.blockReason || "")}" placeholder="z. B. Missbrauch oder Regelverstoss">
+                              </div>
+                              <div class="field span-all">
+                                <label for="creatorLinks-${escapeHtml(user.id)}">Creator-Links</label>
+                                <textarea id="creatorLinks-${escapeHtml(user.id)}" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
+                              </div>
+                            </div>
+                            <div class="card-actions">
+                              <button type="submit" class="ghost small">Speichern</button>
+                              ${
+                                user.username !== "admin" && user.id !== state.session?.id
+                                  ? `<button type="button" class="danger small" data-action="delete-user" data-user-id="${escapeHtml(user.id)}">Loeschen</button>`
+                                  : ""
+                              }
+                            </div>
+                          </form>
                         </div>
-                        <div class="field">
-                          <label for="blockReason-${escapeHtml(user.id)}">Sperrgrund</label>
-                          <input id="blockReason-${escapeHtml(user.id)}" name="blockReason" type="text" value="${escapeHtml(user.blockReason || "")}" placeholder="z. B. Missbrauch oder Regelverstoss">
-                        </div>
-                        <div class="field span-all">
-                          <label for="creatorLinks-${escapeHtml(user.id)}">Creator-Links</label>
-                          <textarea id="creatorLinks-${escapeHtml(user.id)}" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
-                        </div>
-                      </div>
-                      <div class="card-actions">
-                        <button type="submit" class="ghost small">Speichern</button>
-                        ${
-                          user.username !== "admin" && user.id !== state.session?.id
-                            ? `<button type="button" class="danger small" data-action="delete-user" data-user-id="${escapeHtml(user.id)}">Loeschen</button>`
-                            : ""
-                        }
-                      </div>
-                    </form>
-                  </div>
-                </details>
+                      </details>
+                    `
+                    : ""
+                }
 
                 ${
-                  user.id !== state.session?.id
+                  canCoordinateStaff() && user.id !== state.session?.id
                     ? `
                       <details class="mystic-expander editor-expander warning-expander">
                         <summary>Verwarnung senden</summary>
@@ -5972,7 +5988,7 @@ function formatDuration(milliseconds) {
 
 function buildRoleOptions(selectedRole) {
   const normalizedRole = selectedRole === "viewer" ? "member" : selectedRole;
-  return ["member", "moderator", "planner", "admin"]
+  return ["member", "moderator", "moderation_lead", "planner", "admin"]
     .map(
       (role) => `
         <option value="${role}" ${role === normalizedRole ? "selected" : ""}>
@@ -6614,7 +6630,7 @@ function escapeHtml(value) {
 }
 
 function canAccessStaffArea() {
-  return ["moderator", "planner", "admin"].includes(state.session?.role);
+  return ["moderator", "moderation_lead", "planner", "admin"].includes(state.session?.role);
 }
 
 function normalizeActiveTab(tab) {
@@ -6835,9 +6851,9 @@ function getChatFeed(mode = "community") {
 }
 
 function renderStatsStrip() {
-  if (canManagePortal()) {
+  if (canCoordinateStaff()) {
     const memberCount = (state.data?.users || []).filter((entry) => entry.role === "member").length;
-    const moderatorCount = (state.data?.users || []).filter((entry) => entry.role === "moderator").length;
+    const moderatorCount = (state.data?.users || []).filter((entry) => entry.role === "moderator" || entry.role === "moderation_lead").length;
     const liveEntries = (state.data?.timeEntries || []).filter((entry) => !entry.checkOutAt).length;
     const openRequests = (state.data?.requests || []).filter((entry) => entry.status !== "beruecksichtigt").length;
     const nextWeekShifts = getSortedShifts(state.data?.shifts || []).filter((entry) => daysBetween(getLocalDateKey(), entry.date) <= 7);
@@ -7398,6 +7414,12 @@ function renderShiftSelectOption(shift) {
 }
 
 function renderPublicPortal() {
+  const route = getPublicRouteState();
+  if (route.kind === "creator") {
+    const creator = getPublicCreatorBySlug(route.slug);
+    return creator ? renderCreatorPublicPage(creator) : renderCreatorPublicNotFound(route.slug);
+  }
+
   const community = getCommunityData();
   const stats = community.stats || {};
   const creators = (community.creators || []).slice(0, 3);
@@ -7569,6 +7591,8 @@ function renderDashboardTabs(activeTab) {
   let tabs = common;
   if (canManagePortal()) {
     tabs = [...common, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "capacity", label: "Auslastung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }, { id: "settings", label: "Einstellungen" }];
+  } else if (canCoordinateStaff()) {
+    tabs = [...common, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "capacity", label: "Auslastung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }];
   } else if (canAccessStaffArea()) {
     tabs = [...common, { id: "schedule", label: "Meine Schichten" }, { id: "feedback", label: "Feedback" }, { id: "time", label: "Zeiten" }];
   } else {
@@ -9562,6 +9586,8 @@ function renderMemberDashboard(activeTab) {
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
     ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "feedback", "planning", "capacity", "team", "chat", "time", "profile", "settings"]
+    : canCoordinateStaff()
+      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "feedback", "planning", "capacity", "team", "chat", "time", "profile"]
     : canAccessStaffArea()
       ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "schedule", "feedback", "chat", "time", "profile"]
       : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "feedback", "chat", "profile"];
@@ -9583,7 +9609,7 @@ function renderEventsPanel() {
       </div>
 
       ${
-        canManagePortal()
+        canCoordinateStaff()
           ? `
             <form class="stack-form event-editor" data-form="event-create">
               <div class="form-grid">
@@ -9664,7 +9690,7 @@ function renderEventCard(event) {
       <p>${escapeHtml(event.summary)}</p>
       ${event.nextOccurrenceAt ? `<p class="helper-text">Naechster Termin: ${escapeHtml(formatDateTime(event.nextOccurrenceAt))}</p>` : ""}
       ${
-        canManagePortal()
+        canCoordinateStaff()
           ? `
             <form class="card-actions" data-form="event-delete" data-event-id="${escapeHtml(event.id)}">
               <button type="submit" class="danger small">Event loeschen</button>
@@ -9876,20 +9902,26 @@ function renderNotificationsPanel() {
   const notifications = state.data?.notifications || [];
   const browserSupport = typeof window !== "undefined" && "Notification" in window;
   const reminder = getShiftReminderState();
-  const manager = canManagePortal();
+  const leadership = canManagePortal();
   const staff = canAccessStaffArea();
-  const title = manager
+  const title = leadership
     ? "Automatische Hinweise f\u00fcr Leitung und Planung"
+    : isModerationLead()
+      ? "Automatische Hinweise f\u00fcr Moderationsleitung"
     : staff
       ? "Automatische Hinweise f\u00fcr Schichten und Staff-News"
       : "Das Wichtigste aus Community, News und Events";
-  const copy = manager
+  const copy = leadership
     ? "Offene R\u00fcckmeldungen, heutige Eins\u00e4tze und laufende Schichten werden hier automatisch zusammengefasst."
+    : isModerationLead()
+      ? "Auslastung, heutige Eins\u00e4tze und offene Moderationspunkte werden hier automatisch gesammelt."
     : staff
       ? "Schicht-Erinnerungen, Staff-News und n\u00e4chste Eins\u00e4tze werden hier automatisch geb\u00fcndelt."
       : "Angeheftete News und kommende Events werden hier automatisch f\u00fcr dich gesammelt.";
-  const emptyBody = manager
+  const emptyBody = leadership
     ? "Sobald neue R\u00fcckmeldungen oder Eins\u00e4tze anstehen, erscheinen sie hier."
+    : isModerationLead()
+      ? "Sobald neue Moderationshinweise oder Planungsinfos anstehen, erscheinen sie hier."
     : staff
       ? "Sobald neue Staff-Hinweise oder Schichten anstehen, erscheinen sie hier."
       : "Sobald es neue News oder Events gibt, erscheinen sie hier.";
@@ -9961,7 +9993,8 @@ function emitBrowserNotifications() {
 
 function renderDashboard() {
   const user = state.session;
-  const manager = canManagePortal();
+  const manager = canCoordinateStaff();
+  const leadership = canManagePortal();
   const staff = canAccessStaffArea();
   const activeTab = normalizeActiveTab(state.ui.activeTab);
 
@@ -9969,9 +10002,9 @@ function renderDashboard() {
     ${renderWarningOverlay()}
     <div class="app-shell">
       ${renderSonaraHero({
-        eyebrow: manager ? "Leitung" : staff ? "Staff Portal" : "Mitgliederbereich",
+        eyebrow: leadership ? "Leitung" : isModerationLead() ? "Moderationsleitung" : staff ? "Staff Portal" : "Mitgliederbereich",
         title: `Willkommen ${getPrimaryDisplayName(user)}`,
-        intro: manager ? "Community, Team und Staff laufen hier zusammen." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
+        intro: leadership ? "Community, Team und Staff laufen hier zusammen." : isModerationLead() ? "Du hast Planung, Auslastung und Moderationsuebersicht an einem Ort." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
         chips: [ROLE_LABELS[user.role] || user.role, user.vrchatName || "", user.discordName || ""].filter(Boolean)
       })}
       <div class="dashboard-shell">

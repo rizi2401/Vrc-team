@@ -5960,7 +5960,7 @@ function projectDataForRole(user, store) {
     directMessages: getDirectMessagesForUser(user, store),
     forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
     warnings: getWarningsForUser(user, store),
-    managedWarnings: user.role === "planner" || user.role === "admin" ? getManagedWarnings(store) : [],
+    managedWarnings: canCoordinateModeration(user) ? getManagedWarnings(store) : [],
     notifications,
     swapRequests: getSwapRequestsForUser(user, store),
     feedPosts
