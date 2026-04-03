@@ -14,9 +14,76 @@
       "creatorBlurb": "",
       "creatorLinks": [],
       "creatorVisible": false,
+      "creatorSlug": "system-admin",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
       "weeklyHoursCapacity": 0,
       "weeklyDaysCapacity": 0,
       "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
       "availabilityUpdatedAt": "",
       "isBlocked": false,
       "blockReason": "",
@@ -37,9 +104,76 @@
       "creatorBlurb": "",
       "creatorLinks": [],
       "creatorVisible": false,
+      "creatorSlug": "kian",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
       "weeklyHoursCapacity": 0,
       "weeklyDaysCapacity": 0,
       "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
       "availabilityUpdatedAt": "",
       "isBlocked": false,
       "blockReason": "",
@@ -74,30 +208,48 @@
     {
       "id": "welcome-night",
       "title": "Welcome Night",
-      "dateLabel": "Freitag · 20:00 Uhr",
       "world": "Community Hub",
       "host": "SONARA Team",
       "summary": "Neue Mitglieder kennenlernen, Gruppeninfos teilen und entspannt in den Abend starten.",
+      "scheduleType": "single",
+      "eventDate": "",
+      "eventTime": "",
+      "weekday": -1,
+      "reminderEnabled": true,
+      "reminderLeadMinutes": 120,
+      "dateLabel": "Freitag · 20:00 Uhr",
       "createdAt": "2026-03-29T16:46:36.255Z",
       "createdBy": ""
     },
     {
       "id": "world-tour",
       "title": "World Tour",
-      "dateLabel": "Samstag · 21:00 Uhr",
       "world": "Event Arena",
       "host": "Event Team",
       "summary": "Gemeinsame Weltreise mit Stopps fuer Screenshots, Spiele und kleine Community-Momente.",
+      "scheduleType": "single",
+      "eventDate": "",
+      "eventTime": "",
+      "weekday": -1,
+      "reminderEnabled": true,
+      "reminderLeadMinutes": 120,
+      "dateLabel": "Samstag · 21:00 Uhr",
       "createdAt": "2026-03-29T16:46:36.255Z",
       "createdBy": ""
     },
     {
       "id": "late-lounge",
       "title": "Late Lounge",
-      "dateLabel": "Sonntag · 22:00 Uhr",
       "world": "Sunset Lounge",
       "host": "Night Crew",
       "summary": "Ruhiger Community-Abend mit Musik, offenen Gespraechen und lockerer Moderationspraesenz.",
+      "scheduleType": "single",
+      "eventDate": "",
+      "eventTime": "",
+      "weekday": -1,
+      "reminderEnabled": true,
+      "reminderLeadMinutes": 120,
+      "dateLabel": "Sonntag · 22:00 Uhr",
       "createdAt": "2026-03-29T16:46:36.255Z",
       "createdBy": ""
     }

@@ -124,6 +124,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const rootHtmlFile = resolveRootHtmlFile(url.pathname);
+    if (rootHtmlFile) {
+      serveStatic(res, rootHtmlFile);
+      return;
+    }
+
     if (url.pathname.startsWith("/creator/")) {
       serveStatic(res, staticFiles["/"]);
       return;
@@ -4031,6 +4037,20 @@ function serveStatic(res, fileName) {
 
   res.writeHead(200, { "Content-Type": contentType });
   fs.createReadStream(filePath).pipe(res);
+}
+
+function resolveRootHtmlFile(pathname) {
+  const normalizedPath = String(pathname || "").trim();
+  if (!/^\/[^/]+\.html$/i.test(normalizedPath)) return "";
+
+  const fileName = path.basename(normalizedPath);
+  if (!/^[a-zA-Z0-9._-]+\.html$/.test(fileName)) return "";
+
+  const resolvedPath = path.join(ROOT, fileName);
+  if (!resolvedPath.startsWith(ROOT)) return "";
+  if (!fs.existsSync(resolvedPath)) return "";
+  if (!fs.statSync(resolvedPath).isFile()) return "";
+  return fileName;
 }
 
 function sendJson(res, statusCode, payload, headers = {}) {
