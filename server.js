@@ -417,7 +417,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/shifts") {
-    requireRole(auth.user, "planner");
+    requireModerationCoordinator(auth.user);
     const body = await readJson(req);
     const shift = validateShiftPayload(body, auth.store);
     const nextStore = structuredClone(auth.store);
@@ -439,7 +439,7 @@ async function handleApi(req, res, url) {
     req.method === "POST" &&
     (url.pathname === "/api/shifts/bulk" || url.pathname === "/api/planning/bulk-shifts")
   ) {
-    requireRole(auth.user, "planner");
+    requireModerationCoordinator(auth.user);
     const body = await readJson(req);
     const rawEntries = Array.isArray(body.entries) ? body.entries : [];
 
@@ -467,7 +467,7 @@ async function handleApi(req, res, url) {
 
   const shiftMatch = url.pathname.match(/^\/api\/shifts\/([^/]+)$/);
   if (shiftMatch) {
-    requireRole(auth.user, "planner");
+    requireModerationCoordinator(auth.user);
     const shiftId = decodeURIComponent(shiftMatch[1]);
     const nextStore = structuredClone(auth.store);
     const shift = nextStore.shifts.find((entry) => entry.id === shiftId);
@@ -557,7 +557,7 @@ async function handleApi(req, res, url) {
     }
 
     const body = await readJson(req);
-    if (["planner", "admin"].includes(auth.user.role)) {
+    if (canCoordinateModeration(auth.user)) {
       request.status = validateRequestStatus(body.status);
       request.adminNote = String(body.adminNote || "").trim();
       request.adminRespondedAt = new Date().toISOString();
@@ -783,7 +783,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/warnings") {
-    requireRole(auth.user, "planner");
+    requireModerationCoordinator(auth.user);
     const body = await readJson(req);
     const normalized = validateWarningPayload(body, auth.store);
     const nextStore = structuredClone(auth.store);
@@ -826,7 +826,7 @@ async function handleApi(req, res, url) {
       }
       warning.acknowledgedAt = warning.acknowledgedAt || new Date().toISOString();
     } else if (action === "clear") {
-      requireRole(auth.user, "planner");
+      requireModerationCoordinator(auth.user);
       warning.status = "cleared";
       warning.clearedAt = new Date().toISOString();
       warning.clearedBy = auth.user.id;
@@ -1138,7 +1138,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/events") {
-    requireRole(auth.user, "planner");
+    requireModerationCoordinator(auth.user);
     const body = await readJson(req);
     const normalized = validateEventPayload(body, auth.user);
     const nextStore = structuredClone(auth.store);
@@ -1159,7 +1159,7 @@ async function handleApi(req, res, url) {
 
   const eventMatch = url.pathname.match(/^\/api\/events\/([^/]+)$/);
   if (eventMatch && req.method === "DELETE") {
-    requireRole(auth.user, "planner");
+    requireModerationCoordinator(auth.user);
     const eventId = decodeURIComponent(eventMatch[1]);
     const nextStore = structuredClone(auth.store);
     nextStore.events = (nextStore.events || []).filter((entry) => entry.id !== eventId);
@@ -1777,12 +1777,23 @@ function requireAuth(req) {
 }
 
 function requireRole(user, role) {
-  const order = { member: 1, moderator: 2, planner: 3, admin: 4 };
+  const order = { member: 1, moderator: 2, moderation_lead: 3, planner: 4, admin: 5 };
   if (order[user.role] < order[role]) {
     const error = new Error("Keine Berechtigung.");
     error.statusCode = 403;
     throw error;
   }
+}
+
+function canCoordinateModeration(user) {
+  return ["moderation_lead", "planner", "admin"].includes(user?.role);
+}
+
+function requireModerationCoordinator(user) {
+  if (canCoordinateModeration(user)) return;
+  const error = new Error("Keine Berechtigung.");
+  error.statusCode = 403;
+  throw error;
 }
 
 function projectDataForRole(user, store) {
@@ -1878,7 +1889,7 @@ function buildCommunityPayload(store) {
     faq: COMMUNITY_FAQ,
     stats: {
       members: activeUsers.filter((entry) => entry.role === "member").length,
-      moderators: activeUsers.filter((entry) => entry.role === "moderator").length,
+      moderators: activeUsers.filter((entry) => entry.role === "moderator" || entry.role === "moderation_lead").length,
       planners: activeUsers.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
       news: store.announcements.length,
       creators: creators.length
@@ -2172,7 +2183,7 @@ function projectDataForRole(user, store) {
     directMessages: getDirectMessagesForUser(user, store),
     forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
     warnings: getWarningsForUser(user, store),
-    managedWarnings: user.role === "planner" || user.role === "admin" ? getManagedWarnings(store) : [],
+    managedWarnings: canCoordinateModeration(user) ? getManagedWarnings(store) : [],
     notifications,
     swapRequests: getSwapRequestsForUser(user, store),
     feedPosts
@@ -3618,7 +3629,7 @@ function validateSwapDecision(body) {
 }
 
 function validateRole(role) {
-  if (!["member", "moderator", "planner", "admin"].includes(role)) {
+  if (!["member", "moderator", "moderation_lead", "planner", "admin"].includes(role)) {
     const error = new Error("Ungueltige Rolle.");
     error.statusCode = 400;
     throw error;
@@ -4944,6 +4955,7 @@ function normalizeCreatorLinks(input) {
 function normalizeUsers(users, legacyModeratorNames) {
   const normalized = [];
   const usedUsernames = new Set();
+  const usedCreatorSlugs = new Set();
 
   for (const entry of users) {
     const username = normalizeUsername(entry.username);
@@ -4993,7 +5005,7 @@ function normalizeUsers(users, legacyModeratorNames) {
     const blockedBy = String(entry.blockedBy || "").trim();
     const passwordHash = String(entry.passwordHash || "").trim();
     const normalizedRole = entry.role === "viewer" ? "member" : entry.role;
-    const role = ["member", "moderator", "planner", "admin"].includes(normalizedRole) ? normalizedRole : "member";
+    const role = ["member", "moderator", "moderation_lead", "planner", "admin"].includes(normalizedRole) ? normalizedRole : "member";
 
     if (!username || !displayName || !vrchatName || !discordName || !passwordHash || usedUsernames.has(username)) continue;
 
