@@ -130,6 +130,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (/^\/vrchat-link\/?$/i.test(url.pathname)) {
+      serveStatic(res, staticFiles["/"]);
+      return;
+    }
+
     if (url.pathname.startsWith("/creator/")) {
       serveStatic(res, staticFiles["/"]);
       return;
@@ -174,8 +179,20 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    let responseStore = store;
+    let responseUser = user;
+    if (normalizeVrchatLinkSource(body.linkSource)) {
+      const nextStore = structuredClone(store);
+      const target = nextStore.users.find((entry) => entry.id === user.id);
+      if (target) {
+        applyVrchatLinkState(target, body.linkSource);
+        responseStore = writeStore(nextStore);
+        responseUser = target;
+      }
+    }
+
     const sessionId = createSession(user.id);
-    sendPortalData(res, 200, user, store, { "Set-Cookie": createSessionCookie(sessionId) });
+    sendPortalData(res, 200, responseUser, responseStore, { "Set-Cookie": createSessionCookie(sessionId) });
     return;
   }
 
@@ -219,8 +236,12 @@ async function handleApi(req, res, url) {
       availabilitySchedule: normalized.availabilitySchedule,
       availabilitySlots: normalized.availabilitySlots,
       availabilityUpdatedAt: normalized.availabilityUpdatedAt,
+      vrchatLinkedAt: "",
+      vrchatLinkSource: "",
       passwordHash: normalized.passwordHash
     };
+
+    applyVrchatLinkState(user, body.linkSource);
 
     nextStore.users.push(user);
     const savedStore = writeStore(nextStore);
@@ -2020,7 +2041,9 @@ function sanitizeManagedUser(user) {
     creatorApplicationNote: normalizeCreatorApplicationNote(user.creatorApplicationNote),
     creatorReviewNote: normalizeCreatorReviewNote(user.creatorReviewNote),
     creatorReviewedAt: isIsoDate(user.creatorReviewedAt) ? user.creatorReviewedAt : "",
-    creatorReviewedBy: user.creatorReviewedBy || ""
+    creatorReviewedBy: user.creatorReviewedBy || "",
+    vrchatLinkedAt: isIsoDate(user.vrchatLinkedAt) ? user.vrchatLinkedAt : "",
+    vrchatLinkSource: normalizeVrchatLinkSource(user.vrchatLinkSource)
   };
 }
 
@@ -2038,7 +2061,9 @@ function sanitizeSessionUser(user) {
     creatorProofUrl: normalizeCreatorProofUrl(user.creatorProofUrl),
     creatorApplicationNote: normalizeCreatorApplicationNote(user.creatorApplicationNote),
     creatorReviewNote: normalizeCreatorReviewNote(user.creatorReviewNote),
-    creatorReviewedAt: isIsoDate(user.creatorReviewedAt) ? user.creatorReviewedAt : ""
+    creatorReviewedAt: isIsoDate(user.creatorReviewedAt) ? user.creatorReviewedAt : "",
+    vrchatLinkedAt: isIsoDate(user.vrchatLinkedAt) ? user.vrchatLinkedAt : "",
+    vrchatLinkSource: normalizeVrchatLinkSource(user.vrchatLinkSource)
   };
 }
 
@@ -3372,6 +3397,23 @@ function createSession(userId) {
   const sessionId = createSignedSessionToken(userId);
   sessionStore.set(sessionId, { userId, createdAt: Date.now(), expiresAt: Date.now() + SESSION_COOKIE_MAX_AGE_SECONDS * 1000 });
   return sessionId;
+}
+
+function normalizeVrchatLinkSource(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "";
+  if (["browser", "1", "true", "yes", "vrchat-browser"].includes(normalized)) return "vrchat-browser";
+  if (["chat", "vrchat-chat"].includes(normalized)) return "vrchat-chat";
+  if (["world", "vrchat-world"].includes(normalized)) return "vrchat-world";
+  return "";
+}
+
+function applyVrchatLinkState(target, source) {
+  const normalizedSource = normalizeVrchatLinkSource(source);
+  if (!normalizedSource || !target) return false;
+  target.vrchatLinkedAt = new Date().toISOString();
+  target.vrchatLinkSource = normalizedSource;
+  return true;
 }
 
 function validateRegistrationPayload(body, store) {
@@ -5014,6 +5056,8 @@ function normalizeUsers(users, legacyModeratorNames) {
     const creatorPresenceText = normalizeCreatorPresenceText(entry.creatorPresenceText);
     const creatorPresenceUrl = normalizeCreatorPresenceUrl(entry.creatorPresenceUrl);
     const creatorPresenceUpdatedAt = isIsoDate(entry.creatorPresenceUpdatedAt) ? entry.creatorPresenceUpdatedAt : "";
+    const vrchatLinkedAt = isIsoDate(entry.vrchatLinkedAt) ? entry.vrchatLinkedAt : "";
+    const vrchatLinkSource = normalizeVrchatLinkSource(entry.vrchatLinkSource);
     const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(entry.weeklyHoursCapacity);
     const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(entry.weeklyDaysCapacity);
     const availabilitySchedule = normalizeAvailabilitySchedule(entry.availabilitySchedule);
@@ -5060,6 +5104,8 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorPresenceText,
       creatorPresenceUrl,
       creatorPresenceUpdatedAt,
+      vrchatLinkedAt,
+      vrchatLinkSource,
       weeklyHoursCapacity,
       weeklyDaysCapacity,
       availabilitySchedule,
@@ -5112,6 +5158,8 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorPresenceText: "",
       creatorPresenceUrl: "",
       creatorPresenceUpdatedAt: "",
+      vrchatLinkedAt: "",
+      vrchatLinkSource: "",
       weeklyHoursCapacity: 0,
       weeklyDaysCapacity: 0,
       availabilitySchedule: "",
@@ -5149,7 +5197,9 @@ function sanitizeUser(user) {
     creatorPresence: normalizeCreatorPresence(user.creatorPresence),
     creatorPresenceText: normalizeCreatorPresenceText(user.creatorPresenceText),
     creatorPresenceUrl: user.creatorPresenceUrl || "",
-    creatorPresenceUpdatedAt: isIsoDate(user.creatorPresenceUpdatedAt) ? user.creatorPresenceUpdatedAt : ""
+    creatorPresenceUpdatedAt: isIsoDate(user.creatorPresenceUpdatedAt) ? user.creatorPresenceUpdatedAt : "",
+    vrchatLinkedAt: isIsoDate(user.vrchatLinkedAt) ? user.vrchatLinkedAt : "",
+    vrchatLinkSource: normalizeVrchatLinkSource(user.vrchatLinkSource)
   };
 }
 

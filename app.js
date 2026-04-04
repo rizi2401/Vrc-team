@@ -2755,22 +2755,29 @@ async function handleSubmit(event) {
   switch (formName) {
     case "login": {
       const formData = new FormData(form);
-      await performAction(
+      const vrchatLink = getVrchatLinkFlowMeta();
+      const succeeded = await performAction(
         () =>
           api("/api/login", {
             method: "POST",
             body: JSON.stringify({
               identifier: formData.get("identifier"),
-              password: formData.get("password")
+              password: formData.get("password"),
+              linkSource: vrchatLink?.source || ""
             })
           }),
-        "Willkommen im Portal."
+        vrchatLink ? "VRChat-Verknuepfung abgeschlossen. Du bist jetzt im Portal." : "Willkommen im Portal."
       );
+      if (succeeded && vrchatLink) {
+        completeVrchatLinkFlow();
+        render();
+      }
       break;
     }
 
     case "register": {
       const formData = new FormData(form);
+      const vrchatLink = getVrchatLinkFlowMeta();
       const password = String(formData.get("password") || "");
       const confirmPassword = String(formData.get("confirmPassword") || "");
       if (password !== confirmPassword) {
@@ -2780,7 +2787,7 @@ async function handleSubmit(event) {
       }
 
       const avatarUrl = await readImageFileInput(form.querySelector('input[name="avatarFile"]'));
-      await performAction(
+      const succeeded = await performAction(
         () =>
           api("/api/register", {
             method: "POST",
@@ -2789,11 +2796,16 @@ async function handleSubmit(event) {
               discordName: formData.get("discordName"),
               bio: formData.get("bio"),
               avatarUrl: avatarUrl || "",
-              password
+              password,
+              linkSource: vrchatLink?.source || ""
             })
           }),
-        "Zugang wurde erstellt."
+        vrchatLink ? "Konto wurde erstellt und direkt mit deinem VRChat-Link verbunden." : "Zugang wurde erstellt."
       );
+      if (succeeded && vrchatLink) {
+        completeVrchatLinkFlow();
+        render();
+      }
       break;
     }
 
@@ -5293,6 +5305,11 @@ function renderProfilePanel(managerView) {
           <div>
             <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
             <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
+            ${
+              user.vrchatLinkedAt
+                ? `<p class="helper-text">VRChat-Link aktiv seit ${escapeHtml(formatDateTime(user.vrchatLinkedAt))}${user.vrchatLinkSource ? ` ueber ${escapeHtml(formatVrchatLinkSourceLabel(user.vrchatLinkSource))}` : ""}.</p>`
+                : ""
+            }
             ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
             ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
             ${(Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
@@ -6710,20 +6727,87 @@ function getAnnouncementFeed() {
 }
 
 function getPublicRouteState() {
-  const pathname = String(window.location.pathname || "/").trim() || "/";
+  const currentUrl = new URL(window.location.href);
+  const pathname = String(currentUrl.pathname || "/").trim() || "/";
   const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  const vrchatSource = normalizeVrchatLinkSourceValue(currentUrl.searchParams.get("source") || currentUrl.searchParams.get("vrchatLink"));
   const creatorMatch = normalizedPath.match(/^\/creator\/([^/]+)$/);
   if (creatorMatch) {
     return {
       kind: "creator",
-      slug: decodeURIComponent(creatorMatch[1] || "").trim().toLowerCase()
+      slug: decodeURIComponent(creatorMatch[1] || "").trim().toLowerCase(),
+      vrchatSource: ""
+    };
+  }
+
+  if (normalizedPath === "/vrchat-link") {
+    return {
+      kind: "vrchat-link",
+      slug: "",
+      vrchatSource
     };
   }
 
   return {
     kind: "home",
-    slug: ""
+    slug: "",
+    vrchatSource: ""
   };
+}
+
+function normalizeVrchatLinkSourceValue(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized || ["1", "true", "yes", "browser"].includes(normalized)) return "vrchat-browser";
+  if (["chat", "vrchat-chat"].includes(normalized)) return "vrchat-chat";
+  if (["world", "vrchat-world"].includes(normalized)) return "vrchat-world";
+  return "vrchat-browser";
+}
+
+function getVrchatLinkFlowMeta() {
+  const route = getPublicRouteState();
+  if (route.kind !== "vrchat-link") return null;
+
+  const source = route.vrchatSource || "vrchat-browser";
+  const variants = {
+    "vrchat-browser": {
+      eyebrow: "VRChat-Verknuepfung",
+      title: "Mit SONARA verbinden",
+      intro: "Wenn du aus VRChat kommst, melde dich hier an oder lege dein Konto an. Danach landest du direkt im Portal.",
+      sourceLabel: "VRChat Browser"
+    },
+    "vrchat-chat": {
+      eyebrow: "VRChat Chat-Link",
+      title: "Chat-Link mit SONARA verbinden",
+      intro: "Du bist ueber einen VRChat- oder Discord-Chat-Link hier gelandet. Logge dich ein, dann ist dein Portal direkt bereit.",
+      sourceLabel: "Chat-Link"
+    },
+    "vrchat-world": {
+      eyebrow: "VRChat Welt-Link",
+      title: "Welt mit SONARA verbinden",
+      intro: "Dieses Fenster wurde aus deiner Welt geoeffnet. Melde dich jetzt an, danach landest du automatisch in deinem Portal-Profil.",
+      sourceLabel: "Welt-Panel"
+    }
+  };
+
+  return {
+    source,
+    ...(variants[source] || variants["vrchat-browser"])
+  };
+}
+
+function completeVrchatLinkFlow() {
+  state.ui.activeTab = "profile";
+  if (window.location.pathname === "/vrchat-link" && window.history?.replaceState) {
+    window.history.replaceState({}, "", "/");
+  }
+}
+
+function formatVrchatLinkSourceLabel(source) {
+  const normalized = String(source || "").trim().toLowerCase();
+  if (normalized === "vrchat-chat") return "Chat-Link";
+  if (normalized === "vrchat-world") return "Welt-Panel";
+  if (normalized === "vrchat-browser") return "VRChat Browser";
+  return "VRChat";
 }
 
 function buildCreatorPublicPath(user) {
@@ -7472,14 +7556,23 @@ function renderPublicPortal() {
   const community = getCommunityData();
   const stats = community.stats || {};
   const creators = (community.creators || []).slice(0, 3);
+  const vrchatLink = getVrchatLinkFlowMeta();
+  const eyebrow = vrchatLink?.eyebrow || "SONARA Community Portal";
+  const title = vrchatLink?.title || "Community, Team und Creator an einem Ort";
+  const intro = vrchatLink?.intro || "News, Events, Creator-Links und der Mitgliederbereich liegen hier kompakt zusammen.";
+  const chips = vrchatLink
+    ? [vrchatLink.sourceLabel, `${stats.members || 0} Mitglieder`, "Portal-Link aktiv"]
+    : [`${stats.members || 0} Mitglieder`, `${stats.liveCreators || 0} live`, `${(community.events || []).length} Events`];
+  const loginButtonLabel = vrchatLink ? "Anmelden und verbinden" : "Einloggen";
+  const registerButtonLabel = vrchatLink ? "Konto anlegen und verbinden" : "Zugang erstellen";
 
   return `
     <div class="app-shell">
       ${renderSonaraHero({
-        eyebrow: "SONARA Community Portal",
-        title: "Community, Team und Creator an einem Ort",
-        intro: "News, Events, Creator-Links und der Mitgliederbereich liegen hier kompakt zusammen.",
-        chips: [`${stats.members || 0} Mitglieder`, `${stats.liveCreators || 0} live`, `${(community.events || []).length} Events`]
+        eyebrow,
+        title,
+        intro,
+        chips
       })}
 
       ${renderFlash()}
@@ -7512,6 +7605,24 @@ function renderPublicPortal() {
           </div>
 
           ${
+            vrchatLink
+              ? `
+                <article class="mini-card">
+                  <div class="section-head compact-section-head">
+                    <div>
+                      <p class="eyebrow">VRChat Flow</p>
+                      <h3>So laeuft die Verknuepfung</h3>
+                    </div>
+                    <span class="pill amber">${escapeHtml(vrchatLink.sourceLabel)}</span>
+                  </div>
+                  <p class="helper-text">1. Die Welt oder der Chat oeffnet diesen Link. 2. Du meldest dich hier an oder registrierst dich. 3. Danach landest du automatisch in deinem SONARA-Profil.</p>
+                  <p class="helper-text">Die eigentliche Welt kann spaeter einfach genau diese URL oeffnen: <strong>/vrchat-link</strong> oder <strong>/vrchat-link?source=world</strong>.</p>
+                </article>
+              `
+              : ""
+          }
+
+          ${
             creators.length
               ? `
                 <div class="stack-list compact-stack">
@@ -7530,8 +7641,8 @@ function renderPublicPortal() {
         <div class="auth-stack public-auth-stack">
           <form class="panel auth-card" data-form="login">
             <div>
-              <p class="eyebrow">Login</p>
-              <h3>Einloggen</h3>
+              <p class="eyebrow">${vrchatLink ? "VRChat Login" : "Login"}</p>
+              <h3>${vrchatLink ? "Mit deinem SONARA-Konto verbinden" : "Einloggen"}</h3>
             </div>
             <div class="auth-fieldset">
               <div class="field">
@@ -7543,13 +7654,14 @@ function renderPublicPortal() {
                 <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
               </div>
             </div>
-            <button type="submit">Einloggen</button>
+            ${vrchatLink ? '<p class="login-note">Nach dem Login springst du direkt in dein Portal-Profil.</p>' : ""}
+            <button type="submit">${loginButtonLabel}</button>
           </form>
 
           <form class="panel auth-card" data-form="register">
             <div>
-              <p class="eyebrow">Registrierung</p>
-              <h3>Konto anlegen</h3>
+              <p class="eyebrow">${vrchatLink ? "Neu verbinden" : "Registrierung"}</p>
+              <h3>${vrchatLink ? "Noch kein Konto? Direkt hier anlegen" : "Konto anlegen"}</h3>
             </div>
             <div class="auth-fieldset">
               <div class="field">
@@ -7577,7 +7689,8 @@ function renderPublicPortal() {
                 <input id="registerConfirmPassword" name="confirmPassword" type="password" required>
               </div>
             </div>
-            <button type="submit">Zugang erstellen</button>
+            ${vrchatLink ? '<p class="login-note">Nach der Registrierung wird dein neues Konto direkt mit diesem VRChat-Link markiert und eingeloggt.</p>' : ""}
+            <button type="submit">${registerButtonLabel}</button>
           </form>
         </div>
       </div>
