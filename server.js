@@ -1995,7 +1995,7 @@ function sanitizeUser(user) {
     bio: user.bio || "",
     contactNote: user.contactNote || "",
     creatorBlurb: user.creatorBlurb || "",
-    creatorLinks: Array.isArray(user.creatorLinks) ? user.creatorLinks : [],
+    creatorLinks: normalizeCreatorLinks(user.creatorLinks),
     creatorVisible: Boolean(user.creatorVisible),
     availabilitySlots: normalizeAvailabilitySlots(user.availabilitySlots)
   };
@@ -2064,7 +2064,7 @@ function buildCommunityPayload(store) {
     faq: COMMUNITY_FAQ,
     stats: {
       members: activeUsers.filter((entry) => entry.role === "member").length,
-      moderators: activeUsers.filter((entry) => entry.role === "moderator").length,
+      moderators: activeUsers.filter((entry) => entry.role === "moderator" || entry.role === "moderation_lead").length,
       planners: activeUsers.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
       news: store.announcements.length,
       creators: creators.length
@@ -5140,7 +5140,7 @@ function sanitizeUser(user) {
     bio: user.bio || "",
     contactNote: user.contactNote || "",
     creatorBlurb: user.creatorBlurb || "",
-    creatorLinks: Array.isArray(user.creatorLinks) ? user.creatorLinks : [],
+    creatorLinks: normalizeCreatorLinks(user.creatorLinks),
     creatorVisible: Boolean(user.creatorVisible),
     creatorSlug: normalizeCreatorSlugValue(user.creatorSlug || user.creatorCommunityName || user.displayName),
     creatorCommunityName: normalizeCreatorCommunityName(user.creatorCommunityName),
@@ -5937,7 +5937,7 @@ function buildCommunityPayload(store) {
     faq: COMMUNITY_FAQ,
     stats: {
       members: activeUsers.filter((entry) => entry.role === "member").length,
-      moderators: activeUsers.filter((entry) => entry.role === "moderator").length,
+      moderators: activeUsers.filter((entry) => entry.role === "moderator" || entry.role === "moderation_lead").length,
       planners: activeUsers.filter((entry) => entry.role === "planner" || entry.role === "admin").length,
       news: store.announcements.length,
       creators: creators.length,

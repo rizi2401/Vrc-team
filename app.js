@@ -2074,6 +2074,7 @@ function renderCapacityPanel() {
   const totalPlannedHours = rows.reduce((sum, entry) => sum + entry.plannedHours, 0);
   const totalCapacityHours = rows.reduce((sum, entry) => sum + entry.capacityHours, 0);
   const openHours = rows.reduce((sum, entry) => sum + Math.max(0, entry.capacityHours - entry.plannedHours), 0);
+  const totalOvertimeHours = rows.reduce((sum, entry) => sum + entry.overtimeHours, 0);
   const missingRows = rows.filter((entry) => !entry.capacityHours && !entry.capacityDays && !entry.availabilitySchedule && !entry.hasAvailabilitySlots);
   const missingNames = missingRows.map((entry) => getPrimaryDisplayName(entry.user));
 
@@ -2093,6 +2094,7 @@ function renderCapacityPanel() {
         ${renderStatCard("Geleistet", formatHoursValue(totalWorkedHours), "Bisher erfasste Stunden diese Woche", "teal")}
         ${renderStatCard("Geplant", formatHoursValue(totalPlannedHours), "Eingetragene Schichtstunden diese Woche", "amber")}
         ${renderStatCard("Kapazitaet", totalCapacityHours ? formatHoursValue(totalCapacityHours) : "-", totalCapacityHours ? "Gemeldete Wochenstunden aus Profilen" : "Noch keine Profilangaben", "sky")}
+        ${renderStatCard("Ueberstunden", totalOvertimeHours ? formatHoursValue(totalOvertimeHours) : "-", totalOvertimeHours ? "Ist ueber dem persoenlichen Wochenrahmen gelaufen" : "Noch keine erfassten Ueberstunden", totalOvertimeHours ? "rose" : "neutral")}
         ${renderStatCard("Noch offen", totalCapacityHours ? formatHoursValue(openHours) : "-", totalCapacityHours ? "Noch nicht verplante gemeldete Stunden" : "Keine Kapazitaet hinterlegt", "rose")}
       </div>
 
@@ -2131,6 +2133,8 @@ function renderCapacityCard(entry) {
       <p><strong>Heute:</strong> ${escapeHtml(formatHoursValue(entry.todayWorkedHours || 0))}</p>
       <p><strong>Geplant:</strong> ${escapeHtml(formatHoursValue(entry.plannedHours))} an ${escapeHtml(formatCapacityDays(entry.plannedDays))}</p>
       <p><strong>Verfuegbar:</strong> ${escapeHtml(formatCapacityHours(entry.capacityHours))} / ${escapeHtml(formatCapacityDays(entry.capacityDays))}</p>
+      <p><strong>Stunden-Saldo:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatSignedHoursValue(entry.hourBalance) : "Kein Wochenrahmen gesetzt")}</p>
+      ${entry.overtimeHours > 0 ? `<p class="helper-text"><strong>Ueberstunden:</strong> ${escapeHtml(formatHoursValue(entry.overtimeHours))}</p>` : ""}
       ${renderAvailabilitySlotList(entry.availabilitySlots, "Noch keine festen Wochenslots eingetragen.")}
       ${
         entry.availabilitySchedule
@@ -3505,15 +3509,19 @@ function renderAttendanceSummaryCard(entry) {
   return `
     <article class="mini-card attendance-summary-card">
       <div class="status-row">
-        <span class="pill ${entry.liveEntry ? "teal" : "neutral"}">${escapeHtml(entry.liveEntry ? "Live" : "Diese Woche")}</span>
+        <span class="pill ${entry.overtimeHours > 0 ? "rose" : entry.liveEntry ? "teal" : "neutral"}">${escapeHtml(entry.overtimeHours > 0 ? "Ueberstunden" : entry.liveEntry ? "Live" : "Diese Woche")}</span>
         <span class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</span>
       </div>
       <h3>${escapeHtml(getPrimaryDisplayName(entry.user))}</h3>
       <p><strong>Woche:</strong> ${escapeHtml(formatHoursValue(entry.weekHours))}</p>
       <p><strong>Heute:</strong> ${escapeHtml(formatHoursValue(entry.todayHours))}</p>
+      <p><strong>Wochenrahmen:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatHoursValue(entry.capacityHours) : "Keine Angabe")}</p>
+      <p><strong>Saldo:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatSignedHoursValue(entry.balanceHours) : "Kein Soll gesetzt")}</p>
       ${
-        entry.liveEntry
-          ? `<p class="helper-text">Aktiv seit ${escapeHtml(formatTime(entry.liveEntry.checkInAt))}</p>`
+        entry.overtimeHours > 0
+          ? `<p class="helper-text">Diese Person liegt aktuell ${escapeHtml(formatHoursValue(entry.overtimeHours))} ueber ihrem Wochenrahmen.</p>`
+          : entry.liveEntry
+            ? `<p class="helper-text">Aktiv seit ${escapeHtml(formatTime(entry.liveEntry.checkInAt))}</p>`
           : '<p class="helper-text">Aktuell nicht eingestempelt.</p>'
       }
     </article>
@@ -4596,12 +4604,32 @@ function renderWarningCard(entry, managerView) {
   `;
 }
 
+function getCreatorLinks(user) {
+  return (Array.isArray(user?.creatorLinks) ? user.creatorLinks : [])
+    .map((entry) => {
+      if (typeof entry === "string") {
+        const [left, ...rightParts] = entry.split("|");
+        const url = String((rightParts.length ? rightParts.join("|") : left) || "").trim();
+        const label = String((rightParts.length ? left : "") || "").trim() || url;
+        return url ? { label, url } : null;
+      }
+
+      if (!entry || typeof entry !== "object") return null;
+      const url = String(entry.url || "").trim();
+      const label = String(entry.label || "").trim() || url;
+      return url ? { label, url } : null;
+    })
+    .filter(Boolean);
+}
+
 function renderCreatorLinksText(user) {
-  return (user.creatorLinks || []).map((entry) => `${entry.label} | ${entry.url}`).join("\n");
+  return getCreatorLinks(user)
+    .map((entry) => `${entry.label} | ${entry.url}`)
+    .join("\n");
 }
 
 function renderCreatorLinkList(user, compact = false) {
-  const links = user.creatorLinks || [];
+  const links = getCreatorLinks(user);
   if (!links.length) return compact ? "" : '<p class="helper-text">Noch keine Creator-Links.</p>';
 
   return `
@@ -5553,6 +5581,8 @@ function buildCapacityRows() {
       const availabilitySlots = getAvailabilitySlots(user);
       const hasAvailabilitySlotData = hasAvailabilitySlots(availabilitySlots);
       const availabilityUpdatedAt = String(user.availabilityUpdatedAt || "").trim();
+      const hourBalance = capacityHours > 0 ? workedHours - capacityHours : 0;
+      const overtimeHours = capacityHours > 0 ? Math.max(0, hourBalance) : 0;
       const overHours = capacityHours > 0 && plannedHours > capacityHours;
       const overDays = capacityDays > 0 && plannedDays > capacityDays;
       const fullyPlanned =
@@ -5582,6 +5612,8 @@ function buildCapacityRows() {
         plannedDays,
         capacityHours,
         capacityDays,
+        hourBalance,
+        overtimeHours,
         availabilitySchedule,
         availabilitySlots,
         hasAvailabilitySlots: hasAvailabilitySlotData,
@@ -5600,15 +5632,26 @@ function buildAttendanceSummaryRows() {
   const entries = state.data?.timeEntries || [];
 
   return users
-    .map((user) => ({
-      user,
-      weekHours: calculateWorkedHoursForWeek(user.id, week),
-      todayHours: calculateWorkedHoursForRange(user.id, today),
-      liveEntry: entries.find((entry) => entry.userId === user.id && !entry.checkOutAt) || null
-    }))
+    .map((user) => {
+      const weekHours = calculateWorkedHoursForWeek(user.id, week);
+      const capacityHours = Number(user.weeklyHoursCapacity || 0);
+      const overtimeHours = capacityHours > 0 ? Math.max(0, weekHours - capacityHours) : 0;
+      const balanceHours = capacityHours > 0 ? weekHours - capacityHours : 0;
+
+      return {
+        user,
+        weekHours,
+        todayHours: calculateWorkedHoursForRange(user.id, today),
+        capacityHours,
+        overtimeHours,
+        balanceHours,
+        liveEntry: entries.find((entry) => entry.userId === user.id && !entry.checkOutAt) || null
+      };
+    })
     .sort(
       (left, right) =>
         Number(Boolean(right.liveEntry)) - Number(Boolean(left.liveEntry)) ||
+        right.overtimeHours - left.overtimeHours ||
         right.weekHours - left.weekHours ||
         getPrimaryDisplayName(left.user).localeCompare(getPrimaryDisplayName(right.user), "de")
     );
@@ -5710,6 +5753,12 @@ function formatHoursValue(value) {
   const rounded = Math.round(numeric * 10) / 10;
   const hasDecimal = Math.abs(rounded % 1) > 0.001;
   return `${hasDecimal ? rounded.toFixed(1) : Math.round(rounded)} Std.`;
+}
+
+function formatSignedHoursValue(value) {
+  const numeric = Number(value || 0);
+  if (Math.abs(numeric) < 0.001) return "0 Std.";
+  return `${numeric > 0 ? "+" : "-"}${formatHoursValue(Math.abs(numeric))}`;
 }
 
 function formatCapacityHours(value) {
@@ -8782,7 +8831,7 @@ function getCreatorPresenceTimestamp(user) {
 
 function getCreatorPresenceMeta(user) {
   const status = user?.creatorPresence === "live" ? "live" : user?.creatorPresence === "new-release" ? "new-release" : "offline";
-  const linkEntries = (user?.creatorLinks || []).map((entry) => ({
+  const linkEntries = getCreatorLinks(user).map((entry) => ({
     ...entry,
     platform: getCreatorPlatformMeta(entry)
   }));
@@ -9187,7 +9236,7 @@ function renderLiveCreatorCard(user) {
 }
 
 function renderCreatorLinkList(user, compact = false) {
-  const links = user.creatorLinks || [];
+  const links = getCreatorLinks(user);
   if (!links.length) return compact ? "" : '<p class="helper-text">Noch keine Creator-Links.</p>';
 
   return `
@@ -9457,7 +9506,9 @@ function renderDashboardTabs(activeTab) {
 
   let tabs = common;
   if (canManagePortal()) {
-    tabs = [...common, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "capacity", label: "Auslastung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }, { id: "settings", label: "Einstellungen" }];
+    tabs = [...common, { id: "schedule", label: "Meine Schichten" }, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "capacity", label: "Auslastung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }, { id: "settings", label: "Einstellungen" }];
+  } else if (canCoordinateStaff()) {
+    tabs = [...common, { id: "schedule", label: "Meine Schichten" }, { id: "feedback", label: "Feedback" }, { id: "planning", label: "Planung" }, { id: "capacity", label: "Auslastung" }, { id: "team", label: "Team" }, { id: "time", label: "Zeiten" }];
   } else if (canAccessStaffArea()) {
     tabs = [...common, { id: "schedule", label: "Meine Schichten" }, { id: "feedback", label: "Feedback" }, { id: "time", label: "Zeiten" }];
   } else {
@@ -9497,6 +9548,8 @@ function renderManagerDashboard(activeTab) {
       return renderLivePanel();
     case "forum":
       return renderForumPanel(true);
+    case "schedule":
+      return [renderMySchedulePanel(), renderSwapPanel(false)].join("");
     case "feedback":
       return renderFeedbackAdminPanel();
     case "planning":
@@ -9585,9 +9638,9 @@ function renderMemberDashboard(activeTab) {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "feedback", "planning", "capacity", "team", "chat", "time", "profile", "settings"]
+    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "schedule", "feedback", "planning", "capacity", "team", "chat", "time", "profile", "settings"]
     : canCoordinateStaff()
-      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "feedback", "planning", "capacity", "team", "chat", "time", "profile"]
+      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "schedule", "feedback", "planning", "capacity", "team", "chat", "time", "profile"]
     : canAccessStaffArea()
       ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "schedule", "feedback", "chat", "time", "profile"]
       : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "feedback", "chat", "profile"];
