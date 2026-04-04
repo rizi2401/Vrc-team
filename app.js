@@ -390,10 +390,6 @@ async function boot() {
   if (!state.session) {
     await refreshPublicData();
   }
-  if (canManagePortal()) {
-    await refreshDiscordStatus(false);
-    await refreshVrchatOverview(false);
-  }
   render();
 }
 
@@ -441,78 +437,30 @@ async function refreshPublicData() {
 }
 
 async function refreshVrchatOverview(showErrors = true) {
-  if (!canManagePortal()) return;
-  state.vrchatLoading = true;
-
-  try {
-    const payload = await api("/api/admin/vrchat/overview");
-    state.vrchatOverview = payload.overview;
-  } catch (error) {
-    if (showErrors) setFlash(error.message, "danger");
-  } finally {
-    state.vrchatLoading = false;
-    render();
-  }
+  state.vrchatOverview = null;
+  state.vrchatLoading = false;
+  if (showErrors) setFlash("Die VRChat-Datei-Anbindung wurde entfernt.", "info");
+  render();
 }
 
 async function refreshDiscordStatus(showErrors = true) {
-  if (!canManagePortal()) return;
-  state.discordLoading = true;
-
-  try {
-    const payload = await api("/api/admin/discord/status");
-    state.discordStatus = payload.status;
-  } catch (error) {
-    if (showErrors) setFlash(error.message, "danger");
-  } finally {
-    state.discordLoading = false;
-    render();
-  }
+  state.discordStatus = null;
+  state.discordLoading = false;
+  if (showErrors) setFlash("Der Discord-Webhook-Bereich wurde entfernt.", "info");
+  render();
 }
 
 async function runDiscordTest() {
-  state.discordLoading = true;
-  render();
-
-  try {
-    const payload = await api("/api/admin/discord/test", {
-      method: "POST",
-      body: "{}"
-    });
-    state.discordStatus = payload.status;
-    setFlash("Discord-Testnachricht wurde gesendet.", "success");
-  } catch (error) {
-    try {
-      const statusPayload = await api("/api/admin/discord/status");
-      state.discordStatus = statusPayload.status;
-    } catch {}
-    setFlash(error.message, "danger");
-  } finally {
-    state.discordLoading = false;
-    render();
-  }
+  await refreshDiscordStatus(true);
 }
 
 async function runVrchatSync() {
-  state.vrchatLoading = true;
-  render();
-
-  try {
-    const payload = await api("/api/admin/vrchat/sync", {
-      method: "POST",
-      body: "{}"
-    });
-    state.vrchatOverview = payload.overview;
-    setFlash(payload.message || "VRChat-Daten wurden synchronisiert.", payload.ok ? "success" : "info");
-  } catch (error) {
-    setFlash(error.message, "danger");
-  } finally {
-    state.vrchatLoading = false;
-    render();
-  }
+  await refreshVrchatOverview(true);
 }
 
 async function submitVrchatSecurityCode(code) {
+  await refreshVrchatOverview(true);
+  return;
   state.vrchatLoading = true;
   render();
 
@@ -650,9 +598,6 @@ async function performAction(callback, successMessage = "", successTone = "succe
     const payload = await callback();
     if (payload?.session || payload?.data) applyPayload(payload);
     if (successMessage) setFlash(successMessage, successTone);
-    if (canManagePortal() && !state.vrchatOverview) {
-      void refreshVrchatOverview(false);
-    }
   } catch (error) {
     if (error.status === 401) {
       state.session = null;
@@ -1050,7 +995,7 @@ function renderManagerDashboard(activeTab) {
     case "feedback":
       return renderFeedbackAdminPanel();
     case "settings":
-      return [renderSettingsPanel(), renderDiscordPanel(), renderVrchatAnalyticsPanel()].join("");
+      return renderSettingsPanel();
     case "time":
       return renderAttendancePanel(true);
     case "chat":
@@ -2697,6 +2642,157 @@ function renderProfilePanel(managerView) {
   `;
 }
 
+function renderProfileFallback(managerView, error = null) {
+  const user = state.session || {};
+  const draftKey = "profile-update:";
+  const showAvailabilityFields = user.role !== "member";
+  const availabilitySlots = getAvailabilitySlots(user);
+  const creatorApplication = getCreatorApplicationMeta(user);
+
+  return `
+    <section class="panel ${managerView ? "span-12" : "span-12"}">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Profil</p>
+          <h2>Dein Community-Profil</h2>
+          <p class="section-copy">Diese abgesicherte Profilansicht bleibt bewusst einfacher, damit Profil und Verfuegbarkeit auf jeden Fall erreichbar bleiben.</p>
+        </div>
+      </div>
+
+      ${
+        error
+          ? `<div class="flash flash-warning"><span>${escapeHtml(`Die erweiterte Profilansicht konnte gerade nicht geladen werden. Die Basisfelder bleiben trotzdem verfuegbar. (${error.message || "Profilfehler"})`)}</span></div>`
+          : ""
+      }
+
+      <div class="profile-panel">
+        <div class="profile-preview">
+          ${renderUserAvatar(user, "hero-avatar")}
+          <div>
+            <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+            <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
+            ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
+            ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
+            ${showAvailabilityFields ? renderAvailabilitySlotList(availabilitySlots, "Noch keine Zeitfenster eingetragen.") : ""}
+          </div>
+        </div>
+
+        <form class="stack-form" data-form="profile-update">
+          <div class="form-grid">
+            <div class="field">
+              <label for="profileVrchatNameFallback">VRChat-Name</label>
+              <input id="profileVrchatNameFallback" name="vrchatName" type="text" value="${escapeHtml(user.vrchatName || "")}" required>
+            </div>
+            <div class="field">
+              <label for="profileDiscordNameFallback">Discord-Name</label>
+              <input id="profileDiscordNameFallback" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
+            </div>
+            <div class="field">
+              <label for="profileAvatarFileFallback">Profilbild</label>
+              <input id="profileAvatarFileFallback" name="avatarFile" type="file" accept="image/*">
+              ${renderAvatarDraftHint(draftKey, Boolean(user.avatarUrl))}
+            </div>
+            <div class="field">
+              <label for="profilePasswordFallback">Neues Passwort</label>
+              <input id="profilePasswordFallback" name="password" type="password" placeholder="Leer lassen = behalten">
+            </div>
+            <div class="field span-all">
+              <label for="profileBioFallback">Kurzprofil</label>
+              <textarea id="profileBioFallback" name="bio">${escapeHtml(user.bio || "")}</textarea>
+            </div>
+            <div class="field span-all">
+              <label for="profileContactNoteFallback">Kontakt / Hinweise</label>
+              <textarea id="profileContactNoteFallback" name="contactNote">${escapeHtml(user.contactNote || "")}</textarea>
+            </div>
+            ${
+              showAvailabilityFields
+                ? `
+                  <div class="field">
+                    <label for="profileWeeklyHoursCapacityFallback">Verfuegbare Stunden pro Woche</label>
+                    <input id="profileWeeklyHoursCapacityFallback" name="weeklyHoursCapacity" type="number" min="0" max="168" step="0.5" value="${escapeHtml(String(user.weeklyHoursCapacity || ""))}">
+                  </div>
+                  <div class="field">
+                    <label for="profileWeeklyDaysCapacityFallback">Verfuegbare Tage pro Woche</label>
+                    <input id="profileWeeklyDaysCapacityFallback" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
+                  </div>
+                  <div class="field span-all">
+                    <label>Zeitfenster fuer diese Woche</label>
+                    ${renderAvailabilitySlotsEditor(availabilitySlots, "profile-fallback-availability")}
+                  </div>
+                  <div class="field span-all">
+                    <label for="profileAvailabilityScheduleFallback">Zusatzhinweise</label>
+                    <textarea id="profileAvailabilityScheduleFallback" name="availabilitySchedule">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+                  </div>
+                `
+                : ""
+            }
+            <div class="field">
+              <label for="profileCreatorBlurbFallback">Creator-Text</label>
+              <input id="profileCreatorBlurbFallback" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}">
+            </div>
+            ${
+              creatorApplication.approved
+                ? `
+                  <div class="field">
+                    <label for="profileCreatorVisibleFallback">Im Creator-Bereich zeigen</label>
+                    <input id="profileCreatorVisibleFallback" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
+                  </div>
+                `
+                : ""
+            }
+            <div class="field span-all">
+              <label for="profileCreatorCommunityNameFallback">Community-Name</label>
+              <input id="profileCreatorCommunityNameFallback" name="creatorCommunityName" type="text" value="${escapeHtml(user.creatorCommunityName || "")}">
+            </div>
+            <div class="field">
+              <label for="profileCreatorSlugFallback">Slash-Adresse</label>
+              <input id="profileCreatorSlugFallback" name="creatorSlug" type="text" value="${escapeHtml(user.creatorSlug || "")}">
+            </div>
+            <div class="field">
+              <label for="profileCreatorCommunityInviteUrlFallback">Einstiegslink</label>
+              <input id="profileCreatorCommunityInviteUrlFallback" name="creatorCommunityInviteUrl" type="url" value="${escapeHtml(user.creatorCommunityInviteUrl || "")}">
+            </div>
+            <div class="field span-all">
+              <label for="profileCreatorCommunitySummaryFallback">Kurzbeschreibung deiner Community</label>
+              <textarea id="profileCreatorCommunitySummaryFallback" name="creatorCommunitySummary">${escapeHtml(user.creatorCommunitySummary || "")}</textarea>
+            </div>
+            <div class="field">
+              <label for="profileCreatorPresenceFallback">Sonara Live Status</label>
+              <select id="profileCreatorPresenceFallback" name="creatorPresence">
+                <option value="offline" ${user.creatorPresence === "offline" ? "selected" : ""}>Zurzeit ruhig</option>
+                <option value="live" ${user.creatorPresence === "live" ? "selected" : ""}>Ich bin gerade live</option>
+                <option value="new-release" ${user.creatorPresence === "new-release" ? "selected" : ""}>Ich habe etwas Neues hochgeladen</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="profileCreatorPresenceUrlFallback">Direkter Link</label>
+              <input id="profileCreatorPresenceUrlFallback" name="creatorPresenceUrl" type="url" value="${escapeHtml(user.creatorPresenceUrl || "")}">
+            </div>
+            <div class="field span-all">
+              <label for="profileCreatorPresenceTextFallback">Kurztext fuer Sonara Live</label>
+              <textarea id="profileCreatorPresenceTextFallback" name="creatorPresenceText">${escapeHtml(user.creatorPresenceText || "")}</textarea>
+            </div>
+            <div class="field span-all">
+              <label for="profileCreatorLinksFallback">Creator-Links</label>
+              <textarea id="profileCreatorLinksFallback" name="creatorLinks">${escapeHtml(renderCreatorLinksText(user))}</textarea>
+            </div>
+          </div>
+          <button type="submit">Profil speichern</button>
+        </form>
+      </div>
+    </section>
+  `;
+}
+
+function renderProfileWorkspace(managerView) {
+  try {
+    return renderProfilePanel(managerView);
+  } catch (error) {
+    console.error("Profilansicht konnte nicht geladen werden:", error);
+    return renderProfileFallback(managerView, error);
+  }
+}
+
 async function readImageFileInput(fileInput) {
   const file = fileInput?.files?.[0];
   if (!file) return null;
@@ -4268,6 +4364,19 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "availability-update": {
+      const { payload } = buildAvailabilityPayload(form);
+      await performAction(
+        () =>
+          api("/api/profile", {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          }),
+        "Verfuegbarkeit wurde aktualisiert."
+      );
+      break;
+    }
+
     default:
       break;
   }
@@ -4317,19 +4426,31 @@ async function handleClick(event) {
       break;
 
     case "refresh-vrchat-overview":
-      await refreshVrchatOverview(true);
+      setFlash("Die VRChat-Datei-Anbindung wurde entfernt.", "info");
+      state.vrchatOverview = null;
+      state.vrchatLoading = false;
+      render();
       break;
 
     case "refresh-discord-status":
-      await refreshDiscordStatus(true);
+      setFlash("Der Discord-Webhook-Bereich wurde entfernt.", "info");
+      state.discordStatus = null;
+      state.discordLoading = false;
+      render();
       break;
 
     case "run-discord-test":
-      await runDiscordTest();
+      setFlash("Der Discord-Webhook-Bereich wurde entfernt.", "info");
+      state.discordStatus = null;
+      state.discordLoading = false;
+      render();
       break;
 
     case "run-vrchat-sync":
-      await runVrchatSync();
+      setFlash("Die VRChat-Datei-Anbindung wurde entfernt.", "info");
+      state.vrchatOverview = null;
+      state.vrchatLoading = false;
+      render();
       break;
 
     case "logout":
@@ -6649,6 +6770,19 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "availability-update": {
+      const { payload } = buildAvailabilityPayload(form);
+      await performAction(
+        () =>
+          api("/api/profile", {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          }),
+        "Verfuegbarkeit wurde aktualisiert."
+      );
+      break;
+    }
+
     default:
       break;
   }
@@ -7801,9 +7935,9 @@ function renderManagerDashboard(activeTab) {
     case "time":
       return renderAttendancePanel(true);
     case "profile":
-      return renderProfilePanel(true);
+      return renderProfileWorkspace(true);
     case "settings":
-      return [renderSettingsPanel(), renderDiscordPanel(), renderVrchatAnalyticsPanel()].join("");
+      return renderSettingsPanel();
     case "overview":
     default:
       return [renderNotificationsPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
@@ -7831,7 +7965,7 @@ function renderModeratorDashboard(activeTab) {
     case "time":
       return renderAttendancePanel(false);
     case "profile":
-      return renderProfilePanel(false);
+      return renderProfileWorkspace(false);
     case "overview":
     default:
       return [renderNotificationsPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
@@ -7855,7 +7989,7 @@ function renderMemberDashboard(activeTab) {
     case "chat":
       return renderChatWorkspace("member");
     case "profile":
-      return renderProfilePanel(false);
+      return renderProfileWorkspace(false);
     case "overview":
     default:
       return [renderNotificationsPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderCommunityOverviewPanel()].join("");
@@ -9676,9 +9810,9 @@ function renderManagerDashboard(activeTab) {
     case "time":
       return renderAttendancePanel(true);
     case "profile":
-      return renderProfilePanel(true);
+      return renderProfileWorkspace(true);
     case "settings":
-      return [renderSettingsPanel(), renderDiscordPanel(), renderVrchatAnalyticsPanel()].join("");
+      return renderSettingsPanel();
     case "overview":
     default:
       return [renderNotificationsPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderAvailabilityReminderPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
@@ -9712,7 +9846,7 @@ function renderModeratorDashboard(activeTab) {
     case "time":
       return renderAttendancePanel(false);
     case "profile":
-      return renderProfilePanel(false);
+      return renderProfileWorkspace(false);
     case "overview":
     default:
       return [renderNotificationsPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderAvailabilityReminderPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
@@ -9742,7 +9876,7 @@ function renderMemberDashboard(activeTab) {
     case "chat":
       return renderChatWorkspace("member");
     case "profile":
-      return renderProfilePanel(false);
+      return renderProfileWorkspace(false);
     case "overview":
     default:
       return [renderNotificationsPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderCommunityOverviewPanel()].join("");

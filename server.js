@@ -3,7 +3,6 @@ const https = require("node:https");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { fetchVrchatOverview, syncVrchatAnalytics, verifyVrchatSecurityCode } = require("./vrchat_sync");
 
 const HOST = "0.0.0.0";
 const PORT = process.env.PORT || 3000;
@@ -380,51 +379,31 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && url.pathname === "/api/admin/vrchat/overview") {
     requireRole(auth.user, "planner");
-    const overview = await fetchVrchatOverview();
-    sendJson(res, 200, { overview });
+    sendJson(res, 410, { error: "Die VRChat-Datei-Anbindung wurde entfernt." });
     return;
   }
 
   if (req.method === "GET" && url.pathname === "/api/admin/discord/status") {
     requireRole(auth.user, "planner");
-    sendJson(res, 200, { status: getDiscordStatus() });
+    sendJson(res, 410, { error: "Der Discord-Webhook-Bereich wurde entfernt." });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/discord/test") {
     requireRole(auth.user, "planner");
-    const result = await notifyDiscord(buildDiscordTestMessage(auth.user), { kind: "manual" });
-    if (!result.ok) {
-      sendJson(res, 400, { error: result.message, status: getDiscordStatus() });
-      return;
-    }
-
-    sendJson(res, 200, { ok: true, status: getDiscordStatus() });
+    sendJson(res, 410, { error: "Der Discord-Webhook-Bereich wurde entfernt." });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/vrchat/sync") {
     requireRole(auth.user, "planner");
-    const result = await syncVrchatAnalytics();
-    if (result.ok) {
-      broadcastEvent("portal", { type: "vrchat-sync" });
-      sendJson(res, 200, result);
-      return;
-    }
-    sendJson(res, 400, result);
+    sendJson(res, 410, { error: "Die VRChat-Datei-Anbindung wurde entfernt." });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin/vrchat/verify-code") {
     requireRole(auth.user, "planner");
-    const body = await readJson(req);
-    const result = await verifyVrchatSecurityCode(body.code);
-    if (result.ok) {
-      broadcastEvent("portal", { type: "vrchat-code-verified" });
-      sendJson(res, 200, result);
-      return;
-    }
-    sendJson(res, 400, result);
+    sendJson(res, 410, { error: "Die VRChat-Datei-Anbindung wurde entfernt." });
     return;
   }
 
@@ -4106,53 +4085,12 @@ function sendJson(res, statusCode, payload, headers = {}) {
 }
 
 async function notifyDiscord(message, options = {}) {
-  const kind = options.kind === "manual" ? "manual" : "auto";
-  const webhookUrl = String(process.env.DISCORD_WEBHOOK_URL || "").trim();
-  if (!webhookUrl || !message) {
-    discordState.lastError = !webhookUrl ? "DISCORD_WEBHOOK_URL fehlt." : "Keine Discord-Nachricht uebergeben.";
-    discordState.lastStatusCode = 0;
-    discordState.lastAttemptAt = new Date().toISOString();
-    return { ok: false, message: discordState.lastError };
-  }
-
   discordState.lastAttemptAt = new Date().toISOString();
-
-  if (kind === "auto" && !DISCORD_AUTO_NOTIFICATIONS_ENABLED) {
-    discordState.lastError = "Automatische Discord-Benachrichtigungen sind deaktiviert.";
-    discordState.lastStatusCode = 0;
-    return { ok: false, skipped: true, message: discordState.lastError };
-  }
-
-  const cooldownState = getDiscord1015Cooldown();
-  if (cooldownState.active) {
-    discordState.lastError = buildDiscordBlockedUntilMessage(discordState.blockedUntil);
-    discordState.lastStatusCode = 1015;
-    return { ok: false, skipped: true, message: discordState.lastError };
-  }
-
-  discordSendChain = discordSendChain.catch(() => null).then(async () => {
-    try {
-      await waitForDiscordSlot();
-      const result = await postJson(webhookUrl, message);
-      discordLastDispatchAt = Date.now();
-      discordState.lastSuccessAt = new Date().toISOString();
-      discordState.lastError = "";
-      discordState.lastStatusCode = result.statusCode || 204;
-      discordState.blockedUntil = "";
-      return { ok: true };
-    } catch (error) {
-      discordLastDispatchAt = Date.now();
-      if (isDiscord1015Error(error)) {
-        discordState.blockedUntil = new Date(Date.now() + DISCORD_1015_COOLDOWN_MS).toISOString();
-      }
-      discordState.lastError = humanizeDiscordError(error);
-      discordState.lastStatusCode = Number(error.statusCode || 0);
-      console.error("Discord webhook failed:", error.message);
-      return { ok: false, message: discordState.lastError };
-    }
-  });
-
-  return discordSendChain;
+  discordState.lastSuccessAt = "";
+  discordState.lastError = "Der Discord-Webhook-Bereich wurde entfernt.";
+  discordState.lastStatusCode = 410;
+  discordState.blockedUntil = "";
+  return { ok: false, skipped: true, removed: true, message: discordState.lastError };
 }
 
 function buildShiftDiscordMessage(action, shift, store, previousShift = null) {
