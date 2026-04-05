@@ -11,6 +11,7 @@ const STORE_PATH = process.env.STORE_PATH ? path.resolve(process.env.STORE_PATH)
 const DATA_DIR = path.dirname(STORE_PATH);
 const PORTAL_STORE_KEY = "primary";
 const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const USER_ACTIVITY_TOUCH_INTERVAL_MS = normalizePositiveInteger(process.env.USER_ACTIVITY_TOUCH_INTERVAL_MS, 5 * 60 * 1000);
 
 const COMMUNITY_EVENTS = [
   {
@@ -180,14 +181,15 @@ async function handleApi(req, res, url) {
 
     let responseStore = store;
     let responseUser = user;
-    if (normalizeVrchatLinkSource(body.linkSource)) {
-      const nextStore = structuredClone(store);
-      const target = nextStore.users.find((entry) => entry.id === user.id);
-      if (target) {
+    const nextStore = structuredClone(store);
+    const target = nextStore.users.find((entry) => entry.id === user.id);
+    if (target) {
+      if (normalizeVrchatLinkSource(body.linkSource)) {
         applyVrchatLinkState(target, body.linkSource);
-        responseStore = writeStore(nextStore);
-        responseUser = target;
       }
+      applyUserPresenceHeartbeat(target, { login: true, force: true });
+      responseStore = writeStore(nextStore);
+      responseUser = target;
     }
 
     const sessionId = createSession(user.id);
@@ -232,15 +234,19 @@ async function handleApi(req, res, url) {
       creatorPresenceUpdatedAt: normalized.creatorPresenceUpdatedAt,
       weeklyHoursCapacity: normalized.weeklyHoursCapacity,
       weeklyDaysCapacity: normalized.weeklyDaysCapacity,
+      overtimeAdjustments: [],
       availabilitySchedule: normalized.availabilitySchedule,
       availabilitySlots: normalized.availabilitySlots,
       availabilityUpdatedAt: normalized.availabilityUpdatedAt,
+      lastLoginAt: "",
+      lastSeenAt: "",
       vrchatLinkedAt: "",
       vrchatLinkSource: "",
       passwordHash: normalized.passwordHash
     };
 
     applyVrchatLinkState(user, body.linkSource);
+    applyUserPresenceHeartbeat(user, { login: true, force: true });
 
     nextStore.users.push(user);
     const savedStore = writeStore(nextStore);
@@ -266,6 +272,15 @@ async function handleApi(req, res, url) {
   if (!auth) {
     sendJson(res, 401, { error: "Nicht angemeldet." });
     return;
+  }
+
+  {
+    const activityStore = structuredClone(auth.store);
+    const activityUser = activityStore.users.find((entry) => entry.id === auth.user.id);
+    if (activityUser && applyUserPresenceHeartbeat(activityUser)) {
+      auth.store = writeStore(activityStore);
+      auth.user = activityUser;
+    }
   }
 
   if (req.method === "GET" && url.pathname === "/api/bootstrap") {
@@ -623,6 +638,34 @@ async function handleApi(req, res, url) {
     nextStore.announcements = nextStore.announcements.filter((entry) => entry.id !== announcementId);
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "announcement-deleted" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/system-notice") {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const normalized = validateSystemNoticePayload(body);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.systemNotice = {
+      ...normalized,
+      updatedAt: new Date().toISOString(),
+      updatedBy: auth.user.id
+    };
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "system-notice-updated" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "DELETE" && url.pathname === "/api/system-notice") {
+    requireRole(auth.user, "planner");
+    const nextStore = structuredClone(auth.store);
+    nextStore.systemNotice = buildEmptySystemNotice();
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "system-notice-cleared" });
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -1075,9 +1118,12 @@ async function handleApi(req, res, url) {
       creatorPresenceUpdatedAt: normalized.creatorPresenceUpdatedAt,
       weeklyHoursCapacity: normalized.weeklyHoursCapacity,
       weeklyDaysCapacity: normalized.weeklyDaysCapacity,
+      overtimeAdjustments: [],
       availabilitySchedule: normalized.availabilitySchedule,
       availabilitySlots: normalized.availabilitySlots,
       availabilityUpdatedAt: normalized.availabilityUpdatedAt,
+      lastLoginAt: "",
+      lastSeenAt: "",
       passwordHash: normalized.passwordHash,
       isBlocked: blockedState.isBlocked,
       blockReason: blockedState.blockReason,
@@ -1085,9 +1131,50 @@ async function handleApi(req, res, url) {
       blockedBy: blockedState.isBlocked ? auth.user.id : ""
     });
 
+  const savedStore = writeStore(nextStore);
+  broadcastEvent("portal", { type: "user-created" });
+  sendPortalData(res, 201, auth.user, savedStore);
+  return;
+  }
+
+  const overtimeAdjustmentMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/overtime-adjustments$/);
+  if (overtimeAdjustmentMatch && req.method === "POST") {
+    requireModerationCoordinator(auth.user);
+    const userId = decodeURIComponent(overtimeAdjustmentMatch[1]);
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+    const target = nextStore.users.find((entry) => entry.id === userId);
+
+    if (!target) {
+      sendJson(res, 404, { error: "Benutzer nicht gefunden." });
+      return;
+    }
+
+    const mode = String(body.mode || "deduct").trim().toLowerCase();
+    if (!["deduct", "credit"].includes(mode)) {
+      sendJson(res, 400, { error: "Ungueltiger Ausgleichsmodus." });
+      return;
+    }
+
+    const absoluteHours = Math.abs(normalizeOvertimeAdjustmentHours(body.hours));
+    if (!absoluteHours) {
+      sendJson(res, 400, { error: "Bitte eine gueltige Stundenanzahl fuer den Ueberstunden-Ausgleich angeben." });
+      return;
+    }
+
+    const note = normalizeOvertimeAdjustmentNote(body.note);
+    target.overtimeAdjustments = normalizeOvertimeAdjustments(target.overtimeAdjustments);
+    target.overtimeAdjustments.unshift({
+      id: crypto.randomUUID(),
+      hours: mode === "deduct" ? -absoluteHours : absoluteHours,
+      note,
+      createdAt: new Date().toISOString(),
+      createdBy: auth.user.id
+    });
+
     const savedStore = writeStore(nextStore);
-    broadcastEvent("portal", { type: "user-created" });
-    sendPortalData(res, 201, auth.user, savedStore);
+    broadcastEvent("portal", { type: "overtime-adjusted" });
+    sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
 
@@ -1370,6 +1457,7 @@ function buildDefaultStore() {
   const users = [
     buildSeedUser("admin", "System Admin", "admin", "admin123!", "System Admin", "system-admin", "", "Leitet das SONARA Portal und prueft neue Team-Updates."),
     buildSeedUser("lyra", "Lyra", "planner", "plan123!", "Lyra", "lyra_plan", "", "Koordiniert den Staff-Bereich und Events."),
+    buildSeedUser("black", "Black", "moderation_lead", "lead123!", "Black", "black_vrc", "", "Behaelt Moderation, Auslastung und Schichtverteilung im Blick."),
     buildSeedUser("aiko", "Aiko", "moderator", "mod123!", "Aiko", "aiko_vrc", "", "Fokus auf Begruessung und Community-Einstieg."),
     buildSeedUser("mika", "Mika", "moderator", "mod123!", "Mika", "mika_vrc", "", "Hat die Public-Bereiche und Zwischenschichten im Blick."),
     buildSeedUser("ren", "Ren", "moderator", "mod123!", "Ren", "ren_vrc", "", "Betreut gern Events und Briefings."),
@@ -1387,6 +1475,7 @@ function buildDefaultStore() {
       worlds: ["Community Hub", "Sunset Lounge", "Event Arena", "Support Room"],
       tasks: ["Begruessung", "Patrouille", "Support", "Event-Leitung", "Koordination"]
     },
+    systemNotice: buildEmptySystemNotice(),
     shifts: [
       buildShift(addDays(today, 0), "12:00", "16:00", "Kernschicht", "Community Hub", "Begruessung", userByName.get("Aiko"), "Neue User zuerst einsammeln.", true),
       buildShift(addDays(today, 0), "14:00", "18:00", "Zwischenschicht", "Sunset Lounge", "Patrouille", userByName.get("Mika"), "Fokus auf Stoerungen in Public Bereichen."),
@@ -1467,6 +1556,9 @@ function buildSeedUser(
     bio,
     weeklyHoursCapacity: normalizeWeeklyHoursCapacity(weeklyHoursCapacity),
     weeklyDaysCapacity: normalizeWeeklyDaysCapacity(weeklyDaysCapacity),
+    overtimeAdjustments: [],
+    lastLoginAt: "",
+    lastSeenAt: "",
     passwordHash: hashPassword(password)
   };
 }
@@ -1501,6 +1593,7 @@ function normalizeStore(store) {
   return {
     users,
     settings,
+    systemNotice: normalizeSystemNotice(store.systemNotice),
     shifts,
     requests: Array.isArray(store.requests) ? normalizeRequests(store.requests, users) : [],
     announcements: Array.isArray(store.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
@@ -1712,6 +1805,45 @@ function normalizeAnnouncements(announcements, users) {
     .filter((entry) => entry.title && entry.body);
 }
 
+function buildEmptySystemNotice() {
+  return {
+    enabled: false,
+    tone: "warning",
+    title: "",
+    body: "",
+    contactHint: "",
+    updatedAt: "",
+    updatedBy: ""
+  };
+}
+
+function normalizeSystemNoticeTone(value) {
+  return ["info", "warning", "danger"].includes(value) ? value : "warning";
+}
+
+function normalizeSystemNotice(source) {
+  const fallback = buildEmptySystemNotice();
+  if (!source || typeof source !== "object") return fallback;
+
+  return {
+    enabled: normalizeBooleanInput(source.enabled),
+    tone: normalizeSystemNoticeTone(String(source.tone || "").trim().toLowerCase()),
+    title: String(source.title || "").trim().slice(0, 120),
+    body: String(source.body || "").trim().slice(0, 1200),
+    contactHint: String(source.contactHint || "").trim().slice(0, 220),
+    updatedAt: isIsoDate(source.updatedAt) ? source.updatedAt : "",
+    updatedBy: String(source.updatedBy || "").trim()
+  };
+}
+
+function decorateSystemNotice(source, store) {
+  const normalized = normalizeSystemNotice(source);
+  return {
+    ...normalized,
+    updatedByName: normalized.updatedBy ? findUserName(store.users || [], normalized.updatedBy) : ""
+  };
+}
+
 function normalizeChatMessages(messages, users, shifts) {
   const validUserIds = new Set(users.map((entry) => entry.id));
   const validShiftIds = new Set(shifts.map((entry) => entry.id));
@@ -1800,6 +1932,32 @@ function requireModerationCoordinator(user) {
   const error = new Error("Keine Berechtigung.");
   error.statusCode = 403;
   throw error;
+}
+
+function applyUserPresenceHeartbeat(user, options = {}) {
+  if (!user) return false;
+
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  let changed = false;
+
+  if (options.login) {
+    user.lastLoginAt = nowIso;
+    changed = true;
+  }
+
+  const lastSeenAtMs = Date.parse(String(user.lastSeenAt || ""));
+  const shouldTouchSeen =
+    options.force ||
+    !Number.isFinite(lastSeenAtMs) ||
+    now - lastSeenAtMs >= USER_ACTIVITY_TOUCH_INTERVAL_MS;
+
+  if (shouldTouchSeen) {
+    user.lastSeenAt = nowIso;
+    changed = true;
+  }
+
+  return changed;
 }
 
 function projectDataForRole(user, store) {
@@ -2006,9 +2164,12 @@ function sanitizeManagedUser(user) {
     ...sanitizeUser(user),
     weeklyHoursCapacity: normalizeWeeklyHoursCapacity(user.weeklyHoursCapacity),
     weeklyDaysCapacity: normalizeWeeklyDaysCapacity(user.weeklyDaysCapacity),
+    overtimeAdjustments: normalizeOvertimeAdjustments(user.overtimeAdjustments),
     availabilitySchedule: normalizeAvailabilitySchedule(user.availabilitySchedule),
     availabilitySlots: normalizeAvailabilitySlots(user.availabilitySlots),
     availabilityUpdatedAt: isIsoDate(user.availabilityUpdatedAt) ? user.availabilityUpdatedAt : "",
+    lastLoginAt: isIsoDate(user.lastLoginAt) ? user.lastLoginAt : "",
+    lastSeenAt: isIsoDate(user.lastSeenAt) ? user.lastSeenAt : "",
     isBlocked: Boolean(user.isBlocked),
     blockReason: user.blockReason || "",
     blockedAt: user.blockedAt || "",
@@ -2031,9 +2192,12 @@ function sanitizeSessionUser(user) {
     ...sanitizeUser(user),
     weeklyHoursCapacity: normalizeWeeklyHoursCapacity(user.weeklyHoursCapacity),
     weeklyDaysCapacity: normalizeWeeklyDaysCapacity(user.weeklyDaysCapacity),
+    overtimeAdjustments: normalizeOvertimeAdjustments(user.overtimeAdjustments),
     availabilitySchedule: normalizeAvailabilitySchedule(user.availabilitySchedule),
     availabilitySlots: normalizeAvailabilitySlots(user.availabilitySlots),
     availabilityUpdatedAt: isIsoDate(user.availabilityUpdatedAt) ? user.availabilityUpdatedAt : "",
+    lastLoginAt: isIsoDate(user.lastLoginAt) ? user.lastLoginAt : "",
+    lastSeenAt: isIsoDate(user.lastSeenAt) ? user.lastSeenAt : "",
     creatorApplicationStatus: normalizeCreatorApplicationStatus(user.creatorApplicationStatus),
     creatorFollowerCount: normalizeCreatorFollowerCount(user.creatorFollowerCount),
     creatorPrimaryPlatform: normalizeCreatorPrimaryPlatform(user.creatorPrimaryPlatform),
@@ -2556,6 +2720,7 @@ function normalizeStore(store) {
     slots,
     users,
     settings,
+    systemNotice: normalizeSystemNotice(store?.systemNotice),
     shifts,
     events,
     requests: normalizeRequests(store?.requests, users),
@@ -3035,6 +3200,7 @@ function buildPublicPortalData(store) {
     community: buildCommunityPayload(store),
     feedPosts: publicFeedPosts,
     forumThreads: publicForumThreads,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
     announcements: store.announcements
       .slice()
       .sort((left, right) => {
@@ -3533,6 +3699,28 @@ function validateAnnouncementPayload(body) {
   }
 
   return { title, body: bodyText, pinned, imageUrl };
+}
+
+function validateSystemNoticePayload(body) {
+  const enabled = normalizeBooleanInput(body.enabled);
+  const tone = normalizeSystemNoticeTone(String(body.tone || "").trim().toLowerCase());
+  const title = String(body.title || "").trim().slice(0, 120);
+  const bodyText = String(body.body || "").trim().slice(0, 1200);
+  const contactHint = String(body.contactHint || "").trim().slice(0, 220);
+
+  if (enabled && !bodyText) {
+    const error = new Error("Bitte eine Hinweis-Nachricht eingeben, solange der Systemhinweis aktiv ist.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    enabled,
+    tone,
+    title,
+    body: bodyText,
+    contactHint
+  };
 }
 
 function validateChatPayload(body, user, store) {
@@ -4291,6 +4479,39 @@ function normalizeWeeklyDaysCapacity(value) {
   return Math.max(0, Math.min(7, numeric));
 }
 
+function normalizeOvertimeAdjustmentHours(value) {
+  const numeric = Number.parseFloat(String(value ?? "").replace(",", "."));
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(-500, Math.min(500, Math.round(numeric * 10) / 10));
+}
+
+function normalizeOvertimeAdjustmentNote(value) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .trim()
+    .slice(0, 320);
+}
+
+function normalizeOvertimeAdjustments(value) {
+  const source = Array.isArray(value) ? value : [];
+
+  return source
+    .map((entry) => {
+      const hours = normalizeOvertimeAdjustmentHours(entry?.hours);
+      if (!hours) return null;
+
+      return {
+        id: String(entry?.id || crypto.randomUUID()),
+        hours,
+        note: normalizeOvertimeAdjustmentNote(entry?.note),
+        createdAt: isIsoDate(entry?.createdAt) ? entry.createdAt : new Date().toISOString(),
+        createdBy: String(entry?.createdBy || "").trim()
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+}
+
 function normalizeAvailabilitySchedule(value) {
   return String(value || "")
     .replace(/\r/g, "")
@@ -4604,6 +4825,7 @@ function normalizeStore(store) {
   return {
     users,
     settings,
+    systemNotice: normalizeSystemNotice(store.systemNotice),
     shifts,
     requests: Array.isArray(store.requests) ? normalizeRequests(store.requests, users) : [],
     announcements: Array.isArray(store.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
@@ -4711,6 +4933,7 @@ function projectDataForRole(user, store) {
   const base = {
     community,
     announcements,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
     directory,
     communityChatMessages,
     staffChatMessages,
@@ -4786,6 +5009,7 @@ function projectDataForRole(user, store) {
   const base = {
     community,
     announcements,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
     directory,
     communityChatMessages,
     staffChatMessages,
@@ -4998,9 +5222,12 @@ function normalizeUsers(users, legacyModeratorNames) {
     const vrchatLinkSource = normalizeVrchatLinkSource(entry.vrchatLinkSource);
     const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(entry.weeklyHoursCapacity);
     const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(entry.weeklyDaysCapacity);
+    const overtimeAdjustments = normalizeOvertimeAdjustments(entry.overtimeAdjustments);
     const availabilitySchedule = normalizeAvailabilitySchedule(entry.availabilitySchedule);
     const availabilitySlots = normalizeAvailabilitySlots(entry.availabilitySlots);
     const availabilityUpdatedAt = isIsoDate(entry.availabilityUpdatedAt) ? entry.availabilityUpdatedAt : "";
+    const lastLoginAt = isIsoDate(entry.lastLoginAt) ? entry.lastLoginAt : "";
+    const lastSeenAt = isIsoDate(entry.lastSeenAt) ? entry.lastSeenAt : "";
     const isBlocked = Boolean(entry.isBlocked);
     const blockReason = String(entry.blockReason || "").trim().slice(0, 500);
     const blockedAt = isIsoDate(entry.blockedAt) ? entry.blockedAt : "";
@@ -5046,9 +5273,12 @@ function normalizeUsers(users, legacyModeratorNames) {
       vrchatLinkSource,
       weeklyHoursCapacity,
       weeklyDaysCapacity,
+      overtimeAdjustments,
       availabilitySchedule,
       availabilitySlots,
       availabilityUpdatedAt,
+      lastLoginAt,
+      lastSeenAt,
       isBlocked,
       blockReason,
       blockedAt,
@@ -5100,9 +5330,12 @@ function normalizeUsers(users, legacyModeratorNames) {
       vrchatLinkSource: "",
       weeklyHoursCapacity: 0,
       weeklyDaysCapacity: 0,
+      overtimeAdjustments: [],
       availabilitySchedule: "",
       availabilitySlots: buildEmptyAvailabilitySlots(),
       availabilityUpdatedAt: "",
+      lastLoginAt: "",
+      lastSeenAt: "",
       isBlocked: false,
       blockReason: "",
       blockedAt: "",
@@ -5400,6 +5633,7 @@ function normalizeStore(store) {
     slots,
     users,
     settings,
+    systemNotice: normalizeSystemNotice(store?.systemNotice),
     shifts,
     events,
     requests: Array.isArray(store?.requests) ? normalizeRequests(store.requests, users) : [],
@@ -5436,6 +5670,7 @@ function projectDataForRole(user, store) {
   const base = {
     community,
     announcements,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
     directory,
     communityChatMessages,
     staffChatMessages,
@@ -5961,6 +6196,7 @@ function projectDataForRole(user, store) {
   const base = {
     community,
     announcements,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
     directory,
     communityChatMessages,
     staffChatMessages,

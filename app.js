@@ -193,6 +193,7 @@ function shouldClearFormDraftAfterSuccess(formName) {
     "request",
     "request-admin",
     "announcement",
+    "system-notice",
     "event-create",
     "chat",
     "direct-message",
@@ -2020,6 +2021,7 @@ function renderCapacityPanel() {
   const totalCapacityHours = rows.reduce((sum, entry) => sum + entry.capacityHours, 0);
   const openHours = rows.reduce((sum, entry) => sum + Math.max(0, entry.capacityHours - entry.plannedHours), 0);
   const totalOvertimeHours = rows.reduce((sum, entry) => sum + entry.overtimeHours, 0);
+  const totalOvertimeBankHours = rows.reduce((sum, entry) => sum + entry.overtimeBankHours, 0);
   const missingRows = rows.filter((entry) => !entry.capacityHours && !entry.capacityDays && !entry.availabilitySchedule && !entry.hasAvailabilitySlots);
   const missingNames = missingRows.map((entry) => getPrimaryDisplayName(entry.user));
 
@@ -2029,7 +2031,7 @@ function renderCapacityPanel() {
         <div>
           <p class="eyebrow">Auslastung</p>
           <h2>Stunden und Verfuegbarkeit im Blick</h2>
-          <p class="section-copy">Hier siehst du pro Staff-Mitglied geleistete Stunden, geplante Schichten und die gemeldeten Zeitfenster fuer diese Woche. Die Stunden sind nur der Rahmen, entscheidend sind die echten Zeitfenster.</p>
+          <p class="section-copy">Hier siehst du pro Staff-Mitglied diese Woche, letzte Woche und die gesamte Ueberstundenbank. Ausgleich fuer freie Tage oder freie Wochen kannst du direkt hier verbuchen.</p>
         </div>
       </div>
 
@@ -2039,7 +2041,8 @@ function renderCapacityPanel() {
         ${renderStatCard("Geleistet", formatHoursValue(totalWorkedHours), "Bisher erfasste Stunden diese Woche", "teal")}
         ${renderStatCard("Geplant", formatHoursValue(totalPlannedHours), "Eingetragene Schichtstunden diese Woche", "amber")}
         ${renderStatCard("Kapazitaet", totalCapacityHours ? formatHoursValue(totalCapacityHours) : "-", totalCapacityHours ? "Gemeldete Wochenstunden aus Profilen" : "Noch keine Profilangaben", "sky")}
-        ${renderStatCard("Ueberstunden", totalOvertimeHours ? formatHoursValue(totalOvertimeHours) : "-", totalOvertimeHours ? "Ist ueber dem persoenlichen Wochenrahmen gelaufen" : "Noch keine erfassten Ueberstunden", totalOvertimeHours ? "rose" : "neutral")}
+        ${renderStatCard("Diese Woche ueber Soll", totalOvertimeHours ? formatHoursValue(totalOvertimeHours) : "-", totalOvertimeHours ? "Aktueller Ueberhang in dieser Woche" : "Diese Woche noch kein Ueberhang", totalOvertimeHours ? "rose" : "neutral")}
+        ${renderStatCard("Ueberstundenbank", Math.abs(totalOvertimeBankHours) > 0.001 ? formatSignedHoursValue(totalOvertimeBankHours) : "0 Std.", "Gesammelte Ueberstunden inklusive manueller Ausgleichsbuchungen", totalOvertimeBankHours > 0 ? "rose" : totalOvertimeBankHours < 0 ? "amber" : "neutral")}
         ${renderStatCard("Noch offen", totalCapacityHours ? formatHoursValue(openHours) : "-", totalCapacityHours ? "Noch nicht verplante gemeldete Stunden" : "Keine Kapazitaet hinterlegt", "rose")}
       </div>
 
@@ -2074,12 +2077,16 @@ function renderCapacityCard(entry) {
         <span class="pill ${entry.statusTone}">${escapeHtml(entry.statusLabel)}</span>
       </div>
       <p class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</p>
-      <p><strong>Geleistet:</strong> ${escapeHtml(formatHoursValue(entry.workedHours))} an ${escapeHtml(formatCapacityDays(entry.workedDays))}</p>
+      <p><strong>Diese Woche:</strong> ${escapeHtml(formatHoursValue(entry.workedHours))} an ${escapeHtml(formatCapacityDays(entry.workedDays))}</p>
+      <p><strong>Letzte Woche:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekHours || 0))}${entry.capacityHours > 0 ? ` | ${escapeHtml(formatSignedHoursValue(entry.previousWeekBalanceHours || 0))}` : ""}</p>
       <p><strong>Heute:</strong> ${escapeHtml(formatHoursValue(entry.todayWorkedHours || 0))}</p>
       <p><strong>Geplant:</strong> ${escapeHtml(formatHoursValue(entry.plannedHours))} an ${escapeHtml(formatCapacityDays(entry.plannedDays))}</p>
       <p><strong>Verfuegbar:</strong> ${escapeHtml(formatCapacityHours(entry.capacityHours))} / ${escapeHtml(formatCapacityDays(entry.capacityDays))}</p>
-      <p><strong>Stunden-Saldo:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatSignedHoursValue(entry.hourBalance) : "Kein Wochenrahmen gesetzt")}</p>
-      ${entry.overtimeHours > 0 ? `<p class="helper-text"><strong>Ueberstunden:</strong> ${escapeHtml(formatHoursValue(entry.overtimeHours))}</p>` : ""}
+      <p><strong>Aktueller Saldo:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatSignedHoursValue(entry.hourBalance) : "Kein Wochenrahmen gesetzt")}</p>
+      <p><strong>Ueberstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
+      ${entry.overtimeHours > 0 ? `<p class="helper-text"><strong>Diese Woche ueber Soll:</strong> ${escapeHtml(formatHoursValue(entry.overtimeHours))}</p>` : ""}
+      ${entry.previousWeekOvertimeHours > 0 ? `<p class="helper-text"><strong>Letzte Woche ueber Soll:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekOvertimeHours))}</p>` : ""}
+      ${Math.abs(entry.overtimeAdjustmentHours || 0) > 0.001 ? `<p class="helper-text"><strong>Ausgleich gebucht:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeAdjustmentHours))}</p>` : ""}
       ${renderAvailabilitySlotList(entry.availabilitySlots, "Noch keine festen Wochenslots eingetragen.")}
       ${
         entry.availabilitySchedule
@@ -2094,7 +2101,68 @@ function renderCapacityCard(entry) {
             : '<p class="helper-text">Diese Person hat noch keine Wochen-Kapazitaet im Profil hinterlegt.</p>'
           : `<p class="helper-text">${escapeHtml(buildCapacityDeltaText(plannedDelta, dayDelta))}</p>`
       }
+      ${renderOvertimeAdjustmentHistory(entry.recentOvertimeAdjustments || [])}
+      ${renderOvertimeAdjustmentForm(entry)}
     </article>
+  `;
+}
+
+function renderOvertimeAdjustmentHistory(adjustments) {
+  if (!adjustments.length) {
+    return '<p class="helper-text">Noch kein manueller Ueberstunden-Ausgleich gebucht.</p>';
+  }
+
+  return `
+    <div class="overtime-adjustment-history">
+      ${adjustments
+        .map(
+          (entry) => `
+            <article class="mini-card overtime-adjustment-entry">
+              <div class="status-row">
+                <span class="pill ${Number(entry.hours || 0) < 0 ? "amber" : "sky"}">${escapeHtml(formatSignedHoursValue(entry.hours || 0))}</span>
+                <span class="timeline-meta">${escapeHtml(formatDateTime(entry.createdAt))}</span>
+              </div>
+              <p class="timeline-meta">von ${escapeHtml(getOvertimeAdjustmentActorName(entry.createdBy))}</p>
+              ${entry.note ? `<p class="helper-text">${escapeHtml(entry.note)}</p>` : ""}
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderOvertimeAdjustmentForm(entry) {
+  if (!canCoordinateStaff()) return "";
+
+  return `
+    <form class="stack-form compact-form overtime-adjustment-form" data-form="overtime-adjustment" data-user-id="${escapeHtml(entry.user.id)}">
+      <div class="section-head compact-section-head">
+        <div>
+          <p class="eyebrow">Ausgleich</p>
+          <h3>Ueberstunden verbuchen</h3>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field">
+          <label for="overtimeMode-${escapeHtml(entry.user.id)}">Aktion</label>
+          <select id="overtimeMode-${escapeHtml(entry.user.id)}" name="mode">
+            <option value="deduct">Von der Bank abziehen</option>
+            <option value="credit">Zur Bank hinzufuegen</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="overtimeHours-${escapeHtml(entry.user.id)}">Stunden</label>
+          <input id="overtimeHours-${escapeHtml(entry.user.id)}" name="hours" type="number" min="0.5" max="168" step="0.5" placeholder="z. B. 8" required>
+        </div>
+        <div class="field span-all">
+          <label for="overtimeNote-${escapeHtml(entry.user.id)}">Notiz</label>
+          <textarea id="overtimeNote-${escapeHtml(entry.user.id)}" name="note" placeholder="z. B. freie Woche, Event-Ausgleich oder manuelle Korrektur"></textarea>
+        </div>
+      </div>
+      <p class="helper-text">Wenn jemand Ueberstunden abbummelt, buchst du hier den Abzug. So bleibt die Bank sauber und du verlierst den Ueberblick nicht.</p>
+      <button type="submit" class="small">Ueberstunden buchen</button>
+    </form>
   `;
 }
 
@@ -3423,6 +3491,25 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "overtime-adjustment": {
+      const userId = form.dataset.userId;
+      const formData = new FormData(form);
+      const mode = String(formData.get("mode") || "deduct");
+      await performAction(
+        () =>
+          api(`/api/admin/users/${encodeURIComponent(userId)}/overtime-adjustments`, {
+            method: "POST",
+            body: JSON.stringify({
+              mode,
+              hours: formData.get("hours"),
+              note: formData.get("note")
+            })
+          }),
+        mode === "deduct" ? "Ueberstunden-Ausgleich wurde abgezogen." : "Ueberstunden wurden gutgeschrieben."
+      );
+      break;
+    }
+
     default:
       break;
   }
@@ -3617,21 +3704,26 @@ function renderAttendanceSummaryCard(entry) {
   return `
     <article class="mini-card attendance-summary-card">
       <div class="status-row">
-        <span class="pill ${entry.overtimeHours > 0 ? "rose" : entry.liveEntry ? "teal" : "neutral"}">${escapeHtml(entry.overtimeHours > 0 ? "Ueberstunden" : entry.liveEntry ? "Live" : "Diese Woche")}</span>
+        <span class="pill ${entry.overtimeHours > 0 || entry.overtimeBankHours > 0 ? "rose" : entry.liveEntry ? "teal" : "neutral"}">${escapeHtml(entry.overtimeHours > 0 ? "Ueber Soll" : entry.liveEntry ? "Live" : "Diese Woche")}</span>
         <span class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</span>
       </div>
       <h3>${escapeHtml(getPrimaryDisplayName(entry.user))}</h3>
-      <p><strong>Woche:</strong> ${escapeHtml(formatHoursValue(entry.weekHours))}</p>
+      <p><strong>Diese Woche:</strong> ${escapeHtml(formatHoursValue(entry.weekHours))}</p>
+      <p><strong>Letzte Woche:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekHours || 0))}${entry.capacityHours > 0 ? ` | ${escapeHtml(formatSignedHoursValue(entry.previousWeekBalanceHours || 0))}` : ""}</p>
       <p><strong>Heute:</strong> ${escapeHtml(formatHoursValue(entry.todayHours))}</p>
       <p><strong>Wochenrahmen:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatHoursValue(entry.capacityHours) : "Keine Angabe")}</p>
-      <p><strong>Saldo:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatSignedHoursValue(entry.balanceHours) : "Kein Soll gesetzt")}</p>
+      <p><strong>Aktueller Saldo:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatSignedHoursValue(entry.balanceHours) : "Kein Soll gesetzt")}</p>
+      <p><strong>Ueberstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
       ${
         entry.overtimeHours > 0
           ? `<p class="helper-text">Diese Person liegt aktuell ${escapeHtml(formatHoursValue(entry.overtimeHours))} ueber ihrem Wochenrahmen.</p>`
+          : entry.previousWeekOvertimeHours > 0
+            ? `<p class="helper-text">Letzte Woche kamen ${escapeHtml(formatHoursValue(entry.previousWeekOvertimeHours))} an Ueberstunden zusammen.</p>`
           : entry.liveEntry
             ? `<p class="helper-text">Aktiv seit ${escapeHtml(formatTime(entry.liveEntry.checkInAt))}</p>`
           : '<p class="helper-text">Aktuell nicht eingestempelt.</p>'
       }
+      ${Math.abs(entry.overtimeAdjustmentHours || 0) > 0.001 ? `<p class="helper-text">Ausgleich bisher ${escapeHtml(formatSignedHoursValue(entry.overtimeAdjustmentHours))}.</p>` : ""}
     </article>
   `;
 }
@@ -3682,6 +3774,16 @@ function renderTimeEntry(entry, personal) {
 }
 
 function renderSettingsPanel() {
+  const notice = state.data?.systemNotice || {
+    enabled: false,
+    tone: "warning",
+    title: "",
+    body: "",
+    contactHint: "",
+    updatedAt: "",
+    updatedByName: ""
+  };
+
   return `
     <section class="panel span-4">
       <div class="section-head">
@@ -3695,6 +3797,68 @@ function renderSettingsPanel() {
       ${renderCatalogEditor("shiftTypes", "Schichttypen")}
       ${renderCatalogEditor("worlds", "Welten")}
       ${renderCatalogEditor("tasks", "Aufgaben")}
+    </section>
+
+    <section class="panel span-8">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Systemhinweis</p>
+          <h2>Hinweis bei Stoerungen oder Ausfaellen</h2>
+          <p class="section-copy">Wenn etwas im Portal hakt, kannst du hier sofort eine sichtbare Nachricht fuer alle setzen, inklusive kurzer Kontaktinfo.</p>
+        </div>
+        ${
+          notice.enabled
+            ? `<span class="pill ${notice.tone === "danger" ? "rose" : notice.tone === "info" ? "sky" : "amber"}">Aktiv</span>`
+            : '<span class="pill neutral">Inaktiv</span>'
+        }
+      </div>
+
+      <form class="stack-form" data-form="system-notice">
+        <div class="form-grid">
+          <div class="field">
+            <label for="systemNoticeTitle">Titel</label>
+            <input id="systemNoticeTitle" name="title" type="text" value="${escapeHtml(notice.title || "")}" placeholder="z. B. Kurzfristiger Hinweis zum Portal">
+          </div>
+          <div class="field">
+            <label for="systemNoticeTone">Ton</label>
+            <select id="systemNoticeTone" name="tone">
+              <option value="info" ${notice.tone === "info" ? "selected" : ""}>Info</option>
+              <option value="warning" ${notice.tone === "warning" ? "selected" : ""}>Warnung</option>
+              <option value="danger" ${notice.tone === "danger" ? "selected" : ""}>Stoerung</option>
+            </select>
+          </div>
+          <div class="field span-all">
+            <label for="systemNoticeBody">Nachricht</label>
+            <textarea id="systemNoticeBody" name="body" placeholder="z. B. Das Profil speichert gerade nicht sauber. Bitte meldet euch bis zum Fix direkt privat bei mir.">${escapeHtml(notice.body || "")}</textarea>
+          </div>
+          <div class="field span-all">
+            <label for="systemNoticeContact">Kontakt-Hinweis</label>
+            <input id="systemNoticeContact" name="contactHint" type="text" value="${escapeHtml(notice.contactHint || "")}" placeholder="z. B. Wenn etwas klemmt, bitte mir direkt auf Discord schreiben.">
+          </div>
+          <div class="field checkbox-field">
+            <label class="checkbox-row" for="systemNoticeEnabled">
+              <input id="systemNoticeEnabled" name="enabled" type="checkbox" ${notice.enabled ? "checked" : ""}>
+              <span>Systemhinweis sichtbar schalten</span>
+            </label>
+            <p class="helper-text">Sobald aktiv, taucht der Hinweis oben im Portal und auf der oeffentlichen Seite auf.</p>
+          </div>
+        </div>
+
+        ${
+          notice.updatedAt
+            ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(notice.updatedAt))}${notice.updatedByName ? ` von ${escapeHtml(notice.updatedByName)}` : ""}</p>`
+            : ""
+        }
+
+        <div class="card-actions">
+          <button type="submit">Systemhinweis speichern</button>
+          ${
+            notice.enabled
+              ? '<button type="button" class="ghost small" data-action="clear-system-notice">Hinweis entfernen</button>'
+              : ""
+          }
+        </div>
+      </form>
     </section>
   `;
 }
@@ -4218,6 +4382,25 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "system-notice": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/system-notice", {
+            method: "PUT",
+            body: JSON.stringify({
+              enabled: formData.get("enabled") === "on",
+              tone: formData.get("tone"),
+              title: formData.get("title"),
+              body: formData.get("body"),
+              contactHint: formData.get("contactHint")
+            })
+          }),
+        "Systemhinweis wurde aktualisiert."
+      );
+      break;
+    }
+
     case "event-create": {
       const formData = new FormData(form);
       await performAction(
@@ -4551,6 +4734,18 @@ async function handleClick(event) {
             method: "DELETE"
           }),
         "Infoboard-Eintrag entfernt.",
+        "warning"
+      );
+      break;
+
+    case "clear-system-notice":
+      if (!window.confirm("Den sichtbaren Systemhinweis wirklich entfernen?")) return;
+      await performAction(
+        () =>
+          api("/api/system-notice", {
+            method: "DELETE"
+          }),
+        "Systemhinweis wurde entfernt.",
         "warning"
       );
       break;
@@ -5199,6 +5394,7 @@ function renderTeamPanelV2() {
             const shiftCount = (state.data?.shifts || []).filter((entry) => entry.memberId === user.id).length;
             const requestCount = (state.data?.requests || []).filter((entry) => entry.userId === user.id && entry.status !== "beruecksichtigt").length;
             const creatorApplication = getCreatorApplicationMeta(user);
+            const activityMeta = getUserActivityMeta(user);
             const availabilitySlots = getAvailabilitySlots(user);
             const compactBio = truncateText(user.bio, 140);
             const compactContact = truncateText(user.contactNote, 140);
@@ -5246,6 +5442,7 @@ function renderTeamPanelV2() {
                     <span class="pill ${user.role === "admin" ? "amber" : user.role === "planner" ? "sky" : user.role === "moderation_lead" ? "amber" : user.role === "moderator" ? "teal" : "neutral"}">${escapeHtml(ROLE_LABELS[user.role])}</span>
                     ${user.isBlocked ? '<span class="pill rose">Gesperrt</span>' : '<span class="pill success">Aktiv</span>'}
                     <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
+                    <span class="pill ${activityMeta.tone}">${escapeHtml(activityMeta.title)}</span>
                   </div>
                   <span class="timeline-meta">${escapeHtml(String(shiftCount))} Schichten | ${escapeHtml(String(requestCount))} offen</span>
                 </div>
@@ -5254,6 +5451,8 @@ function renderTeamPanelV2() {
                   <div class="team-user-copy">
                     <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
                     <p class="timeline-meta">Discord: ${escapeHtml(user.discordName || "-")}</p>
+                    <p class="timeline-meta">Zuletzt online: ${escapeHtml(activityMeta.seenLabel)}</p>
+                    <p class="timeline-meta">Letzter Login: ${escapeHtml(activityMeta.loginLabel)}</p>
                     ${user.isBlocked ? `<p class="helper-text"><strong>Gesperrt:</strong> ${escapeHtml(user.blockReason || "Kein Grund angegeben.")}</p>` : ""}
                     ${compactBio ? `<p class="helper-text team-user-teaser">${escapeHtml(compactBio)}</p>` : ""}
                     ${compactContact ? `<p class="helper-text team-user-teaser">${escapeHtml(compactContact)}</p>` : ""}
@@ -5708,7 +5907,8 @@ function buildCapacityRows() {
 
   return users
     .map((user) => {
-      const workedHours = calculateWorkedHoursForWeek(user.id, week);
+      const overtime = buildUserOvertimeSummary(user);
+      const workedHours = overtime.currentWeek.workedHours;
       const todayWorkedHours = calculateWorkedHoursForRange(user.id, today);
       const workedDays = calculateWorkedDaysForWeek(user.id, week);
       const plannedHours = calculatePlannedHoursForWeek(user.id, week);
@@ -5719,8 +5919,8 @@ function buildCapacityRows() {
       const availabilitySlots = getAvailabilitySlots(user);
       const hasAvailabilitySlotData = hasAvailabilitySlots(availabilitySlots);
       const availabilityUpdatedAt = String(user.availabilityUpdatedAt || "").trim();
-      const hourBalance = capacityHours > 0 ? workedHours - capacityHours : 0;
-      const overtimeHours = capacityHours > 0 ? Math.max(0, hourBalance) : 0;
+      const hourBalance = overtime.currentWeek.balanceHours;
+      const overtimeHours = overtime.currentWeek.overtimeHours;
       const overHours = capacityHours > 0 && plannedHours > capacityHours;
       const overDays = capacityDays > 0 && plannedDays > capacityDays;
       const fullyPlanned =
@@ -5752,6 +5952,14 @@ function buildCapacityRows() {
         capacityDays,
         hourBalance,
         overtimeHours,
+        previousWeekHours: overtime.previousWeek.workedHours,
+        previousWeekBalanceHours: overtime.previousWeek.balanceHours,
+        previousWeekOvertimeHours: overtime.previousWeek.overtimeHours,
+        overtimeBankHours: overtime.bankHours,
+        overtimeAccruedHours: overtime.accruedHours,
+        overtimeAdjustmentHours: overtime.adjustmentHours,
+        availableCompHours: overtime.availableCompHours,
+        recentOvertimeAdjustments: overtime.recentAdjustments,
         availabilitySchedule,
         availabilitySlots,
         hasAvailabilitySlots: hasAvailabilitySlotData,
@@ -5771,10 +5979,11 @@ function buildAttendanceSummaryRows() {
 
   return users
     .map((user) => {
-      const weekHours = calculateWorkedHoursForWeek(user.id, week);
+      const overtime = buildUserOvertimeSummary(user);
+      const weekHours = overtime.currentWeek.workedHours;
       const capacityHours = Number(user.weeklyHoursCapacity || 0);
-      const overtimeHours = capacityHours > 0 ? Math.max(0, weekHours - capacityHours) : 0;
-      const balanceHours = capacityHours > 0 ? weekHours - capacityHours : 0;
+      const overtimeHours = overtime.currentWeek.overtimeHours;
+      const balanceHours = overtime.currentWeek.balanceHours;
 
       return {
         user,
@@ -5783,19 +5992,27 @@ function buildAttendanceSummaryRows() {
         capacityHours,
         overtimeHours,
         balanceHours,
+        previousWeekHours: overtime.previousWeek.workedHours,
+        previousWeekBalanceHours: overtime.previousWeek.balanceHours,
+        previousWeekOvertimeHours: overtime.previousWeek.overtimeHours,
+        overtimeBankHours: overtime.bankHours,
+        overtimeAccruedHours: overtime.accruedHours,
+        overtimeAdjustmentHours: overtime.adjustmentHours,
+        recentOvertimeAdjustments: overtime.recentAdjustments,
         liveEntry: entries.find((entry) => entry.userId === user.id && !entry.checkOutAt) || null
       };
     })
     .sort(
       (left, right) =>
         Number(Boolean(right.liveEntry)) - Number(Boolean(left.liveEntry)) ||
+        right.overtimeBankHours - left.overtimeBankHours ||
         right.overtimeHours - left.overtimeHours ||
         right.weekHours - left.weekHours ||
         getPrimaryDisplayName(left.user).localeCompare(getPrimaryDisplayName(right.user), "de")
     );
 }
 
-function getCurrentWeekRange(referenceDate = new Date()) {
+function getWeekRange(referenceDate = new Date()) {
   const start = new Date(referenceDate);
   start.setHours(0, 0, 0, 0);
   const weekday = start.getDay();
@@ -5813,6 +6030,17 @@ function getCurrentWeekRange(referenceDate = new Date()) {
   };
 }
 
+function getCurrentWeekRange(referenceDate = new Date()) {
+  return getWeekRange(referenceDate);
+}
+
+function getPreviousWeekRange(referenceDate = new Date()) {
+  const currentWeek = getWeekRange(referenceDate);
+  const previousWeekAnchor = new Date(currentWeek.start);
+  previousWeekAnchor.setDate(previousWeekAnchor.getDate() - 1);
+  return getWeekRange(previousWeekAnchor);
+}
+
 function getCurrentDayRange(referenceDate = new Date()) {
   const start = new Date(referenceDate);
   start.setHours(0, 0, 0, 0);
@@ -5825,6 +6053,101 @@ function getCurrentDayRange(referenceDate = new Date()) {
     end,
     startKey: getLocalDateKey(start),
     endKey: getLocalDateKey(end)
+  };
+}
+
+function getWeekRangeLabel(range) {
+  const lastDay = new Date(range.end);
+  lastDay.setDate(lastDay.getDate() - 1);
+  return `${formatDate(range.startKey)} bis ${formatDate(getLocalDateKey(lastDay))}`;
+}
+
+function getAllTrackedWeekRangesForUser(userId, referenceDate = new Date()) {
+  const entries = (state.data?.timeEntries || []).filter((entry) => entry.userId === userId);
+  const currentWeek = getWeekRange(referenceDate);
+  if (!entries.length) return [currentWeek];
+
+  let earliest = null;
+  for (const entry of entries) {
+    const timestamp = new Date(entry.checkInAt);
+    if (!Number.isFinite(timestamp.getTime())) continue;
+    if (!earliest || timestamp < earliest) earliest = timestamp;
+  }
+
+  if (!earliest) return [currentWeek];
+
+  const ranges = [];
+  let cursor = getWeekRange(earliest).start;
+  while (cursor < currentWeek.end) {
+    const range = getWeekRange(cursor);
+    ranges.push(range);
+    cursor = new Date(range.end);
+  }
+
+  return ranges;
+}
+
+function getUserOvertimeAdjustments(user) {
+  return Array.isArray(user?.overtimeAdjustments)
+    ? user.overtimeAdjustments.filter((entry) => Math.abs(Number(entry?.hours || 0)) > 0.001)
+    : [];
+}
+
+function getOvertimeAdjustmentActorName(actorId) {
+  const actor = (state.data?.users || []).find((entry) => entry.id === actorId);
+  return actor ? getPrimaryDisplayName(actor) : "Leitung";
+}
+
+function buildUserOvertimeSummary(user) {
+  const capacityHours = Number(user?.weeklyHoursCapacity || 0);
+  const currentWeek = getCurrentWeekRange();
+  const previousWeek = getPreviousWeekRange();
+  const trackedWeeks = getAllTrackedWeekRangesForUser(user.id);
+  const weeklyRows = trackedWeeks.map((range) => {
+    const workedHours = calculateWorkedHoursForWeek(user.id, range);
+    const balanceHours = capacityHours > 0 ? workedHours - capacityHours : 0;
+    const overtimeHours = capacityHours > 0 ? Math.max(0, balanceHours) : 0;
+
+    return {
+      ...range,
+      label: getWeekRangeLabel(range),
+      workedHours,
+      balanceHours,
+      overtimeHours
+    };
+  });
+
+  const currentWeekRow =
+    weeklyRows.find((entry) => entry.startKey === currentWeek.startKey) || {
+      ...currentWeek,
+      label: getWeekRangeLabel(currentWeek),
+      workedHours: calculateWorkedHoursForWeek(user.id, currentWeek),
+      balanceHours: capacityHours > 0 ? calculateWorkedHoursForWeek(user.id, currentWeek) - capacityHours : 0,
+      overtimeHours: capacityHours > 0 ? Math.max(0, calculateWorkedHoursForWeek(user.id, currentWeek) - capacityHours) : 0
+    };
+  const previousWeekRow =
+    weeklyRows.find((entry) => entry.startKey === previousWeek.startKey) || {
+      ...previousWeek,
+      label: getWeekRangeLabel(previousWeek),
+      workedHours: calculateWorkedHoursForWeek(user.id, previousWeek),
+      balanceHours: capacityHours > 0 ? calculateWorkedHoursForWeek(user.id, previousWeek) - capacityHours : 0,
+      overtimeHours: capacityHours > 0 ? Math.max(0, calculateWorkedHoursForWeek(user.id, previousWeek) - capacityHours) : 0
+    };
+
+  const adjustments = getUserOvertimeAdjustments(user);
+  const adjustmentHours = adjustments.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+  const accruedHours = weeklyRows.reduce((sum, entry) => sum + entry.overtimeHours, 0);
+  const bankHours = accruedHours + adjustmentHours;
+
+  return {
+    currentWeek: currentWeekRow,
+    previousWeek: previousWeekRow,
+    weeklyRows,
+    accruedHours,
+    adjustmentHours,
+    bankHours,
+    availableCompHours: Math.max(0, bankHours),
+    recentAdjustments: adjustments.slice(0, 3)
   };
 }
 
@@ -6146,6 +6469,20 @@ function formatDateTime(isoString) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(isoString));
+}
+
+function getUserActivityMeta(user) {
+  const lastSeenAt = String(user?.lastSeenAt || "");
+  const lastLoginAt = String(user?.lastLoginAt || "");
+  const lastSeenAtMs = Date.parse(lastSeenAt);
+  const recentlyActive = Number.isFinite(lastSeenAtMs) && Date.now() - lastSeenAtMs <= 10 * 60 * 1000;
+
+  return {
+    tone: recentlyActive ? "success" : lastSeenAt ? "neutral" : "rose",
+    title: recentlyActive ? "Vor Kurzem online" : lastSeenAt ? "Zuletzt online" : "Noch kein Besuch",
+    seenLabel: lastSeenAt ? formatDateTime(lastSeenAt) : "Noch kein Aktivitaetssignal",
+    loginLabel: lastLoginAt ? formatDateTime(lastLoginAt) : "Noch kein Login gespeichert"
+  };
 }
 
 function formatTime(isoString) {
@@ -6860,6 +7197,39 @@ function getAnnouncementFeed() {
   return state.data?.announcements || state.publicData?.announcements || [];
 }
 
+function getSystemNotice() {
+  const notice = state.data?.systemNotice || state.publicData?.systemNotice || null;
+  if (!notice?.enabled || !String(notice.body || "").trim()) return null;
+  return notice;
+}
+
+function renderSystemNoticeBanner() {
+  const notice = getSystemNotice();
+  if (!notice) return "";
+
+  const flashClass =
+    notice.tone === "danger"
+      ? "flash-danger"
+      : notice.tone === "info"
+        ? "flash-info"
+        : "flash-warning";
+
+  return `
+    <section class="flash ${flashClass} system-notice-banner">
+      <div class="system-notice-copy">
+        <strong>${escapeHtml(notice.title || "Wichtiger Hinweis")}</strong>
+        <span>${escapeHtml(notice.body)}</span>
+        ${notice.contactHint ? `<span class="timeline-meta">${escapeHtml(notice.contactHint)}</span>` : ""}
+        ${
+          notice.updatedAt
+            ? `<span class="timeline-meta">Aktualisiert ${escapeHtml(formatDateTime(notice.updatedAt))}${notice.updatedByName ? ` von ${escapeHtml(notice.updatedByName)}` : ""}</span>`
+            : ""
+        }
+      </div>
+    </section>
+  `;
+}
+
 function getPublicRouteState() {
   const currentUrl = new URL(window.location.href);
   const pathname = String(currentUrl.pathname || "/").trim() || "/";
@@ -6986,6 +7356,7 @@ function renderCreatorPublicPage(creator) {
       })}
 
       ${renderFlash()}
+      ${renderSystemNoticeBanner()}
 
       <div class="dashboard-shell creator-public-shell">
         <section class="panel creator-public-summary">
@@ -7710,6 +8081,7 @@ function renderPublicPortal() {
       })}
 
       ${renderFlash()}
+      ${renderSystemNoticeBanner()}
 
       <div class="auth-layout public-grid">
         <section class="panel">
@@ -7917,7 +8289,7 @@ function renderManagerDashboard(activeTab) {
     case "events":
       return renderEventsPanel();
     case "news":
-      return renderNewsPanel(true);
+      return renderNewsPanel(canManagePortal());
     case "creators":
       return renderCreatorsPanel(true);
     case "forum":
@@ -10309,6 +10681,7 @@ function renderDashboard() {
       })}
       <div class="dashboard-shell">
         ${renderFlash()}
+        ${renderSystemNoticeBanner()}
         ${renderShiftReminderBanner()}
         <section class="panel toolbar">
           <div class="toolbar-user">

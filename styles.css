@@ -572,6 +572,12 @@ h3 {
   border-color: rgba(53, 65, 82, 0.18);
 }
 
+.system-notice-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3643,6 +3649,23 @@ input[type="file"]::-webkit-file-upload-button {
   display: grid;
   gap: 0.8rem;
   align-content: start;
+}
+
+.overtime-adjustment-history {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.overtime-adjustment-entry {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.overtime-adjustment-form {
+  margin-top: 0.95rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 208, 144, 0.14);
 }
 
 .creator-community-activity-card {
