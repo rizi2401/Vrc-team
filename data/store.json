@@ -34,6 +34,7 @@
       "vrchatLinkSource": "",
       "weeklyHoursCapacity": 0,
       "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
       "availabilitySchedule": "",
       "availabilitySlots": [
         {
@@ -87,6 +88,8 @@
         }
       ],
       "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
       "isBlocked": false,
       "blockReason": "",
       "blockedAt": "",
@@ -126,6 +129,7 @@
       "vrchatLinkSource": "",
       "weeklyHoursCapacity": 0,
       "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
       "availabilitySchedule": "",
       "availabilitySlots": [
         {
@@ -179,6 +183,8 @@
         }
       ],
       "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
       "isBlocked": false,
       "blockReason": "",
       "blockedAt": "",
@@ -206,6 +212,15 @@
       "Support / Hilfe",
       "Leitung / Koordination"
     ]
+  },
+  "systemNotice": {
+    "enabled": false,
+    "tone": "warning",
+    "title": "",
+    "body": "",
+    "contactHint": "",
+    "updatedAt": "",
+    "updatedBy": ""
   },
   "shifts": [],
   "events": [

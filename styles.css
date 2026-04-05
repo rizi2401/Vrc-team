@@ -3267,6 +3267,78 @@ body::after {
   gap: 0.45rem;
 }
 
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.dashboard-sidebar {
+  position: sticky;
+  top: 14px;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.dashboard-sidebar-head {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.dashboard-sidebar-sections {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.dashboard-sidebar-section {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.dashboard-sidebar-buttons {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.dashboard-sidebar .tab-chip {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.dashboard-main {
+  min-width: 0;
+}
+
+.availability-overview-grid,
+.activity-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.availability-overview-card,
+.activity-overview-card {
+  display: grid;
+  gap: 0.55rem;
+}
+
+@media (max-width: 1080px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-sidebar {
+    position: static;
+  }
+
+  .dashboard-sidebar-buttons {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
 .file-hint {
   margin-top: 8px;
   font-size: 0.85rem;
