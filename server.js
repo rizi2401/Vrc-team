@@ -507,7 +507,21 @@ async function handleApi(req, res, url) {
       const body = await readJson(req);
       const normalized = validateShiftPayload(body, auth.store);
       const previousShift = { ...shift };
-      const memberChanged = shift.memberId !== normalized.memberId;
+      const affectsRecordedHistory =
+        shift.date !== normalized.date ||
+        shift.startTime !== normalized.startTime ||
+        shift.endTime !== normalized.endTime ||
+        shift.memberId !== normalized.memberId ||
+        shift.shiftType !== normalized.shiftType ||
+        shift.world !== normalized.world ||
+        shift.task !== normalized.task;
+
+      if (affectsRecordedHistory) {
+        preserveTimeEntryHistoryForShift(nextStore.timeEntries, previousShift, nextStore, {
+          detachEntries: true,
+          closeOpenEntries: false
+        });
+      }
 
       shift.date = normalized.date;
       shift.startTime = normalized.startTime;
@@ -520,10 +534,6 @@ async function handleApi(req, res, url) {
       shift.isLead = normalized.isLead;
       applyCatalogAdds(nextStore.settings, normalized.catalogAdds);
 
-      if (memberChanged) {
-        nextStore.timeEntries = nextStore.timeEntries.filter((entry) => entry.shiftId !== shiftId);
-      }
-
       const savedStore = writeStore(nextStore);
       void notifyDiscord(buildShiftDiscordMessage("updated", shift, savedStore, previousShift), { kind: "auto" });
       broadcastEvent("portal", { type: "shift-updated" });
@@ -533,8 +543,11 @@ async function handleApi(req, res, url) {
 
     if (req.method === "DELETE") {
       const deletedShift = { ...shift };
+      preserveTimeEntryHistoryForShift(nextStore.timeEntries, deletedShift, nextStore, {
+        detachEntries: true,
+        closeOpenEntries: true
+      });
       nextStore.shifts = nextStore.shifts.filter((entry) => entry.id !== shiftId);
-      nextStore.timeEntries = nextStore.timeEntries.filter((entry) => entry.shiftId !== shiftId);
       nextStore.swapRequests = nextStore.swapRequests.filter((entry) => entry.shiftId !== shiftId);
       nextStore.chatMessages = nextStore.chatMessages.map((entry) =>
         entry.relatedShiftId === shiftId ? { ...entry, relatedShiftId: "" } : entry
@@ -967,8 +980,11 @@ async function handleApi(req, res, url) {
         return;
       }
 
+      preserveTimeEntryHistoryForShift(nextStore.timeEntries, shift, nextStore, {
+        detachEntries: true,
+        closeOpenEntries: true
+      });
       shift.memberId = decision.candidateId;
-      nextStore.timeEntries = nextStore.timeEntries.filter((entry) => entry.shiftId !== shift.id);
       swapRequest.status = "genehmigt";
       swapRequest.approvedCandidateId = decision.candidateId;
     } else {
@@ -998,6 +1014,12 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    const shiftEnd = getShiftEndDateTime(shift);
+    if (shiftEnd && Date.now() > shiftEnd.getTime()) {
+      sendJson(res, 400, { error: "Diese Schicht ist bereits beendet." });
+      return;
+    }
+
     if (auth.store.timeEntries.some((entry) => entry.userId === auth.user.id && !entry.checkOutAt)) {
       sendJson(res, 400, { error: "Du bist bereits in einer Schicht eingestempelt." });
       return;
@@ -1009,7 +1031,8 @@ async function handleApi(req, res, url) {
       userId: auth.user.id,
       shiftId,
       checkInAt: new Date().toISOString(),
-      checkOutAt: ""
+      checkOutAt: "",
+      shiftSnapshot: buildTimeEntryShiftSnapshot(shift, auth.store)
     });
 
     const savedStore = writeStore(nextStore);
@@ -1031,6 +1054,10 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (!entry.shiftSnapshot) {
+      const liveShift = nextStore.shifts.find((item) => item.id === shiftId);
+      entry.shiftSnapshot = buildTimeEntryShiftSnapshot(liveShift, nextStore);
+    }
     entry.checkOutAt = new Date().toISOString();
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "check-out" });
@@ -1864,9 +1891,48 @@ function normalizeChatMessages(messages, users, shifts) {
     .filter((entry) => validUserIds.has(entry.authorId) && entry.content);
 }
 
+function normalizeTimeEntryShiftSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return null;
+
+  const normalized = {
+    id: String(snapshot.id || "").trim(),
+    date: isDateKey(snapshot.date) ? String(snapshot.date).trim() : "",
+    startTime: normalizeTimeValue(snapshot.startTime),
+    endTime: normalizeTimeValue(snapshot.endTime),
+    shiftType: String(snapshot.shiftType || "").trim(),
+    world: String(snapshot.world || "").trim(),
+    task: String(snapshot.task || "").trim(),
+    memberId: String(snapshot.memberId || "").trim(),
+    memberName: String(snapshot.memberName || "").trim(),
+    notes: String(snapshot.notes || "").trim(),
+    isLead: normalizeBooleanInput(snapshot.isLead)
+  };
+
+  if (!normalized.date || !normalized.startTime || !normalized.endTime) return null;
+  if (!normalized.shiftType || !normalized.world || !normalized.task) return null;
+  return normalized;
+}
+
+function buildTimeEntryShiftSnapshot(shift, store) {
+  if (!shift) return null;
+
+  return normalizeTimeEntryShiftSnapshot({
+    id: shift.id,
+    date: shift.date,
+    startTime: shift.startTime,
+    endTime: shift.endTime,
+    shiftType: shift.shiftType,
+    world: shift.world,
+    task: shift.task,
+    memberId: shift.memberId,
+    memberName: findUserName(store.users || [], shift.memberId),
+    notes: shift.notes || "",
+    isLead: shift.isLead
+  });
+}
+
 function normalizeTimeEntries(entries, users, shifts) {
   const validUserIds = new Set(users.map((entry) => entry.id));
-  const validShiftIds = new Set(shifts.map((entry) => entry.id));
 
   return entries
     .map((entry) => ({
@@ -1874,15 +1940,94 @@ function normalizeTimeEntries(entries, users, shifts) {
       userId: String(entry.userId || "").trim(),
       shiftId: String(entry.shiftId || "").trim(),
       checkInAt: isIsoDate(entry.checkInAt) ? entry.checkInAt : "",
-      checkOutAt: isIsoDate(entry.checkOutAt) ? entry.checkOutAt : ""
+      checkOutAt: isIsoDate(entry.checkOutAt) ? entry.checkOutAt : "",
+      shiftSnapshot: normalizeTimeEntryShiftSnapshot(entry.shiftSnapshot)
     }))
-    .filter((entry) => validUserIds.has(entry.userId) && validShiftIds.has(entry.shiftId) && entry.checkInAt);
+    .filter((entry) => validUserIds.has(entry.userId) && entry.checkInAt && (entry.shiftId || entry.shiftSnapshot));
+}
+
+function getShiftDateTime(dateKey, timeValue) {
+  if (!isDateKey(dateKey) || !isTimeValue(timeValue)) return null;
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  const [hours, minutes] = String(timeValue).split(":").map(Number);
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+}
+
+function getShiftEndDateTime(shift) {
+  const start = getShiftDateTime(shift?.date, shift?.startTime);
+  const end = getShiftDateTime(shift?.date, shift?.endTime);
+  if (!start || !end) return null;
+  if (end <= start) {
+    end.setDate(end.getDate() + 1);
+  }
+  return end;
+}
+
+function preserveTimeEntryHistoryForShift(timeEntries, shift, store, options = {}) {
+  if (!shift || !Array.isArray(timeEntries)) return false;
+
+  const detachEntries = Boolean(options.detachEntries);
+  const closeOpenEntries = Boolean(options.closeOpenEntries);
+  const snapshot = buildTimeEntryShiftSnapshot(shift, store);
+  let changed = false;
+
+  for (const entry of timeEntries) {
+    if (entry.shiftId !== shift.id) continue;
+
+    if (!entry.shiftSnapshot && snapshot) {
+      entry.shiftSnapshot = snapshot;
+      changed = true;
+    }
+
+    if (closeOpenEntries && !entry.checkOutAt) {
+      const shiftEnd = getShiftEndDateTime(snapshot || shift);
+      const fallbackEnd = shiftEnd ? Math.min(Date.now(), shiftEnd.getTime()) : Date.now();
+      entry.checkOutAt = new Date(fallbackEnd).toISOString();
+      changed = true;
+    }
+
+    if (detachEntries) {
+      entry.shiftId = "";
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+function hydrateHistoricalTimeEntries(store) {
+  if (!store || !Array.isArray(store.timeEntries)) return false;
+
+  let changed = false;
+
+  for (const entry of store.timeEntries) {
+    const liveShift = entry.shiftId ? store.shifts.find((shift) => shift.id === entry.shiftId) : null;
+    if (!entry.shiftSnapshot && liveShift) {
+      entry.shiftSnapshot = buildTimeEntryShiftSnapshot(liveShift, store);
+      changed = true;
+    }
+
+    if (!entry.checkOutAt) {
+      const referenceShift = liveShift || entry.shiftSnapshot;
+      const shiftEnd = getShiftEndDateTime(referenceShift);
+      if (shiftEnd && Date.now() >= shiftEnd.getTime()) {
+        entry.checkOutAt = shiftEnd.toISOString();
+        changed = true;
+      }
+    }
+  }
+
+  return changed;
 }
 
 function readStore() {
   if (!portalStoreCache) {
     const fallback = normalizeStore(readFileStore());
     portalStoreCache = fallback;
+  }
+
+  if (hydrateHistoricalTimeEntries(portalStoreCache)) {
+    persistPortalStore(portalStoreCache);
   }
 
   return structuredClone(portalStoreCache);
@@ -3077,6 +3222,17 @@ function decorateShift(shift, store) {
   };
 }
 
+function decorateShiftSnapshot(snapshot, store) {
+  const normalized = normalizeTimeEntryShiftSnapshot(snapshot);
+  if (!normalized) return null;
+
+  return {
+    ...normalized,
+    memberName: normalized.memberName || findUserName(store.users || [], normalized.memberId),
+    windowLabel: formatShiftWindow(normalized.startTime, normalized.endTime)
+  };
+}
+
 function decorateCalendarShift(shift, store) {
   const user = (store.users || []).find((entry) => entry.id === shift.memberId);
   return {
@@ -3120,10 +3276,11 @@ function decorateChatMessage(entry, store) {
 
 function decorateTimeEntry(entry, store) {
   const shift = store.shifts.find((item) => item.id === entry.shiftId);
+  const fallbackShift = decorateShiftSnapshot(entry.shiftSnapshot, store);
   return {
     ...entry,
     memberName: findUserName(store.users, entry.userId),
-    shift: shift ? decorateShift(shift, store) : null
+    shift: shift ? decorateShift(shift, store) : fallbackShift
   };
 }
 

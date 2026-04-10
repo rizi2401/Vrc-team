@@ -3758,3 +3758,285 @@ input[type="file"]::-webkit-file-upload-button {
     grid-template-columns: 1fr;
   }
 }
+
+/* Dashboard compacting + creator builder */
+
+.dashboard-layout {
+  grid-template-columns: minmax(220px, 250px) minmax(0, 1fr);
+}
+
+.dashboard-sidebar {
+  top: 10px;
+  align-self: start;
+  max-height: calc(100vh - 20px);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.dashboard-sidebar-head {
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid rgba(255, 208, 144, 0.12);
+}
+
+.dashboard-sidebar-buttons .tab-chip {
+  min-height: 42px;
+  padding: 0.72rem 0.9rem;
+}
+
+.dashboard-main-stack {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.calendar-members {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
+}
+
+.capacity-card,
+.availability-overview-card,
+.activity-overview-card,
+.team-user-card,
+.creator-builder-preview,
+.creator-builder-form {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+}
+
+.capacity-card-head {
+  align-items: flex-start;
+}
+
+.capacity-card-metrics,
+.availability-overview-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.capacity-metric {
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.72rem 0.8rem;
+  border-radius: 16px 10px 16px 10px;
+  border: 1px solid rgba(255, 208, 144, 0.1);
+  background: linear-gradient(180deg, rgba(12, 22, 40, 0.66), rgba(7, 15, 29, 0.5));
+}
+
+.capacity-metric strong {
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.capacity-metric small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.capacity-detail-stack {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.compact-inline-expander summary {
+  padding: 0.8rem 0.95rem;
+  font-size: 0.95rem;
+}
+
+.wide-team-grid {
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+}
+
+.team-user-copy {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.compact-copy-stack {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.team-create-expander {
+  margin-bottom: 1rem;
+}
+
+.creator-builder-panel {
+  margin-top: 1rem;
+}
+
+.creator-builder-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(260px, 0.44fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .calendar-members,
+  .wide-team-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .dashboard-sidebar {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .creator-builder-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Planning, availability and profile cleanup */
+
+.planner-stat-strip {
+  margin-bottom: 1rem;
+}
+
+.planner-editor-stack {
+  gap: 1rem;
+}
+
+.planner-workspace-card,
+.planner-compact-note,
+.availability-summary-card {
+  padding: 1rem 1.05rem;
+  border-radius: 18px 12px 18px 12px;
+  border: 1px solid rgba(255, 208, 144, 0.1);
+  background: linear-gradient(180deg, rgba(10, 19, 35, 0.82), rgba(7, 14, 28, 0.72));
+}
+
+.planner-form-block,
+.profile-creator-stack {
+  gap: 0.95rem;
+}
+
+.planner-support-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.planner-compact-note {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+}
+
+.planner-bulk-shell {
+  margin-top: 0.1rem;
+}
+
+.planner-bulk-shell .mystic-expander-body {
+  display: grid;
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
+.planner-person-card,
+.planner-group {
+  padding: 1rem 1.05rem;
+}
+
+.planner-card-list,
+.planner-sidebar-list {
+  gap: 0.8rem;
+}
+
+.planner-group-head,
+.planner-sidebar-head {
+  margin-bottom: 0.8rem;
+}
+
+.availability-summary-strip {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 1rem;
+}
+
+.availability-summary-card {
+  display: grid;
+  gap: 0.35rem;
+  align-content: start;
+}
+
+.availability-summary-card strong {
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.availability-form-shell.compact,
+.creator-application-shell.compact,
+.creator-presence-shell.compact {
+  padding: 1rem 1.05rem;
+}
+
+.availability-slot-editor {
+  gap: 0.6rem;
+}
+
+.availability-slot-row {
+  padding: 0.7rem 0.8rem;
+  border-radius: 16px 10px 16px 10px;
+  border: 1px solid rgba(255, 208, 144, 0.08);
+  background: linear-gradient(180deg, rgba(11, 20, 37, 0.7), rgba(7, 14, 27, 0.56));
+}
+
+.availability-overview-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.profile-panel {
+  gap: 1rem;
+}
+
+.profile-preview {
+  padding: 1rem 1.1rem;
+  align-items: start;
+}
+
+.profile-summary-list {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.profile-summary-list p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.profile-core-grid {
+  gap: 0.85rem;
+}
+
+.profile-secondary-expander {
+  margin-top: 0.1rem;
+}
+
+.profile-secondary-expander summary {
+  padding: 0.9rem 1rem;
+  font-size: 0.98rem;
+}
+
+.profile-secondary-expander .mystic-expander-body {
+  display: grid;
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
+.profile-secondary-expander .availability-form-shell {
+  margin: 0;
+}
+
+@media (max-width: 980px) {
+  .planner-support-grid,
+  .availability-summary-strip {
+    grid-template-columns: 1fr;
+  }
+}

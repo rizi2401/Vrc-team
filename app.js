@@ -206,6 +206,7 @@ function shouldClearFormDraftAfterSuccess(formName) {
     "admin-user-create",
     "user-update",
     "profile-update",
+    "creator-hub-update",
     "availability-update"
   ].includes(String(formName || ""));
 }
@@ -1342,183 +1343,190 @@ function renderPlannerPanel() {
   const plannerGroups = buildPlannerOverviewGroups(shifts);
   const presetValue = getMatchingShiftPresetValue(plannerFormValues.startTime || "12:00", plannerFormValues.endTime || "16:00");
   const shiftsMarkup = renderPlannerGroupedShiftSections(plannerGroups);
+  const openRequests = (state.data.requests || []).filter((entry) => entry.status === "offen").length;
+  const worldCount = new Set(shifts.map((entry) => entry.world).filter(Boolean)).size;
 
   return `
     <section class="panel span-12">
       <div class="section-head">
         <div>
           <p class="eyebrow">Schichtplanung</p>
-          <h2>Welten, Aufgaben und Besetzung</h2>
-          <p class="section-copy">Links siehst du direkt, wer schon wie oft eingetragen ist. Unten bleibt alles nach Person sortiert bearbeitbar.</p>
+          <h2>Schichten sauber planen und ruhig abarbeiten</h2>
+          <p class="section-copy">Eine klare Planungsflaeche fuer Datum, Person und Aufgabe. Abgeschlossene Zeiten bleiben im Archiv, auch wenn alte Schichten spaeter geloescht werden.</p>
         </div>
-        <span class="pill neutral">Auto-Save auf dem Server</span>
+        <span class="pill neutral">Server speichert live</span>
+      </div>
+
+      <div class="stats-strip compact-stats planner-stat-strip">
+        ${renderStatCard("Schichten", shifts.length, "Aktuell im Plan", "amber")}
+        ${renderStatCard("Personen", plannerGroups.length, "Gerade eingeplant", "sky")}
+        ${renderStatCard("Welten", worldCount, "Aktive Einsatzorte", "teal")}
+        ${renderStatCard("Offene Rueckmeldungen", openRequests, "Zur Planung noch offen", openRequests ? "rose" : "neutral")}
       </div>
 
       <div class="planner-layout">
         ${renderPlannerSidebar(plannerGroups)}
 
         <div class="planner-editor-stack">
-          <form class="stack-form" data-form="shift">
-            <div class="form-grid">
-              <div class="field">
-                <label for="shiftDate">Datum</label>
-                <input id="shiftDate" name="date" type="date" value="${escapeHtml(plannerFormValues.date || getLocalDateKey())}" required>
+          <section class="mini-card planner-workspace-card">
+            <div class="section-head compact-section-head">
+              <div>
+                <p class="eyebrow">Einzelschicht</p>
+                <h3>${editingShift ? "Schicht anpassen" : "Neue Schicht anlegen"}</h3>
+                <p class="section-copy">Datum, Person, Zeitfenster und Aufgabe in einem Block. Nach dem Speichern bleibt der Arbeitsfluss ruhig stehen.</p>
               </div>
-              <div class="field">
-                <label for="shiftMember">Moderator</label>
-                <select id="shiftMember" name="memberId" required>
-                  ${buildUserOptions(users, plannerFormValues.memberId || "")}
-                </select>
-              </div>
-              <div class="field">
-                <label for="shiftPreset">Schichtfenster</label>
-                <select id="shiftPreset" data-change="shift-preset">
-                  ${renderShiftPresetOptions(presetValue)}
-                </select>
-              </div>
-              <div class="field">
-                <label for="shiftStartTime">Beginn</label>
-                <input id="shiftStartTime" name="startTime" type="time" value="${escapeHtml(plannerFormValues.startTime || "12:00")}" required>
-              </div>
-              <div class="field">
-                <label for="shiftEndTime">Ende</label>
-                <input id="shiftEndTime" name="endTime" type="time" value="${escapeHtml(plannerFormValues.endTime || "16:00")}" required>
-              </div>
-              <div class="field">
-                <label for="shiftType">Schichttyp</label>
-                <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Abloese" required>
-              </div>
-              <div class="field">
-                <label for="shiftWorld">Welt</label>
-                <input id="shiftWorld" name="world" list="worldOptions" value="${escapeHtml(plannerFormValues.world || state.data.settings.worlds?.[0] || "")}" placeholder="z. B. Community Hub" required>
-              </div>
-              <div class="field">
-                <label for="shiftTask">Aufgabe</label>
-                <input id="shiftTask" name="task" list="taskOptions" value="${escapeHtml(plannerFormValues.task || state.data.settings.tasks?.[0] || "")}" placeholder="z. B. Patrouille" required>
-              </div>
-              <div class="field checkbox-field">
-                <label class="checkbox-row" for="shiftIsLead">
-                  <input id="shiftIsLead" name="isLead" type="checkbox" ${plannerFormValues.isLead ? "checked" : ""}>
-                  <span>Leitung in dieser Instanz</span>
-                </label>
-                <p class="helper-text">Wird im Kalender besonders hervorgehoben.</p>
-              </div>
-              <div class="field">
-                <label for="shiftNotes">Interne Notiz</label>
-                <textarea id="shiftNotes" name="notes" placeholder="Briefing, Besonderheiten oder Ansprechpartner">${escapeHtml(plannerFormValues.notes || "")}</textarea>
-              </div>
+              ${editingShift ? '<span class="pill amber">Bearbeitung aktiv</span>' : '<span class="pill success">Neu</span>'}
             </div>
 
-            <datalist id="shiftTypeOptions">${renderDatalistOptions(state.data.settings.shiftTypes)}</datalist>
-            <datalist id="worldOptions">${renderDatalistOptions(state.data.settings.worlds)}</datalist>
-            <datalist id="taskOptions">${renderDatalistOptions(state.data.settings.tasks)}</datalist>
+            <form class="stack-form planner-form-block" data-form="shift">
+              <div class="form-grid">
+                <div class="field">
+                  <label for="shiftDate">Datum</label>
+                  <input id="shiftDate" name="date" type="date" value="${escapeHtml(plannerFormValues.date || getLocalDateKey())}" required>
+                </div>
+                <div class="field">
+                  <label for="shiftMember">Moderator</label>
+                  <select id="shiftMember" name="memberId" required>
+                    ${buildUserOptions(users, plannerFormValues.memberId || "")}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="shiftPreset">Schichtfenster</label>
+                  <select id="shiftPreset" data-change="shift-preset">
+                    ${renderShiftPresetOptions(presetValue)}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="shiftStartTime">Beginn</label>
+                  <input id="shiftStartTime" name="startTime" type="time" value="${escapeHtml(plannerFormValues.startTime || "12:00")}" required>
+                </div>
+                <div class="field">
+                  <label for="shiftEndTime">Ende</label>
+                  <input id="shiftEndTime" name="endTime" type="time" value="${escapeHtml(plannerFormValues.endTime || "16:00")}" required>
+                </div>
+                <div class="field">
+                  <label for="shiftType">Schichttyp</label>
+                  <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Abloese" required>
+                </div>
+                <div class="field">
+                  <label for="shiftWorld">Welt</label>
+                  <input id="shiftWorld" name="world" list="worldOptions" value="${escapeHtml(plannerFormValues.world || state.data.settings.worlds?.[0] || "")}" placeholder="z. B. Community Hub" required>
+                </div>
+                <div class="field">
+                  <label for="shiftTask">Aufgabe</label>
+                  <input id="shiftTask" name="task" list="taskOptions" value="${escapeHtml(plannerFormValues.task || state.data.settings.tasks?.[0] || "")}" placeholder="z. B. Patrouille" required>
+                </div>
+                <div class="field checkbox-field">
+                  <label class="checkbox-row" for="shiftIsLead">
+                    <input id="shiftIsLead" name="isLead" type="checkbox" ${plannerFormValues.isLead ? "checked" : ""}>
+                    <span>Leitung in dieser Instanz</span>
+                  </label>
+                </div>
+                <div class="field span-all">
+                  <label for="shiftNotes">Interne Notiz</label>
+                  <textarea id="shiftNotes" name="notes" placeholder="Briefing, Besonderheiten oder Ansprechpartner">${escapeHtml(plannerFormValues.notes || "")}</textarea>
+                </div>
+              </div>
 
-            <div class="card-actions">
-              <button type="submit">${editingShift ? "Aenderung speichern" : "Schicht speichern"}</button>
-              ${editingShift ? '<button type="button" class="ghost small" data-action="cancel-shift-edit">Bearbeitung abbrechen</button>' : ""}
-            </div>
-            <p class="pill-note">Nach jedem neuen Speichern bleiben Moderator, Welt und Aufgabe stehen. Das Datum springt auf den naechsten Tag, damit du eine Woche am Stueck planen kannst.</p>
-          </form>
+              <datalist id="shiftTypeOptions">${renderDatalistOptions(state.data.settings.shiftTypes)}</datalist>
+              <datalist id="worldOptions">${renderDatalistOptions(state.data.settings.worlds)}</datalist>
+              <datalist id="taskOptions">${renderDatalistOptions(state.data.settings.tasks)}</datalist>
 
-          <div class="planner-hint">
-            <h3>Team-Workflow</h3>
-            <p>
-              Lege hier fest, wer wann welche Welt moderiert und welche Aufgabe uebernimmt.
-              Moderatoren sehen spaeter nur ihre eigenen Einsaetze, koennen Wuensche senden und ihre Zeiten erfassen.
-            </p>
-            <p>
-              Die Kernschichten laufen ab 12 Uhr im 4-Stunden-Takt. Fuer Abloesen und Verstaerkung stehen Zwischenschichten bereit,
-              und Beginn sowie Ende lassen sich jederzeit frei anpassen.
-            </p>
-            <p>
-              Wenn die Datenbank-Verbindung aktiv ist, bleiben Schichten, Kataloge und Kalender auch nach GitHub-Updates und neuen Deploys erhalten.
-            </p>
+              <div class="card-actions">
+                <button type="submit">${editingShift ? "Aenderung speichern" : "Schicht speichern"}</button>
+                ${editingShift ? '<button type="button" class="ghost small" data-action="cancel-shift-edit">Bearbeitung abbrechen</button>' : ""}
+              </div>
+              <p class="pill-note">Moderator, Welt und Aufgabe bleiben nach dem Speichern stehen. So kannst du mehrere Tage am Stueck ohne Hektik planen.</p>
+            </form>
+          </section>
 
-            <div class="inline-stats">
-              <span>${escapeHtml(String(shifts.length))} Schichten gespeichert</span>
-              <span>${escapeHtml(String((state.data.settings.worlds || []).length))} Welten im Katalog</span>
-              <span>${escapeHtml(String((state.data.requests || []).filter((entry) => entry.status === "offen").length))} neue Rueckmeldungen</span>
-            </div>
+          <div class="planner-support-grid">
+            <article class="mini-card planner-compact-note">
+              <h3>Archiv und Aufraeumen</h3>
+              <p class="helper-text">Sobald eine laufende Schicht ihr Ende erreicht, wird der offene Zeiteintrag automatisch abgeschlossen. Danach kannst du alte Schichten spaeter loeschen, ohne dass die geleisteten Stunden verloren gehen.</p>
+            </article>
+
+            <article class="mini-card planner-compact-note">
+              <h3>Planungsrhythmus</h3>
+              <p class="helper-text">Nutze oben die Einzelschicht fuer Korrekturen und Sonderfaelle. Die Sammelplanung darunter ist fuer komplette Wochen oder wiederkehrende Muster gedacht.</p>
+            </article>
           </div>
 
-          <form class="stack-form planner-bulk-form" data-form="shift-bulk">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">Sammelplanung</p>
-                <h3>Eine Woche in einem Rutsch planen</h3>
-                <p class="section-copy">Ein Moderator = ganze Woche fuer eine Person. Mehrere Moderatoren = gleiche Schicht fuer alle ausgewaehlten Personen.</p>
-              </div>
-            </div>
-
-            <div class="form-grid">
-              <div class="field span-all">
-                <div class="field-head">
-                  <label>Moderatoren auswaehlen</label>
-                  <div class="bulk-selector-toolbar">
-                    <button type="button" class="ghost small" data-action="bulk-select-all-members">Alle</button>
-                    <button type="button" class="ghost small" data-action="bulk-clear-members">Keine</button>
+          <details class="mystic-expander planner-bulk-shell">
+            <summary>Sammelplanung fuer mehrere Tage</summary>
+            <div class="mystic-expander-body">
+              <form class="stack-form planner-bulk-form" data-form="shift-bulk">
+                <div class="form-grid">
+                  <div class="field span-all">
+                    <div class="field-head">
+                      <label>Moderatoren auswaehlen</label>
+                      <div class="bulk-selector-toolbar">
+                        <button type="button" class="ghost small" data-action="bulk-select-all-members">Alle</button>
+                        <button type="button" class="ghost small" data-action="bulk-clear-members">Keine</button>
+                      </div>
+                    </div>
+                    <div class="bulk-checkbox-grid">
+                      ${buildBulkMemberChecks(users)}
+                    </div>
+                    <p class="helper-text">Ein Haken bedeutet Wochenplanung fuer diese Person. Mehrere Haken erzeugen denselben Einsatz fuer mehrere Moderatoren.</p>
+                  </div>
+                  <div class="field">
+                    <label for="bulkDateStart">Von</label>
+                    <input id="bulkDateStart" name="dateStart" type="date" value="${escapeHtml(plannerFormValues.date || getLocalDateKey())}" required>
+                  </div>
+                  <div class="field">
+                    <label for="bulkDateEnd">Bis</label>
+                    <input id="bulkDateEnd" name="dateEnd" type="date" value="${escapeHtml(addDaysToDateKey(plannerFormValues.date || getLocalDateKey(), 6))}" required>
+                  </div>
+                  <div class="field">
+                    <label for="bulkStartTime">Beginn</label>
+                    <input id="bulkStartTime" name="startTime" type="time" value="${escapeHtml(plannerFormValues.startTime || "12:00")}" required>
+                  </div>
+                  <div class="field">
+                    <label for="bulkEndTime">Ende</label>
+                    <input id="bulkEndTime" name="endTime" type="time" value="${escapeHtml(plannerFormValues.endTime || "16:00")}" required>
+                  </div>
+                  <div class="field">
+                    <label for="bulkShiftType">Schichttyp</label>
+                    <input id="bulkShiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" required>
+                  </div>
+                  <div class="field">
+                    <label for="bulkWorld">Welt</label>
+                    <input id="bulkWorld" name="world" list="worldOptions" value="${escapeHtml(plannerFormValues.world || state.data.settings.worlds?.[0] || "")}" required>
+                  </div>
+                  <div class="field">
+                    <label for="bulkTask">Aufgabe</label>
+                    <input id="bulkTask" name="task" list="taskOptions" value="${escapeHtml(plannerFormValues.task || state.data.settings.tasks?.[0] || "")}" required>
+                  </div>
+                  <div class="field checkbox-field">
+                    <label class="checkbox-row" for="bulkIsLead">
+                      <input id="bulkIsLead" name="isLead" type="checkbox" ${plannerFormValues.isLead ? "checked" : ""}>
+                      <span>Leitung mitsetzen</span>
+                    </label>
+                  </div>
+                  <div class="field span-all">
+                    <div class="field-head">
+                      <label>Wochentage</label>
+                      <div class="bulk-selector-toolbar">
+                        <button type="button" class="ghost small" data-action="bulk-weekdays-workdays">Mo-Fr</button>
+                        <button type="button" class="ghost small" data-action="bulk-weekdays-all">Alle Tage</button>
+                        <button type="button" class="ghost small" data-action="bulk-weekdays-clear">Keine</button>
+                      </div>
+                    </div>
+                    <div class="weekday-grid">
+                      ${renderPlannerWeekdayChecks()}
+                    </div>
+                  </div>
+                  <div class="field span-all">
+                    <label for="bulkNotes">Interne Notiz</label>
+                    <textarea id="bulkNotes" name="notes" placeholder="Gleiche Notiz fuer alle angelegten Schichten">${escapeHtml(plannerFormValues.notes || "")}</textarea>
                   </div>
                 </div>
-                <div class="bulk-checkbox-grid">
-                  ${buildBulkMemberChecks(users)}
-                </div>
-                <p class="helper-text">Ein Moderator = Wochenplanung fuer eine Person. Mehrere Haken = gleiche Schicht fuer alle markierten Moderatoren.</p>
-              </div>
-              <div class="field">
-                <label for="bulkDateStart">Von</label>
-                <input id="bulkDateStart" name="dateStart" type="date" value="${escapeHtml(plannerFormValues.date || getLocalDateKey())}" required>
-              </div>
-              <div class="field">
-                <label for="bulkDateEnd">Bis</label>
-                <input id="bulkDateEnd" name="dateEnd" type="date" value="${escapeHtml(addDaysToDateKey(plannerFormValues.date || getLocalDateKey(), 6))}" required>
-              </div>
-              <div class="field">
-                <label for="bulkStartTime">Beginn</label>
-                <input id="bulkStartTime" name="startTime" type="time" value="${escapeHtml(plannerFormValues.startTime || "12:00")}" required>
-              </div>
-              <div class="field">
-                <label for="bulkEndTime">Ende</label>
-                <input id="bulkEndTime" name="endTime" type="time" value="${escapeHtml(plannerFormValues.endTime || "16:00")}" required>
-              </div>
-              <div class="field">
-                <label for="bulkShiftType">Schichttyp</label>
-                <input id="bulkShiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" required>
-              </div>
-              <div class="field">
-                <label for="bulkWorld">Welt</label>
-                <input id="bulkWorld" name="world" list="worldOptions" value="${escapeHtml(plannerFormValues.world || state.data.settings.worlds?.[0] || "")}" required>
-              </div>
-              <div class="field">
-                <label for="bulkTask">Aufgabe</label>
-                <input id="bulkTask" name="task" list="taskOptions" value="${escapeHtml(plannerFormValues.task || state.data.settings.tasks?.[0] || "")}" required>
-              </div>
-              <div class="field checkbox-field">
-                <label class="checkbox-row" for="bulkIsLead">
-                  <input id="bulkIsLead" name="isLead" type="checkbox" ${plannerFormValues.isLead ? "checked" : ""}>
-                  <span>Leitung mitsetzen</span>
-                </label>
-              </div>
-              <div class="field span-all">
-                <div class="field-head">
-                  <label>Wochentage</label>
-                  <div class="bulk-selector-toolbar">
-                    <button type="button" class="ghost small" data-action="bulk-weekdays-workdays">Mo-Fr</button>
-                    <button type="button" class="ghost small" data-action="bulk-weekdays-all">Alle Tage</button>
-                    <button type="button" class="ghost small" data-action="bulk-weekdays-clear">Keine</button>
-                  </div>
-                </div>
-                <div class="weekday-grid">
-                  ${renderPlannerWeekdayChecks()}
-                </div>
-              </div>
-              <div class="field span-all">
-                <label for="bulkNotes">Interne Notiz</label>
-                <textarea id="bulkNotes" name="notes" placeholder="Gleiche Notiz fuer alle angelegten Schichten">${escapeHtml(plannerFormValues.notes || "")}</textarea>
-              </div>
-            </div>
 
-            <button type="submit">Sammelplanung speichern</button>
-          </form>
+                <button type="submit">Sammelplanung speichern</button>
+              </form>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -2169,34 +2177,59 @@ function renderCapacityPanel() {
   `;
 }
 
+function renderCapacityMetric(label, value, meta = "") {
+  return `
+    <div class="capacity-metric">
+      <span class="timeline-meta">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      ${meta ? `<small>${escapeHtml(meta)}</small>` : ""}
+    </div>
+  `;
+}
+
 function renderCapacityCard(entry) {
   const plannedDelta = entry.capacityHours > 0 ? entry.capacityHours - entry.plannedHours : null;
   const dayDelta = entry.capacityDays > 0 ? entry.capacityDays - entry.plannedDays : null;
-
-  return `
-    <article class="calendar-member ${entry.statusTone === "rose" ? "lead" : ""}">
-      <div class="status-row">
-        <h4>${escapeHtml(getPrimaryDisplayName(entry.user))}</h4>
-        <span class="pill ${entry.statusTone}">${escapeHtml(entry.statusLabel)}</span>
-      </div>
-      <p class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</p>
-      <p><strong>Diese Woche:</strong> ${escapeHtml(formatHoursValue(entry.workedHours))} an ${escapeHtml(formatCapacityDays(entry.workedDays))}</p>
-      <p><strong>Letzte Woche:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekHours || 0))}${entry.capacityHours > 0 ? ` | ${escapeHtml(formatSignedHoursValue(entry.previousWeekBalanceHours || 0))}` : ""}</p>
-      <p><strong>Heute:</strong> ${escapeHtml(formatHoursValue(entry.todayWorkedHours || 0))}</p>
-      <p><strong>Geplant:</strong> ${escapeHtml(formatHoursValue(entry.plannedHours))} an ${escapeHtml(formatCapacityDays(entry.plannedDays))}</p>
+  const availabilityDetails = `
+    <div class="capacity-detail-stack">
       <p><strong>Verfuegbar:</strong> ${escapeHtml(formatCapacityHours(entry.capacityHours))} / ${escapeHtml(formatCapacityDays(entry.capacityDays))}</p>
+      ${renderAvailabilitySlotList(entry.availabilitySlots, "Noch keine festen Wochenslots eingetragen.")}
+      ${
+        entry.availabilitySchedule
+          ? `<p><strong>Hinweise:</strong> ${escapeHtml(entry.availabilitySchedule)}</p>`
+          : '<p class="helper-text">Keine Zusatzhinweise fuer diese Woche hinterlegt.</p>'
+      }
+      ${entry.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(entry.availabilityUpdatedAt))}</p>` : '<p class="timeline-meta">Noch nie im Portal hinterlegt.</p>'}
+    </div>
+  `;
+  const overtimeDetails = `
+    <div class="capacity-detail-stack">
+      <p><strong>Letzte Woche:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekHours || 0))}${entry.capacityHours > 0 ? ` | ${escapeHtml(formatSignedHoursValue(entry.previousWeekBalanceHours || 0))}` : ""}</p>
       <p><strong>Aktueller Saldo:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatSignedHoursValue(entry.hourBalance) : "Kein Wochenrahmen gesetzt")}</p>
       <p><strong>Ueberstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
       ${entry.overtimeHours > 0 ? `<p class="helper-text"><strong>Diese Woche ueber Soll:</strong> ${escapeHtml(formatHoursValue(entry.overtimeHours))}</p>` : ""}
       ${entry.previousWeekOvertimeHours > 0 ? `<p class="helper-text"><strong>Letzte Woche ueber Soll:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekOvertimeHours))}</p>` : ""}
       ${Math.abs(entry.overtimeAdjustmentHours || 0) > 0.001 ? `<p class="helper-text"><strong>Ausgleich gebucht:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeAdjustmentHours))}</p>` : ""}
-      ${renderAvailabilitySlotList(entry.availabilitySlots, "Noch keine festen Wochenslots eingetragen.")}
-      ${
-        entry.availabilitySchedule
-          ? `<p><strong>Hinweise:</strong> ${escapeHtml(entry.availabilitySchedule)}</p>`
-          : ""
-      }
-      ${entry.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(entry.availabilityUpdatedAt))}</p>` : ""}
+      ${renderOvertimeAdjustmentHistory(entry.recentOvertimeAdjustments || [])}
+      ${renderOvertimeAdjustmentForm(entry)}
+    </div>
+  `;
+
+  return `
+    <article class="calendar-member capacity-card ${entry.statusTone === "rose" ? "lead" : ""}">
+      <div class="status-row capacity-card-head">
+        <div>
+          <h4>${escapeHtml(getPrimaryDisplayName(entry.user))}</h4>
+          <p class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</p>
+        </div>
+        <span class="pill ${entry.statusTone}">${escapeHtml(entry.statusLabel)}</span>
+      </div>
+      <div class="capacity-card-metrics">
+        ${renderCapacityMetric("Diese Woche", formatHoursValue(entry.workedHours), formatCapacityDays(entry.workedDays))}
+        ${renderCapacityMetric("Heute", formatHoursValue(entry.todayWorkedHours || 0), "bereits erfasst")}
+        ${renderCapacityMetric("Geplant", formatHoursValue(entry.plannedHours), formatCapacityDays(entry.plannedDays))}
+        ${renderCapacityMetric("Bank", formatSignedHoursValue(entry.overtimeBankHours || 0), "gesamt")}
+      </div>
       ${
         plannedDelta === null && dayDelta === null
           ? entry.availabilitySchedule || entry.hasAvailabilitySlots
@@ -2204,8 +2237,18 @@ function renderCapacityCard(entry) {
             : '<p class="helper-text">Diese Person hat noch keine Wochen-Kapazitaet im Profil hinterlegt.</p>'
           : `<p class="helper-text">${escapeHtml(buildCapacityDeltaText(plannedDelta, dayDelta))}</p>`
       }
-      ${renderOvertimeAdjustmentHistory(entry.recentOvertimeAdjustments || [])}
-      ${renderOvertimeAdjustmentForm(entry)}
+      <details class="mystic-expander compact-inline-expander">
+        <summary>Verfuegbarkeit und Slots</summary>
+        <div class="mystic-expander-body">
+          ${availabilityDetails}
+        </div>
+      </details>
+      <details class="mystic-expander compact-inline-expander">
+        <summary>Saldo, letzte Woche und Ausgleich</summary>
+        <div class="mystic-expander-body">
+          ${overtimeDetails}
+        </div>
+      </details>
     </article>
   `;
 }
@@ -2278,19 +2321,36 @@ function renderAvailabilityReminderPanel() {
   const hasStructuredAvailability = hasAvailabilitySlots(availabilitySlots);
   const hasAnyAvailability = Boolean(hasAvailability || hasStructuredAvailability);
   const updatedLabel = user.availabilityUpdatedAt ? formatDateTime(user.availabilityUpdatedAt) : "";
+  const activeSlotCount = normalizeClientAvailabilitySlots(availabilitySlots).filter((slot) => slot.enabled && (slot.startTime || slot.endTime || slot.note)).length;
 
   return `
     <section class="panel span-12">
       <div class="section-head">
         <div>
           <p class="eyebrow">Verfuegbarkeit</p>
-          <h2>Trage deine freien Zeiten direkt hier ein</h2>
-          <p class="section-copy">Damit die Auslastung funktioniert, brauchen wir nicht nur Stunden, sondern auch konkrete Zeitfenster. Du kannst das hier direkt speichern, ohne erst ins Profil wechseln zu muessen.</p>
+          <h2>Dein Wochenrahmen fuer die Planung</h2>
+          <p class="section-copy">Ein eigener Bereich nur fuer freie Zeiten. Stunden, Tage und Slots stehen gesammelt an einer Stelle und bleiben bei Live-Updates stabil.</p>
         </div>
         <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Zum Profil</button>
       </div>
 
-      <p class="pill-note">${escapeHtml(hasAnyAvailability ? "Deine Verfuegbarkeit ist schon hinterlegt. Passe sie hier an, sobald sich fuer die kommende Woche etwas aendert." : "Aktuell fehlt deine Verfuegbarkeit noch. Bitte trage sie direkt hier ein, damit die Leitung dich sinnvoll einplanen kann.")}</p>
+      <div class="availability-summary-strip">
+        <article class="mini-card availability-summary-card">
+          <span class="timeline-meta">Status</span>
+          <strong>${escapeHtml(hasAnyAvailability ? "Eingetragen" : "Fehlt noch")}</strong>
+          <p class="helper-text">${escapeHtml(hasAnyAvailability ? "Du kannst bestehende Angaben direkt anpassen." : "Bitte einmal sauber fuer die kommende Woche ausfuellen.")}</p>
+        </article>
+        <article class="mini-card availability-summary-card">
+          <span class="timeline-meta">Rahmen</span>
+          <strong>${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))}</strong>
+          <p class="helper-text">${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>
+        </article>
+        <article class="mini-card availability-summary-card">
+          <span class="timeline-meta">Slots</span>
+          <strong>${escapeHtml(String(activeSlotCount))}</strong>
+          <p class="helper-text">${escapeHtml(updatedLabel ? `Zuletzt: ${updatedLabel}` : "Noch nicht gespeichert")}</p>
+        </article>
+      </div>
 
       <form class="stack-form" data-form="availability-update">
         <div class="availability-form-shell">
@@ -2298,7 +2358,7 @@ function renderAvailabilityReminderPanel() {
             <div>
               <p class="eyebrow">Staff-Planung</p>
               <h3>Dein Wochenrahmen</h3>
-              <p class="helper-text">Trage deine Woche direkt pro Tag ein. Zusatztipps oder Sonderfaelle kannst du darunter noch als Freitext notieren.</p>
+              <p class="helper-text">Erst die harten Zeiten, darunter nur noch kurze Sonderfaelle oder Hinweise.</p>
             </div>
             <span class="pill ${hasAnyAvailability ? "success" : "rose"}">${escapeHtml(hasAnyAvailability ? "Eingetragen" : "Bitte ausfuellen")}</span>
           </div>
@@ -2314,12 +2374,12 @@ function renderAvailabilityReminderPanel() {
             <div class="field span-all">
               <label>Wochen-Slots</label>
               ${renderAvailabilitySlotsEditor(availabilitySlots, "dashboard-availability")}
-              <p class="helper-text">Das ist die eigentliche Verfuegbarkeit fuer die Leitung. So sieht man sauber pro Tag, wann du wirklich kannst.</p>
+              <p class="helper-text">Hier traegst du pro Tag direkt ein, wann du wirklich eingesetzt werden kannst.</p>
             </div>
             <div class="field span-all">
               <label for="dashboardAvailabilitySchedule">Zusatzhinweise fuer diese Woche</label>
               <textarea id="dashboardAvailabilitySchedule" name="availabilitySchedule" placeholder="z. B. Mittwoch eventuell spaeter, Samstag nur spontan oder Sonntag nur fuer kurze Absprachen.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
-              <p class="helper-text">Hier kommen nur noch Sonderfaelle, Erlaeuterungen oder flexible Hinweise rein.</p>
+              <p class="helper-text">Nur fuer Ausnahmen, flexible Hinweise oder kurze Erklaerungen.</p>
             </div>
           </div>
         </div>
@@ -2360,15 +2420,24 @@ function renderAvailabilityOverviewPanel() {
                   return `
                     <article class="mini-card availability-overview-card">
                       <div class="status-row">
-                        <h3>${escapeHtml(getPrimaryDisplayName(entry.user))}</h3>
+                        <div>
+                          <h3>${escapeHtml(getPrimaryDisplayName(entry.user))}</h3>
+                          <p class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</p>
+                        </div>
                         <span class="pill ${hasAnyAvailability ? "success" : "rose"}">${escapeHtml(hasAnyAvailability ? "Eingetragen" : "Fehlt")}</span>
                       </div>
-                      <p class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</p>
-                      <p class="timeline-meta">Zuletzt online: ${escapeHtml(activityMeta.seenLabel)}</p>
-                      <p><strong>Rahmen:</strong> ${escapeHtml(formatCapacityHours(entry.capacityHours))} / ${escapeHtml(formatCapacityDays(entry.capacityDays))}</p>
-                      ${renderAvailabilitySlotList(entry.availabilitySlots, "Noch keine Zeitfenster eingetragen.")}
-                      ${entry.availabilitySchedule ? `<p class="helper-text"><strong>Hinweise:</strong> ${escapeHtml(entry.availabilitySchedule)}</p>` : ""}
-                      ${entry.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt geaendert: ${escapeHtml(formatDateTime(entry.availabilityUpdatedAt))}</p>` : '<p class="timeline-meta">Noch nie im Portal hinterlegt.</p>'}
+                      <div class="availability-overview-meta">
+                        ${renderCapacityMetric("Rahmen", formatCapacityHours(entry.capacityHours), formatCapacityDays(entry.capacityDays))}
+                        ${renderCapacityMetric("Online", activityMeta.title, activityMeta.seenLabel)}
+                      </div>
+                      <details class="mystic-expander compact-inline-expander">
+                        <summary>Zeitfenster und Hinweise</summary>
+                        <div class="mystic-expander-body">
+                          ${renderAvailabilitySlotList(entry.availabilitySlots, "Noch keine Zeitfenster eingetragen.")}
+                          ${entry.availabilitySchedule ? `<p class="helper-text"><strong>Hinweise:</strong> ${escapeHtml(entry.availabilitySchedule)}</p>` : '<p class="helper-text">Keine Zusatzhinweise fuer diese Woche hinterlegt.</p>'}
+                          ${entry.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt geaendert: ${escapeHtml(formatDateTime(entry.availabilityUpdatedAt))}</p>` : '<p class="timeline-meta">Noch nie im Portal hinterlegt.</p>'}
+                        </div>
+                      </details>
                     </article>
                   `;
                 })
@@ -2941,6 +3010,52 @@ function renderProfilePanel(managerView) {
           </div>
           <button type="submit">Profil speichern</button>
         </form>
+
+        <details class="mystic-expander profile-secondary-expander" ${creatorApplicationOpen ? "open" : ""}>
+          <summary>Creator-Pruefung und Freischaltung</summary>
+          <div class="mystic-expander-body">
+            <section class="availability-form-shell creator-application-shell compact">
+              <div class="availability-form-head">
+                <div>
+                  <p class="eyebrow">Creator-Pruefung</p>
+                  <h3>Freischaltung fuer deinen eigenen Creator-Hub</h3>
+                  <p class="helper-text">Damit nicht jeder sich einfach selbst zum Creator macht, landet dein Bereich erst nach einer kurzen Pruefung im Netzwerk. Aktuell ist ${escapeHtml(String(CREATOR_MIN_FOLLOWERS))}+ Follower die grobe Einstiegsschwelle.</p>
+                </div>
+                <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
+              </div>
+              <div class="creator-application-copy">
+                <p class="helper-text">${escapeHtml(creatorApplication.summary)}</p>
+                <div class="chip-list">
+                  <span class="pill ${creatorApplication.thresholdMet ? "success" : "rose"}">${escapeHtml(creatorApplication.thresholdLabel)}</span>
+                  ${creatorApplication.primaryPlatform ? `<span class="pill neutral">${escapeHtml(creatorApplication.primaryPlatform)}</span>` : ""}
+                  ${creatorApplication.reviewedLabel ? `<span class="timeline-meta">${escapeHtml(creatorApplication.reviewedLabel)}</span>` : ""}
+                </div>
+                ${creatorApplication.reviewNote ? `<p class="helper-text"><strong>Rueckmeldung:</strong> ${escapeHtml(creatorApplication.reviewNote)}</p>` : ""}
+              </div>
+              <form class="stack-form creator-application-form" data-form="creator-application">
+                <div class="creator-presence-form-grid">
+                  <div class="field">
+                    <label for="profileCreatorPrimaryPlatform">Hauptplattform</label>
+                    <input id="profileCreatorPrimaryPlatform" name="creatorPrimaryPlatform" type="text" value="${escapeHtml(user.creatorPrimaryPlatform || "")}" placeholder="TikTok, Twitch, YouTube ...">
+                  </div>
+                  <div class="field">
+                    <label for="profileCreatorFollowerCount">Follower</label>
+                    <input id="profileCreatorFollowerCount" name="creatorFollowerCount" type="number" min="0" step="1" value="${escapeHtml(String(user.creatorFollowerCount || ""))}" placeholder="z. B. 520">
+                  </div>
+                  <div class="field span-all">
+                    <label for="profileCreatorProofUrl">Nachweis-Link</label>
+                    <input id="profileCreatorProofUrl" name="creatorProofUrl" type="url" value="${escapeHtml(user.creatorProofUrl || "")}" placeholder="Profil, Kanal oder Linktree mit sichtbaren Zahlen">
+                  </div>
+                  <div class="field span-all">
+                    <label for="profileCreatorApplicationNote">Kurze Einordnung fuer die Leitung</label>
+                    <textarea id="profileCreatorApplicationNote" name="creatorApplicationNote" placeholder="Worum geht es bei deinem Content und was soll dein Hub hier spaeter sammeln?">${escapeHtml(user.creatorApplicationNote || "")}</textarea>
+                  </div>
+                </div>
+                <button type="submit">${creatorApplication.pending ? "Bewerbung aktualisieren" : creatorApplication.rejected ? "Erneut pruefen lassen" : "Creator-Pruefung absenden"}</button>
+              </form>
+            </section>
+          </div>
+        </details>
       </div>
     </section>
   `;
@@ -3710,6 +3825,31 @@ async function handleSubmit(event) {
             body: JSON.stringify(payload)
           }),
         "Profil wurde aktualisiert."
+      );
+      break;
+    }
+
+    case "creator-hub-update": {
+      const formData = new FormData(form);
+      const payload = {
+        creatorBlurb: formData.get("creatorBlurb"),
+        creatorLinks: formData.get("creatorLinks"),
+        creatorVisible: formData.get("creatorVisible") === "on",
+        creatorSlug: formData.get("creatorSlug"),
+        creatorCommunityName: formData.get("creatorCommunityName"),
+        creatorCommunitySummary: formData.get("creatorCommunitySummary"),
+        creatorCommunityInviteUrl: formData.get("creatorCommunityInviteUrl"),
+        creatorPresence: formData.get("creatorPresence"),
+        creatorPresenceText: formData.get("creatorPresenceText"),
+        creatorPresenceUrl: formData.get("creatorPresenceUrl")
+      };
+      await performAction(
+        () =>
+          api("/api/profile", {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          }),
+        "Creator-Hub wurde aktualisiert."
       );
       break;
     }
@@ -5549,6 +5689,9 @@ function renderTeamPanelV2() {
   const users = state.data?.users || [];
   const createDraftKey = "admin-user-create:";
   const pendingCreatorEntries = getCreatorReviewEntries(["pending"]);
+  const moderationLeadCount = users.filter((entry) => entry.role === "moderation_lead").length;
+  const moderatorCount = users.filter((entry) => entry.role === "moderator").length;
+  const traineeCount = users.filter((entry) => entry.role === "member").length;
 
   return `
     <section class="panel span-12">
@@ -5557,58 +5700,68 @@ function renderTeamPanelV2() {
           <p class="eyebrow">Team und Mitglieder</p>
           <h2>Accounts, Rollen und Creator-Profile</h2>
         </div>
-        <span class="pill neutral">${escapeHtml(String(users.length))} Accounts</span>
+        <div class="chip-list">
+          <span class="pill neutral">${escapeHtml(String(users.length))} Accounts</span>
+          <span class="pill amber">${escapeHtml(String(moderationLeadCount))} Moderationsleitung</span>
+          <span class="pill teal">${escapeHtml(String(moderatorCount))} Moderatoren</span>
+          <span class="pill sky">${escapeHtml(String(traineeCount))} Mitglieder</span>
+        </div>
       </div>
 
       ${
         canManageUsers()
           ? `
-            <form class="stack-form" data-form="admin-user-create">
-              <div class="form-grid">
-                <div class="field">
-                  <label for="newVrchatName">VRChat-Name</label>
-                  <input id="newVrchatName" name="vrchatName" type="text" required>
-                </div>
-                <div class="field">
-                  <label for="newDiscordName">Discord-Name</label>
-                  <input id="newDiscordName" name="discordName" type="text" required>
-                </div>
-                <div class="field">
-                  <label for="newRole">Rolle</label>
-                  <select id="newRole" name="role">${buildRoleOptions("member")}</select>
-                </div>
-                <div class="field">
-                  <label for="newAvatarFile">Profilbild</label>
-                  <input id="newAvatarFile" name="avatarFile" type="file" accept="image/*">
-                  ${renderAvatarDraftHint(createDraftKey, false)}
-                </div>
-                <div class="field">
-                  <label for="newPassword">Startpasswort</label>
-                  <input id="newPassword" name="password" type="password" required>
-                </div>
-                <div class="field">
-                  <label for="newCreatorVisible">Nach Freigabe im Creator-Bereich zeigen</label>
-                  <input id="newCreatorVisible" name="creatorVisible" type="checkbox">
-                </div>
-                <div class="field span-all">
-                  <label for="newBio">Kurzprofil</label>
-                  <textarea id="newBio" name="bio"></textarea>
-                </div>
-                <div class="field span-all">
-                  <label for="newContactNote">Kontakt / Hinweise</label>
-                  <textarea id="newContactNote" name="contactNote" placeholder="Discord-Server, Kontaktinfo oder kurze Hinweise"></textarea>
-                </div>
-                <div class="field">
-                  <label for="newCreatorBlurb">Creator-Text</label>
-                  <input id="newCreatorBlurb" name="creatorBlurb" type="text" placeholder="Kurztext fuer Creator-Bereich">
-                </div>
-                <div class="field span-all">
-                  <label for="newCreatorLinks">Creator-Links</label>
-                  <textarea id="newCreatorLinks" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...&#10;Spotify | https://..."></textarea>
-                </div>
+            <details class="mystic-expander editor-expander team-create-expander">
+              <summary>Neuen Account anlegen</summary>
+              <div class="mystic-expander-body">
+                <form class="stack-form" data-form="admin-user-create">
+                  <div class="form-grid">
+                    <div class="field">
+                      <label for="newVrchatName">VRChat-Name</label>
+                      <input id="newVrchatName" name="vrchatName" type="text" required>
+                    </div>
+                    <div class="field">
+                      <label for="newDiscordName">Discord-Name</label>
+                      <input id="newDiscordName" name="discordName" type="text" required>
+                    </div>
+                    <div class="field">
+                      <label for="newRole">Rolle</label>
+                      <select id="newRole" name="role">${buildRoleOptions("member")}</select>
+                    </div>
+                    <div class="field">
+                      <label for="newAvatarFile">Profilbild</label>
+                      <input id="newAvatarFile" name="avatarFile" type="file" accept="image/*">
+                      ${renderAvatarDraftHint(createDraftKey, false)}
+                    </div>
+                    <div class="field">
+                      <label for="newPassword">Startpasswort</label>
+                      <input id="newPassword" name="password" type="password" required>
+                    </div>
+                    <div class="field">
+                      <label for="newCreatorVisible">Nach Freigabe im Creator-Bereich zeigen</label>
+                      <input id="newCreatorVisible" name="creatorVisible" type="checkbox">
+                    </div>
+                    <div class="field span-all">
+                      <label for="newBio">Kurzprofil</label>
+                      <textarea id="newBio" name="bio"></textarea>
+                    </div>
+                    <div class="field span-all">
+                      <label for="newContactNote">Kontakt / Hinweise</label>
+                      <textarea id="newContactNote" name="contactNote" placeholder="Discord-Server, Kontaktinfo oder kurze Hinweise"></textarea>
+                    </div>
+                    <div class="field">
+                      <label for="newCreatorBlurb">Creator-Text</label>
+                      <input id="newCreatorBlurb" name="creatorBlurb" type="text" placeholder="Kurztext fuer Creator-Bereich">
+                    </div>
+                    <div class="field span-all">
+                      <label for="newCreatorLinks">Creator-Links</label>
+                      <textarea id="newCreatorLinks" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...&#10;Spotify | https://..."></textarea>
+                    </div>
+                  </div>
+                  <button type="submit">Account anlegen</button>
+                </form>
               </div>
-              <button type="submit">Account anlegen</button>
-            </form>
+            </details>
           `
           : ""
       }
@@ -5632,21 +5785,28 @@ function renderTeamPanelV2() {
             const creatorApplication = getCreatorApplicationMeta(user);
             const activityMeta = getUserActivityMeta(user);
             const availabilitySlots = getAvailabilitySlots(user);
-            const compactBio = truncateText(user.bio, 140);
-            const compactContact = truncateText(user.contactNote, 140);
             const availabilitySummary =
               user.role !== "member" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0) || user.availabilitySchedule || hasAvailabilitySlots(availabilitySlots))
                 ? `
                   <div class="team-user-availability">
                     ${(Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
                     ${renderAvailabilitySlotList(availabilitySlots, "")}
-                    ${user.availabilitySchedule ? `<p class="helper-text"><strong>Hinweise:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
-                  </div>
-                `
+                     ${user.availabilitySchedule ? `<p class="helper-text"><strong>Hinweise:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
+                   </div>
+                 `
                 : "";
             const profileDetails = [
-              user.bio ? renderExpandableTextBlock("Kurzprofil lesen", user.bio) : "",
-              user.contactNote ? renderExpandableTextBlock("Kontakt und Hinweise", user.contactNote) : "",
+              user.bio || user.contactNote
+                ? `
+                  <details class="mystic-expander">
+                    <summary>Profil und Kontakt</summary>
+                    <div class="mystic-expander-body compact-copy-stack">
+                      ${user.bio ? `<p class="helper-text"><strong>Kurzprofil:</strong> ${escapeHtml(user.bio)}</p>` : ""}
+                      ${user.contactNote ? `<p class="helper-text"><strong>Kontakt:</strong> ${escapeHtml(user.contactNote)}</p>` : ""}
+                    </div>
+                  </details>
+                `
+                : "",
               availabilitySummary
                 ? `
                   <details class="mystic-expander">
@@ -5682,19 +5842,18 @@ function renderTeamPanelV2() {
                   </div>
                   <span class="timeline-meta">${escapeHtml(String(shiftCount))} Schichten | ${escapeHtml(String(requestCount))} offen</span>
                 </div>
-                <div class="profile-head">
-                  ${renderUserAvatar(user, "profile-avatar")}
-                  <div class="team-user-copy">
-                    <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
-                    <p class="timeline-meta">Discord: ${escapeHtml(user.discordName || "-")}</p>
-                    <p class="timeline-meta">Zuletzt online: ${escapeHtml(activityMeta.seenLabel)}</p>
-                    <p class="timeline-meta">Letzter Login: ${escapeHtml(activityMeta.loginLabel)}</p>
-                    ${user.isBlocked ? `<p class="helper-text"><strong>Gesperrt:</strong> ${escapeHtml(user.blockReason || "Kein Grund angegeben.")}</p>` : ""}
-                    ${compactBio ? `<p class="helper-text team-user-teaser">${escapeHtml(compactBio)}</p>` : ""}
-                    ${compactContact ? `<p class="helper-text team-user-teaser">${escapeHtml(compactContact)}</p>` : ""}
-                    ${user.role !== "member" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
+                  <div class="profile-head">
+                    ${renderUserAvatar(user, "profile-avatar")}
+                    <div class="team-user-copy">
+                      <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
+                      <p class="timeline-meta">Discord: ${escapeHtml(user.discordName || "-")}</p>
+                      <p class="timeline-meta">Zuletzt online: ${escapeHtml(activityMeta.seenLabel)}</p>
+                      <p class="timeline-meta">Letzter Login: ${escapeHtml(activityMeta.loginLabel)}</p>
+                      ${user.creatorSlug ? `<p class="timeline-meta">Slash: ${escapeHtml(`/creator/${user.creatorSlug}`)}</p>` : ""}
+                      ${user.isBlocked ? `<p class="helper-text"><strong>Gesperrt:</strong> ${escapeHtml(user.blockReason || "Kein Grund angegeben.")}</p>` : ""}
+                      ${user.role !== "member" && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
+                    </div>
                   </div>
-                </div>
                 ${profileDetails}
 
                 ${
@@ -8271,7 +8430,7 @@ function getAssignableUsers() {
 
 function buildRoleOptions(selectedRole) {
   const normalizedRole = selectedRole === "viewer" ? "member" : selectedRole;
-  return ["member", "moderator", "planner", "admin"]
+  return ["member", "moderator", "moderation_lead", "planner", "admin"]
     .map(
       (role) => `
         <option value="${role}" ${role === normalizedRole ? "selected" : ""}>
@@ -8917,13 +9076,26 @@ function renderProfilePanel(managerView) {
   const creatorCommunity = getCreatorCommunityMeta(user);
   const creatorApplication = getCreatorApplicationMeta(user);
   const availabilitySlots = getAvailabilitySlots(user);
+  const creatorToolsOpen = Boolean(
+    user.creatorBlurb ||
+      user.creatorCommunityName ||
+      user.creatorSlug ||
+      user.creatorCommunityInviteUrl ||
+      user.creatorCommunitySummary ||
+      creatorPresence.status !== "offline" ||
+      user.creatorPresenceText ||
+      user.creatorPresenceUrl ||
+      (Array.isArray(user.creatorLinks) && user.creatorLinks.length)
+  );
+  const creatorApplicationOpen = Boolean(!creatorApplication.approved || creatorApplication.pending || creatorApplication.rejected);
 
   return `
     <section class="panel ${managerView ? "span-12" : "span-12"}">
       <div class="section-head">
         <div>
           <p class="eyebrow">Profil</p>
-          <h2>Dein Community-Profil</h2>
+          <h2>Dein Profil und dein Planungsrahmen</h2>
+          <p class="section-copy">Die Basisdaten bleiben oben. Alles, was du nur gelegentlich brauchst, liegt darunter in ruhigen Klappbereichen.</p>
         </div>
       </div>
 
@@ -8935,115 +9107,21 @@ function renderProfilePanel(managerView) {
             <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
             ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
             ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
-            ${showAvailabilityFields && (Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0)) ? `<p class="helper-text">Verfuegbar: ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
+            <div class="profile-summary-list">
+              ${showAvailabilityFields ? `<p><strong>Rahmen:</strong> ${escapeHtml(formatCapacityHours(user.weeklyHoursCapacity))} / ${escapeHtml(formatCapacityDays(user.weeklyDaysCapacity))}</p>` : ""}
+              ${showAvailabilityFields ? `<p><strong>Slots:</strong> ${escapeHtml(String(normalizeClientAvailabilitySlots(availabilitySlots).filter((slot) => slot.enabled && (slot.startTime || slot.endTime || slot.note)).length))} aktiv</p>` : ""}
+              ${showAvailabilityFields && user.availabilityUpdatedAt ? `<p><strong>Zuletzt gepflegt:</strong> ${escapeHtml(formatDateTime(user.availabilityUpdatedAt))}</p>` : ""}
+              <p><strong>Creator:</strong> ${escapeHtml(creatorApplication.title)}</p>
+            </div>
             ${showAvailabilityFields ? renderAvailabilitySlotList(availabilitySlots, "") : ""}
-            ${showAvailabilityFields && user.availabilitySchedule ? `<p class="helper-text"><strong>Hinweise:</strong> ${escapeHtml(user.availabilitySchedule)}</p>` : ""}
-            ${showAvailabilityFields && user.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(user.availabilityUpdatedAt))}</p>` : ""}
             <div class="creator-presence-inline">
               <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
               <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
               ${creatorPresence.updatedLabel ? `<span class="timeline-meta">${escapeHtml(creatorPresence.updatedLabel)}</span>` : ""}
             </div>
-            <p class="timeline-meta">${escapeHtml(creatorCommunity.name)}</p>
-            <p class="helper-text">${escapeHtml(creatorCommunity.summary)}</p>
-            ${
-              creatorCommunity.inviteUrl
-                ? `<a class="creator-action-link" href="${escapeHtml(creatorCommunity.inviteUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorCommunity.inviteLabel)}</a>`
-                : ""
-            }
-            <p class="helper-text">${escapeHtml(creatorPresence.summary)}</p>
-            <p class="helper-text">${escapeHtml(creatorApplication.summary)}</p>
-            ${
-              creatorPresence.actionUrl
-                ? `<a class="creator-action-link" href="${escapeHtml(creatorPresence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorPresence.actionLabel)}</a>`
-              : ""
-            }
-            ${renderCreatorLinkList(user, true)}
+            ${user.creatorSlug ? `<p class="timeline-meta">Slash-Seite: ${escapeHtml(`/creator/${user.creatorSlug}`)}</p>` : ""}
           </div>
         </div>
-
-        ${
-          showAvailabilityFields
-            ? `
-              <article class="mini-card">
-                <h3>Verfuegbarkeit fuer die Planung</h3>
-                <p class="helper-text">Hier tragen Moderatoren und Leitung ihre freien Stunden, Tage und konkreten Zeitfenster fuer die kommende Woche ein. Genau diese Angaben landen danach direkt in der Auslastung.</p>
-              </article>
-            `
-            : ""
-        }
-
-        <article class="mini-card creator-presence-preview">
-          <div class="status-row">
-            <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
-            ${creatorPresence.actionPlatform ? `<span class="timeline-meta">${escapeHtml(creatorPresence.actionPlatform.name)}</span>` : ""}
-          </div>
-          <h3>Sonara Live Status</h3>
-          <p class="helper-text">Wenn du streamst oder etwas Neues droppst, erscheint es hier fuer die Community. Plattformen erkennt das Portal direkt aus deinen Creator-Links.</p>
-          <p class="helper-text">${escapeHtml(creatorPresence.summary)}</p>
-          ${
-            creatorPresence.actionUrl
-              ? `<a class="creator-action-link" href="${escapeHtml(creatorPresence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorPresence.actionLabel)}</a>`
-              : '<p class="helper-text">Noch kein direkter Creator-Link aktiv. Sobald du unten einen Status und Link pflegst, tauchst du im Sonara-Live-Bereich auf.</p>'
-          }
-        </article>
-
-        <article class="mini-card creator-presence-preview">
-          <div class="status-row">
-            <span class="pill neutral">Creator Hub</span>
-            ${creatorCommunity.inviteUrl ? '<span class="timeline-meta">Mit Einstieg</span>' : '<span class="timeline-meta">Unter einem Dach</span>'}
-          </div>
-          <h3>${escapeHtml(creatorCommunity.name)}</h3>
-          <p class="helper-text">${escapeHtml(creatorCommunity.summary)}</p>
-          ${user.creatorSlug ? `<p class="timeline-meta">Seite: ${escapeHtml(`/creator/${user.creatorSlug}`)}</p>` : ""}
-          ${
-            creatorCommunity.inviteUrl
-              ? `<a class="creator-action-link" href="${escapeHtml(creatorCommunity.inviteUrl)}" target="_blank" rel="noreferrer">${escapeHtml(creatorCommunity.inviteLabel)}</a>`
-              : '<p class="helper-text">Wenn du magst, kannst du deiner Community hier einen eigenen Eingang geben, etwa einen Discord-, Twitch- oder Sammellink.</p>'
-          }
-          ${user.creatorSlug ? `<a class="creator-action-link" href="${escapeHtml(buildCreatorPublicPath(user))}">Slash-Seite ansehen</a>` : ""}
-        </article>
-
-        <section class="availability-form-shell creator-application-shell">
-          <div class="availability-form-head">
-            <div>
-              <p class="eyebrow">Creator-Pruefung</p>
-              <h3>Freischaltung fuer deinen eigenen Creator-Hub</h3>
-              <p class="helper-text">Damit nicht jeder sich einfach selbst zum Creator macht, landet dein Bereich erst nach einer kurzen Pruefung im Netzwerk. Aktuell ist ${escapeHtml(String(CREATOR_MIN_FOLLOWERS))}+ Follower die grobe Einstiegsschwelle.</p>
-            </div>
-            <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
-          </div>
-          <div class="creator-application-copy">
-            <p class="helper-text">${escapeHtml(creatorApplication.summary)}</p>
-            <div class="chip-list">
-              <span class="pill ${creatorApplication.thresholdMet ? "success" : "rose"}">${escapeHtml(creatorApplication.thresholdLabel)}</span>
-              ${creatorApplication.primaryPlatform ? `<span class="pill neutral">${escapeHtml(creatorApplication.primaryPlatform)}</span>` : ""}
-              ${creatorApplication.reviewedLabel ? `<span class="timeline-meta">${escapeHtml(creatorApplication.reviewedLabel)}</span>` : ""}
-            </div>
-            ${creatorApplication.reviewNote ? `<p class="helper-text"><strong>Rueckmeldung:</strong> ${escapeHtml(creatorApplication.reviewNote)}</p>` : ""}
-          </div>
-          <form class="stack-form creator-application-form" data-form="creator-application">
-            <div class="creator-presence-form-grid">
-              <div class="field">
-                <label for="profileCreatorPrimaryPlatform">Hauptplattform</label>
-                <input id="profileCreatorPrimaryPlatform" name="creatorPrimaryPlatform" type="text" value="${escapeHtml(user.creatorPrimaryPlatform || "")}" placeholder="TikTok, Twitch, YouTube ...">
-              </div>
-              <div class="field">
-                <label for="profileCreatorFollowerCount">Follower</label>
-                <input id="profileCreatorFollowerCount" name="creatorFollowerCount" type="number" min="0" step="1" value="${escapeHtml(String(user.creatorFollowerCount || ""))}" placeholder="z. B. 520">
-              </div>
-              <div class="field span-all">
-                <label for="profileCreatorProofUrl">Nachweis-Link</label>
-                <input id="profileCreatorProofUrl" name="creatorProofUrl" type="url" value="${escapeHtml(user.creatorProofUrl || "")}" placeholder="Profil, Kanal oder Linktree mit sichtbaren Zahlen">
-              </div>
-              <div class="field span-all">
-                <label for="profileCreatorApplicationNote">Kurze Einordnung fuer die Leitung</label>
-                <textarea id="profileCreatorApplicationNote" name="creatorApplicationNote" placeholder="Worum geht es bei deinem Content und was soll dein Hub hier spaeter sammeln?">${escapeHtml(user.creatorApplicationNote || "")}</textarea>
-              </div>
-            </div>
-            <button type="submit">${creatorApplication.pending ? "Bewerbung aktualisieren" : creatorApplication.rejected ? "Erneut pruefen lassen" : "Creator-Pruefung absenden"}</button>
-          </form>
-        </section>
 
         <form class="stack-form" data-form="profile-update">
           <div class="form-grid">
@@ -9075,12 +9153,12 @@ function renderProfilePanel(managerView) {
             ${
               showAvailabilityFields
                 ? `
-                  <div class="span-all availability-form-shell">
+                  <div class="span-all availability-form-shell compact">
                     <div class="availability-form-head">
                       <div>
                         <p class="eyebrow">Verfuegbarkeit</p>
                         <h3>Dein Wochenrahmen fuer die Planung</h3>
-                        <p class="helper-text">Hier kannst du dir in Ruhe Stunden, Tage und konkrete Zeitfenster fuer die kommende Woche eintragen. Live-Updates halten deine offenen Eingaben jetzt fest.</p>
+                        <p class="helper-text">Stunden, Tage und Slots in einem Block. Hinweise kommen nur noch extra darunter.</p>
                       </div>
                       <span class="pill neutral">Staff-Planung</span>
                     </div>
@@ -9096,40 +9174,51 @@ function renderProfilePanel(managerView) {
                       <div class="field span-all">
                         <label for="profileAvailabilitySchedule">Zeitfenster fuer diese Woche</label>
                         ${renderAvailabilitySlotsEditor(availabilitySlots, "profile-availability")}
-                        <p class="helper-text">Bitte trage hier moeglichst konkret pro Tag ein, wann du Zeit hast. Die Leitung plant damit direkt weiter, deshalb bleiben deine Eingaben jetzt auch bei Hintergrund-Updates stabil stehen.</p>
+                        <p class="helper-text">Bitte pro Tag moeglichst konkret eintragen. Die Leitung plant direkt mit diesen Slots weiter.</p>
                       </div>
                       <div class="field span-all">
                         <label for="profileAvailabilitySchedule">Zusatzhinweise fuer diese Woche</label>
                         <textarea id="profileAvailabilitySchedule" name="availabilitySchedule" placeholder="z. B. Freitag eventuell spaeter oder Sonntag nur spontan erreichbar.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
-                        <p class="helper-text">Hier kommen nur noch Hinweise dazu, nicht mehr die Haupt-Zeitfenster.</p>
+                        <p class="helper-text">Nur fuer Sonderfaelle oder kurze Ergaenzungen.</p>
                       </div>
                     </div>
                   </div>
                 `
                 : ""
             }
-            <div class="field">
-              <label for="profileCreatorBlurb">Creator-Text</label>
-              <input id="profileCreatorBlurb" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}" placeholder="z. B. Musik, Clips, Streams">
-            </div>
-            ${
-              creatorApplication.approved
-                ? `
-                  <div class="field">
-                    <label for="profileCreatorVisible">Im Creator-Bereich zeigen</label>
-                    <input id="profileCreatorVisible" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
-                  </div>
-                `
-                : `
-                  <div class="field">
-                    <label>Creator-Freigabe</label>
-                    <div class="input-like">
-                      <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
+            <div class="span-all">
+              <details class="mystic-expander profile-secondary-expander" ${creatorToolsOpen || creatorApplication.approved ? "open" : ""}>
+                <summary>Creator-Bereich und Sonara Live</summary>
+                <div class="mystic-expander-body profile-creator-stack">
+                  <div class="form-grid profile-core-grid">
+                    <div class="field">
+                      <label for="profileCreatorBlurb">Creator-Text</label>
+                      <input id="profileCreatorBlurb" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}" placeholder="z. B. Musik, Clips, Streams">
                     </div>
+                    ${
+                      creatorApplication.approved
+                        ? `
+                          <div class="field">
+                            <label for="profileCreatorVisible">Im Creator-Bereich zeigen</label>
+                            <input id="profileCreatorVisible" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
+                          </div>
+                        `
+                        : `
+                          <div class="field">
+                            <label>Creator-Freigabe</label>
+                            <div class="input-like">
+                              <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
+                            </div>
+                          </div>
+                        `
+                    }
                   </div>
-                `
-            }
-            <div class="span-all availability-form-shell creator-presence-shell">
+                  <div class="creator-presence-inline">
+                    <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
+                    <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
+                    ${creatorPresence.updatedLabel ? `<span class="timeline-meta">${escapeHtml(creatorPresence.updatedLabel)}</span>` : ""}
+                  </div>
+                  <div class="availability-form-shell creator-presence-shell compact">
               <div class="availability-form-head">
                 <div>
                   <p class="eyebrow">Creator Community</p>
@@ -9158,7 +9247,7 @@ function renderProfilePanel(managerView) {
                 </div>
               </div>
             </div>
-            <div class="span-all availability-form-shell creator-presence-shell">
+            <div class="availability-form-shell creator-presence-shell compact">
               <div class="availability-form-head">
                 <div>
                   <p class="eyebrow">Sonara Live</p>
@@ -9190,6 +9279,10 @@ function renderProfilePanel(managerView) {
             <div class="field span-all">
               <label for="profileCreatorLinks">Creator-Links</label>
               <textarea id="profileCreatorLinks" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...&#10;Twitch | https://...&#10;YouTube | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
+            </div>
+            ${renderCreatorLinkList(user, true)}
+                </div>
+              </details>
             </div>
           </div>
           <button type="submit">Profil speichern</button>
@@ -9297,6 +9390,111 @@ function getChatFeed(mode = "community") {
   );
 }
 
+function renderCreatorBuilderPanel() {
+  const user = state.session;
+  if (!user) return "";
+
+  const creatorPresence = getCreatorPresenceMeta(user);
+  const creatorCommunity = getCreatorCommunityMeta(user);
+  const creatorApplication = getCreatorApplicationMeta(user);
+  const publicPath = user.creatorSlug ? buildCreatorPublicPath(user) : "";
+  const hubReady = Boolean(user.creatorSlug && creatorCommunity.name && (user.creatorCommunitySummary || user.creatorBlurb));
+
+  return `
+    <section class="panel span-12 creator-builder-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Mein Creator-Hub</p>
+          <h2>Slash-Seite und Creator-Ecke direkt bauen</h2>
+          <p class="section-copy">Hier baust du deinen eigenen kleinen Bereich unter SONARA. Die oeffentliche Freigabe haengt weiter an der Creator-Pruefung, aber du kannst Namen, Slash-Adresse, Einstieg und Live-Status schon komplett vorbereiten.</p>
+        </div>
+        <div class="chip-list">
+          <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
+          <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
+        </div>
+      </div>
+
+      <div class="creator-builder-grid">
+        <article class="mini-card creator-builder-preview">
+          <div class="status-row">
+            <span class="pill neutral">Vorschau</span>
+            <span class="pill ${hubReady ? "success" : "amber"}">${escapeHtml(hubReady ? "Hub vorbereitet" : "Noch unvollstaendig")}</span>
+          </div>
+          <h3>${escapeHtml(creatorCommunity.name)}</h3>
+          <p class="helper-text">${escapeHtml(creatorCommunity.summary)}</p>
+          <p class="timeline-meta">${publicPath ? escapeHtml(publicPath) : "/creator/dein-slug"}</p>
+          <p class="helper-text">${escapeHtml(creatorPresence.summary)}</p>
+          <div class="chip-list">
+            <span class="pill neutral">${escapeHtml(user.creatorBlurb || "Noch kein Creator-Text")}</span>
+            ${creatorCommunity.inviteUrl ? `<span class="pill sky">Einstiegslink gesetzt</span>` : '<span class="pill neutral">Noch kein Einstiegslink</span>'}
+          </div>
+          <div class="creator-community-actions">
+            ${publicPath ? `<a class="creator-action-link" href="${escapeHtml(publicPath)}" target="_blank" rel="noreferrer">Slash-Seite ansehen</a>` : ""}
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Vollprofil oeffnen</button>
+          </div>
+        </article>
+
+        <form class="stack-form creator-builder-form" data-form="creator-hub-update">
+          <div class="creator-presence-form-grid">
+            <div class="field">
+              <label for="creatorHubCommunityName">Name deiner Community</label>
+              <input id="creatorHubCommunityName" name="creatorCommunityName" type="text" value="${escapeHtml(user.creatorCommunityName || "")}" placeholder="z. B. House of Mika">
+            </div>
+            <div class="field">
+              <label for="creatorHubSlug">Slash-Adresse</label>
+              <input id="creatorHubSlug" name="creatorSlug" type="text" value="${escapeHtml(user.creatorSlug || "")}" placeholder="z. B. house-of-mika">
+            </div>
+            <div class="field">
+              <label for="creatorHubInviteUrl">Einstiegslink</label>
+              <input id="creatorHubInviteUrl" name="creatorCommunityInviteUrl" type="url" value="${escapeHtml(user.creatorCommunityInviteUrl || "")}" placeholder="Discord, Linktree oder Sammellink">
+            </div>
+            <div class="field">
+              <label for="creatorHubBlurb">Kurzer Creator-Text</label>
+              <input id="creatorHubBlurb" name="creatorBlurb" type="text" value="${escapeHtml(user.creatorBlurb || "")}" placeholder="z. B. Musik, Clips, Streams">
+            </div>
+            <div class="field span-all">
+              <label for="creatorHubSummary">Kurzbeschreibung deiner Community</label>
+              <textarea id="creatorHubSummary" name="creatorCommunitySummary" placeholder="Worum geht es in deiner Community und was sollen Leute dort finden?">${escapeHtml(user.creatorCommunitySummary || "")}</textarea>
+            </div>
+            <div class="field">
+              <label for="creatorHubPresence">Sonara Live Status</label>
+              <select id="creatorHubPresence" name="creatorPresence">
+                <option value="offline" ${creatorPresence.status === "offline" ? "selected" : ""}>Zurzeit ruhig</option>
+                <option value="live" ${creatorPresence.status === "live" ? "selected" : ""}>Ich bin gerade live</option>
+                <option value="new-release" ${creatorPresence.status === "new-release" ? "selected" : ""}>Ich habe etwas Neues hochgeladen</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="creatorHubPresenceUrl">Direkter Link</label>
+              <input id="creatorHubPresenceUrl" name="creatorPresenceUrl" type="url" value="${escapeHtml(user.creatorPresenceUrl || "")}" placeholder="Stream, neues Video oder Profil-Link">
+            </div>
+            <div class="field span-all">
+              <label for="creatorHubPresenceText">Kurztext fuer Sonara Live</label>
+              <textarea id="creatorHubPresenceText" name="creatorPresenceText" placeholder="z. B. Heute Abend live ab 20 Uhr oder neuer Upload ist online.">${escapeHtml(user.creatorPresenceText || "")}</textarea>
+            </div>
+            <div class="field span-all">
+              <label for="creatorHubLinks">Creator-Links</label>
+              <textarea id="creatorHubLinks" name="creatorLinks" placeholder="Discord | https://...&#10;TikTok | https://...&#10;Twitch | https://...&#10;YouTube | https://...">${escapeHtml(renderCreatorLinksText(user))}</textarea>
+            </div>
+            ${
+              creatorApplication.approved
+                ? `
+                  <div class="field">
+                    <label for="creatorHubVisible">Im Creator-Bereich zeigen</label>
+                    <input id="creatorHubVisible" name="creatorVisible" type="checkbox" ${user.creatorVisible ? "checked" : ""}>
+                  </div>
+                `
+                : ""
+            }
+          </div>
+          <p class="helper-text">Die Slash-Seite wird automatisch unter <code>/creator/dein-slug</code> aufgebaut. Wenn die Creator-Pruefung noch offen ist, speicherst du hier trotzdem schon alles vor.</p>
+          <button type="submit">Creator-Hub speichern</button>
+        </form>
+      </div>
+    </section>
+  `;
+}
+
 function renderCreatorsPanel(managerView) {
   const creators = getCreatorEntries();
   const creatorActivity = getCreatorActivityEntries(4);
@@ -9316,6 +9514,7 @@ function renderCreatorsPanel(managerView) {
           ${pendingApplications.length ? `<span class="pill amber">${escapeHtml(String(pendingApplications.length))} Pruefungen offen</span>` : ""}
         </div>
       </div>
+      ${renderCreatorBuilderPanel()}
       ${
         managerView
           ? `<p class="helper-text">Creator pflegen ihre Hub-Daten weiterhin im Profil. Freigaben selbst laufen jetzt getrennt ueber die Creator-Pruefung, damit niemand sich den Bereich einfach selbst zuschalten kann.</p>`
@@ -11031,9 +11230,6 @@ function renderDashboard() {
         chips: [ROLE_LABELS[user.role] || user.role, user.vrchatName || "", user.discordName || ""].filter(Boolean)
       })}
       <div class="dashboard-shell">
-        ${renderFlash()}
-        ${renderSystemNoticeBanner()}
-        ${renderShiftReminderBanner()}
         <section class="panel toolbar">
           <div class="toolbar-user">
             ${renderUserAvatar(user, "toolbar-avatar")}
@@ -11047,11 +11243,16 @@ function renderDashboard() {
             <button type="button" class="ghost small" data-action="logout">Abmelden</button>
           </div>
         </section>
-        ${renderStatsStrip()}
         <div class="dashboard-layout">
           ${renderDashboardTabs(activeTab)}
-          <div class="dashboard-grid focused-grid dashboard-main">
-            ${manager ? renderManagerDashboard(activeTab) : staff ? renderModeratorDashboard(activeTab) : renderMemberDashboard(activeTab)}
+          <div class="dashboard-main-stack">
+            ${renderFlash()}
+            ${renderSystemNoticeBanner()}
+            ${renderShiftReminderBanner()}
+            ${renderStatsStrip()}
+            <div class="dashboard-grid focused-grid dashboard-main">
+              ${manager ? renderManagerDashboard(activeTab) : staff ? renderModeratorDashboard(activeTab) : renderMemberDashboard(activeTab)}
+            </div>
           </div>
         </div>
       </div>
