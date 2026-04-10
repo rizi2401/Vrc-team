@@ -237,6 +237,9 @@ async function handleApi(req, res, url) {
       creatorPresenceText: normalized.creatorPresenceText,
       creatorPresenceUrl: normalized.creatorPresenceUrl,
       creatorPresenceUpdatedAt: normalized.creatorPresenceUpdatedAt,
+      creatorWebhookToken: createCreatorWebhookToken(),
+      creatorAutomationLastAt: "",
+      creatorAutomationLastSource: "",
       weeklyHoursCapacity: normalized.weeklyHoursCapacity,
       weeklyDaysCapacity: normalized.weeklyDaysCapacity,
       overtimeAdjustments: [],
@@ -270,6 +273,39 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/public") {
     const store = readStore();
     sendJson(res, 200, buildPublicPortalData(store));
+    return;
+  }
+
+  const creatorWebhookMatch = url.pathname.match(/^\/api\/creator-presence\/webhook\/([^/]+)$/);
+  if (creatorWebhookMatch && req.method === "POST") {
+    const token = normalizeCreatorWebhookToken(decodeURIComponent(creatorWebhookMatch[1]), { allowEmpty: false });
+    const store = readStore();
+    const nextStore = structuredClone(store);
+    const target = nextStore.users.find((entry) => entry.creatorWebhookToken === token && !entry.isBlocked);
+
+    if (!target) {
+      sendJson(res, 404, { error: "Webhook nicht gefunden." });
+      return;
+    }
+
+    const body = await readJson(req);
+    const normalized = validateCreatorPresenceWebhookPayload(body, target);
+    target.creatorPresence = normalized.creatorPresence;
+    target.creatorPresenceText = normalized.creatorPresenceText;
+    target.creatorPresenceUrl = normalized.creatorPresenceUrl;
+    target.creatorPresenceUpdatedAt =
+      normalized.creatorPresence !== "offline" || normalized.creatorPresenceText || normalized.creatorPresenceUrl ? new Date().toISOString() : "";
+    target.creatorAutomationLastAt = new Date().toISOString();
+    target.creatorAutomationLastSource = normalized.source;
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "creator-presence-webhook", userId: target.id, status: normalized.creatorPresence });
+    sendJson(res, 200, {
+      ok: true,
+      creatorId: target.id,
+      status: normalized.creatorPresence,
+      updatedAt: target.creatorPresenceUpdatedAt || target.creatorAutomationLastAt
+    });
     return;
   }
 
@@ -313,6 +349,25 @@ async function handleApi(req, res, url) {
 
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "profile-updated" });
+    sendPortalData(res, 200, target, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/profile/creator-webhook/rotate") {
+    const nextStore = structuredClone(auth.store);
+    const target = nextStore.users.find((entry) => entry.id === auth.user.id);
+
+    if (!target) {
+      sendJson(res, 404, { error: "Profil nicht gefunden." });
+      return;
+    }
+
+    target.creatorWebhookToken = createCreatorWebhookToken();
+    target.creatorAutomationLastAt = "";
+    target.creatorAutomationLastSource = "";
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "creator-webhook-rotated", userId: target.id });
     sendPortalData(res, 200, target, savedStore);
     return;
   }
@@ -684,6 +739,34 @@ async function handleApi(req, res, url) {
     nextStore.systemNotice = buildEmptySystemNotice();
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "system-notice-cleared" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/promo-video") {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const normalized = validatePromoVideoPayload(body);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.promoVideo = {
+      ...normalized,
+      updatedAt: new Date().toISOString(),
+      updatedBy: auth.user.id
+    };
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "promo-video-updated" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "DELETE" && url.pathname === "/api/promo-video") {
+    requireRole(auth.user, "planner");
+    const nextStore = structuredClone(auth.store);
+    nextStore.promoVideo = buildEmptyPromoVideo();
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "promo-video-cleared" });
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -1508,6 +1591,7 @@ function buildDefaultStore() {
       tasks: ["Begruessung", "Patrouille", "Support", "Event-Leitung", "Koordination"]
     },
     systemNotice: buildEmptySystemNotice(),
+    promoVideo: buildEmptyPromoVideo(),
     shifts: [
       buildShift(addDays(today, 0), "12:00", "16:00", "Kernschicht", "Community Hub", "Begruessung", userByName.get("Aiko"), "Neue User zuerst einsammeln.", true),
       buildShift(addDays(today, 0), "14:00", "18:00", "Zwischenschicht", "Sunset Lounge", "Patrouille", userByName.get("Mika"), "Fokus auf Stoerungen in Public Bereichen."),
@@ -1589,6 +1673,9 @@ function buildSeedUser(
     weeklyHoursCapacity: normalizeWeeklyHoursCapacity(weeklyHoursCapacity),
     weeklyDaysCapacity: normalizeWeeklyDaysCapacity(weeklyDaysCapacity),
     overtimeAdjustments: [],
+    creatorWebhookToken: createCreatorWebhookToken(),
+    creatorAutomationLastAt: "",
+    creatorAutomationLastSource: "",
     lastLoginAt: "",
     lastSeenAt: "",
     passwordHash: hashPassword(password)
@@ -1849,6 +1936,17 @@ function buildEmptySystemNotice() {
   };
 }
 
+function buildEmptyPromoVideo() {
+  return {
+    enabled: false,
+    title: "",
+    intro: "",
+    url: "",
+    updatedAt: "",
+    updatedBy: ""
+  };
+}
+
 function normalizeSystemNoticeTone(value) {
   return ["info", "warning", "danger"].includes(value) ? value : "warning";
 }
@@ -1874,6 +1972,42 @@ function decorateSystemNotice(source, store) {
     ...normalized,
     updatedByName: normalized.updatedBy ? findUserName(store.users || [], normalized.updatedBy) : ""
   };
+}
+
+function normalizePromoVideo(source) {
+  const fallback = buildEmptyPromoVideo();
+  if (!source || typeof source !== "object") return fallback;
+
+  return {
+    enabled: normalizeBooleanInput(source.enabled),
+    title: String(source.title || "").trim().slice(0, 120),
+    intro: String(source.intro || "").trim().slice(0, 500),
+    url: normalizeExternalLink(source.url),
+    updatedAt: isIsoDate(source.updatedAt) ? source.updatedAt : "",
+    updatedBy: String(source.updatedBy || "").trim()
+  };
+}
+
+function decoratePromoVideo(source, store) {
+  const normalized = normalizePromoVideo(source);
+  return {
+    ...normalized,
+    updatedByName: normalized.updatedBy ? findUserName(store.users || [], normalized.updatedBy) : ""
+  };
+}
+
+function createCreatorWebhookToken() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+function normalizeCreatorWebhookToken(value, options = {}) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (/^[a-f0-9]{32,64}$/.test(normalized)) return normalized;
+  return options.allowEmpty ? "" : createCreatorWebhookToken();
+}
+
+function normalizeCreatorAutomationSource(value) {
+  return String(value || "").trim().slice(0, 80);
 }
 
 function normalizeChatMessages(messages, users, shifts) {
@@ -2355,6 +2489,9 @@ function sanitizeSessionUser(user) {
     creatorApplicationNote: normalizeCreatorApplicationNote(user.creatorApplicationNote),
     creatorReviewNote: normalizeCreatorReviewNote(user.creatorReviewNote),
     creatorReviewedAt: isIsoDate(user.creatorReviewedAt) ? user.creatorReviewedAt : "",
+    creatorWebhookToken: normalizeCreatorWebhookToken(user.creatorWebhookToken),
+    creatorAutomationLastAt: isIsoDate(user.creatorAutomationLastAt) ? user.creatorAutomationLastAt : "",
+    creatorAutomationLastSource: normalizeCreatorAutomationSource(user.creatorAutomationLastSource),
     vrchatLinkedAt: isIsoDate(user.vrchatLinkedAt) ? user.vrchatLinkedAt : "",
     vrchatLinkSource: normalizeVrchatLinkSource(user.vrchatLinkSource)
   };
@@ -2871,6 +3008,7 @@ function normalizeStore(store) {
     users,
     settings,
     systemNotice: normalizeSystemNotice(store?.systemNotice),
+    promoVideo: normalizePromoVideo(store?.promoVideo),
     shifts,
     events,
     requests: normalizeRequests(store?.requests, users),
@@ -3363,6 +3501,7 @@ function buildPublicPortalData(store) {
     feedPosts: publicFeedPosts,
     forumThreads: publicForumThreads,
     systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
     announcements: store.announcements
       .slice()
       .sort((left, right) => {
@@ -3882,6 +4021,66 @@ function validateSystemNoticePayload(body) {
     title,
     body: bodyText,
     contactHint
+  };
+}
+
+function validatePromoVideoPayload(body) {
+  const enabled = normalizeBooleanInput(body.enabled);
+  const title = String(body.title || "").trim().slice(0, 120);
+  const intro = String(body.intro || "").trim().slice(0, 500);
+  const url = normalizeExternalLink(body.url);
+
+  if (body.url && !url) {
+    const error = new Error("Bitte eine gueltige Video-URL angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (enabled && !url) {
+    const error = new Error("Zum sichtbaren Promo-Video wird eine gueltige URL gebraucht.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    enabled: Boolean(enabled && url),
+    title,
+    intro,
+    url
+  };
+}
+
+function validateCreatorPresenceWebhookPayload(body, target) {
+  const eventType = String(body?.event || "").trim().toLowerCase();
+  let creatorPresence =
+    body?.status !== undefined || body?.creatorPresence !== undefined
+      ? normalizeCreatorPresence(body?.status ?? body?.creatorPresence)
+      : normalizeCreatorPresence(target?.creatorPresence);
+  if (eventType) {
+    if (["live", "live.start", "stream.online", "online", "go-live"].includes(eventType)) creatorPresence = "live";
+    if (["offline", "live.stop", "stream.offline", "stop-live"].includes(eventType)) creatorPresence = "offline";
+    if (["release", "upload", "new-release", "video.published", "content.published"].includes(eventType)) creatorPresence = "new-release";
+  }
+
+  const rawUrl = body?.url ?? body?.creatorPresenceUrl;
+  const rawText = body?.text ?? body?.creatorPresenceText;
+  const creatorPresenceUrl =
+    rawUrl !== undefined ? normalizeCreatorPresenceUrl(rawUrl) : normalizeCreatorPresenceUrl(target?.creatorPresenceUrl);
+  const creatorPresenceText =
+    rawText !== undefined ? normalizeCreatorPresenceText(rawText) : normalizeCreatorPresenceText(target?.creatorPresenceText);
+  const source = normalizeCreatorAutomationSource(body?.source || body?.platform || body?.provider || body?.service || "Automation");
+
+  if (rawUrl !== undefined && rawUrl && !creatorPresenceUrl) {
+    const error = new Error("Der uebergebene Live- oder Upload-Link ist nicht gueltig.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    creatorPresence,
+    creatorPresenceText,
+    creatorPresenceUrl,
+    source
   };
 }
 
@@ -5096,6 +5295,7 @@ function projectDataForRole(user, store) {
     community,
     announcements,
     systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
     directory,
     communityChatMessages,
     staffChatMessages,
@@ -5172,6 +5372,7 @@ function projectDataForRole(user, store) {
     community,
     announcements,
     systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
     directory,
     communityChatMessages,
     staffChatMessages,
@@ -5380,6 +5581,9 @@ function normalizeUsers(users, legacyModeratorNames) {
     const creatorPresenceText = normalizeCreatorPresenceText(entry.creatorPresenceText);
     const creatorPresenceUrl = normalizeCreatorPresenceUrl(entry.creatorPresenceUrl);
     const creatorPresenceUpdatedAt = isIsoDate(entry.creatorPresenceUpdatedAt) ? entry.creatorPresenceUpdatedAt : "";
+    const creatorWebhookToken = normalizeCreatorWebhookToken(entry.creatorWebhookToken);
+    const creatorAutomationLastAt = isIsoDate(entry.creatorAutomationLastAt) ? entry.creatorAutomationLastAt : "";
+    const creatorAutomationLastSource = normalizeCreatorAutomationSource(entry.creatorAutomationLastSource);
     const vrchatLinkedAt = isIsoDate(entry.vrchatLinkedAt) ? entry.vrchatLinkedAt : "";
     const vrchatLinkSource = normalizeVrchatLinkSource(entry.vrchatLinkSource);
     const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(entry.weeklyHoursCapacity);
@@ -5431,6 +5635,9 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorPresenceText,
       creatorPresenceUrl,
       creatorPresenceUpdatedAt,
+      creatorWebhookToken,
+      creatorAutomationLastAt,
+      creatorAutomationLastSource,
       vrchatLinkedAt,
       vrchatLinkSource,
       weeklyHoursCapacity,
@@ -5488,6 +5695,9 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorPresenceText: "",
       creatorPresenceUrl: "",
       creatorPresenceUpdatedAt: "",
+      creatorWebhookToken: createCreatorWebhookToken(),
+      creatorAutomationLastAt: "",
+      creatorAutomationLastSource: "",
       vrchatLinkedAt: "",
       vrchatLinkSource: "",
       weeklyHoursCapacity: 0,
@@ -5796,6 +6006,7 @@ function normalizeStore(store) {
     users,
     settings,
     systemNotice: normalizeSystemNotice(store?.systemNotice),
+    promoVideo: normalizePromoVideo(store?.promoVideo),
     shifts,
     events,
     requests: Array.isArray(store?.requests) ? normalizeRequests(store.requests, users) : [],
@@ -5833,6 +6044,7 @@ function projectDataForRole(user, store) {
     community,
     announcements,
     systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
     directory,
     communityChatMessages,
     staffChatMessages,
@@ -6359,6 +6571,7 @@ function projectDataForRole(user, store) {
     community,
     announcements,
     systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
     directory,
     communityChatMessages,
     staffChatMessages,

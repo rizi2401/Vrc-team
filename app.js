@@ -207,7 +207,8 @@ function shouldClearFormDraftAfterSuccess(formName) {
     "user-update",
     "profile-update",
     "creator-hub-update",
-    "availability-update"
+    "availability-update",
+    "promo-video"
   ].includes(String(formName || ""));
 }
 
@@ -4243,6 +4244,14 @@ function renderSettingsPanel() {
     updatedAt: "",
     updatedByName: ""
   };
+  const promoVideo = state.data?.promoVideo || {
+    enabled: false,
+    title: "",
+    intro: "",
+    url: "",
+    updatedAt: "",
+    updatedByName: ""
+  };
 
   return `
     <section class="panel span-4">
@@ -4315,6 +4324,61 @@ function renderSettingsPanel() {
           ${
             notice.enabled
               ? '<button type="button" class="ghost small" data-action="clear-system-notice">Hinweis entfernen</button>'
+              : ""
+          }
+        </div>
+      </form>
+    </section>
+
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Landing Video</p>
+          <h2>Werbevideo auf der Startseite</h2>
+          <p class="section-copy">Hier kannst du dein Promo- oder Trailer-Video direkt auf die oeffentliche SONARA-Seite legen. Unterstuetzt werden YouTube, Twitch und direkte MP4/WebM-Links.</p>
+        </div>
+        ${
+          promoVideo.enabled
+            ? '<span class="pill amber">Aktiv</span>'
+            : '<span class="pill neutral">Inaktiv</span>'
+        }
+      </div>
+
+      <form class="stack-form" data-form="promo-video">
+        <div class="form-grid">
+          <div class="field">
+            <label for="promoVideoTitle">Titel</label>
+            <input id="promoVideoTitle" name="title" type="text" value="${escapeHtml(promoVideo.title || "")}" placeholder="z. B. Willkommen in SONARA">
+          </div>
+          <div class="field checkbox-field">
+            <label class="checkbox-row" for="promoVideoEnabled">
+              <input id="promoVideoEnabled" name="enabled" type="checkbox" ${promoVideo.enabled ? "checked" : ""}>
+              <span>Video auf der Startseite sichtbar schalten</span>
+            </label>
+            <p class="helper-text">Autoplay laeuft aus Browsergruenden stumm, aber mit Controls.</p>
+          </div>
+          <div class="field span-all">
+            <label for="promoVideoIntro">Kurztext</label>
+            <textarea id="promoVideoIntro" name="intro" placeholder="Kurzer Introtext unter oder neben dem Video.">${escapeHtml(promoVideo.intro || "")}</textarea>
+          </div>
+          <div class="field span-all">
+            <label for="promoVideoUrl">Video-URL</label>
+            <input id="promoVideoUrl" name="url" type="url" value="${escapeHtml(promoVideo.url || "")}" placeholder="YouTube, Twitch oder direkter MP4/WebM-Link">
+            <p class="helper-text">Beispiel: YouTube-Link, Twitch-Kanal/Video oder ein direkter Link auf eine Videodatei.</p>
+          </div>
+        </div>
+
+        ${
+          promoVideo.updatedAt
+            ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(promoVideo.updatedAt))}${promoVideo.updatedByName ? ` von ${escapeHtml(promoVideo.updatedByName)}` : ""}</p>`
+            : ""
+        }
+
+        <div class="card-actions">
+          <button type="submit">Promo-Video speichern</button>
+          ${
+            promoVideo.enabled || promoVideo.url
+              ? '<button type="button" class="ghost small" data-action="clear-promo-video">Promo-Video entfernen</button>'
               : ""
           }
         </div>
@@ -5207,6 +5271,30 @@ async function handleClick(event) {
           }),
         "Systemhinweis wurde entfernt.",
         "warning"
+      );
+      break;
+
+    case "clear-promo-video":
+      if (!window.confirm("Das sichtbare Promo-Video wirklich entfernen?")) return;
+      await performAction(
+        () =>
+          api("/api/promo-video", {
+            method: "DELETE"
+          }),
+        "Promo-Video wurde entfernt.",
+        "warning"
+      );
+      break;
+
+    case "rotate-creator-webhook":
+      if (!window.confirm("Webhook wirklich neu erzeugen? Alte Automationen muessen danach die neue URL bekommen.")) return;
+      await performAction(
+        () =>
+          api("/api/profile/creator-webhook/rotate", {
+            method: "POST",
+            body: "{}"
+          }),
+        "Creator-Webhook wurde neu erzeugt."
       );
       break;
 
@@ -7227,6 +7315,43 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "system-notice": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/system-notice", {
+            method: "PUT",
+            body: JSON.stringify({
+              enabled: formData.get("enabled") === "on",
+              tone: formData.get("tone"),
+              title: formData.get("title"),
+              body: formData.get("body"),
+              contactHint: formData.get("contactHint")
+            })
+          }),
+        "Systemhinweis wurde aktualisiert."
+      );
+      break;
+    }
+
+    case "promo-video": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/promo-video", {
+            method: "PUT",
+            body: JSON.stringify({
+              enabled: formData.get("enabled") === "on",
+              title: formData.get("title"),
+              intro: formData.get("intro"),
+              url: formData.get("url")
+            })
+          }),
+        "Promo-Video wurde aktualisiert."
+      );
+      break;
+    }
+
     case "event-create": {
       const formData = new FormData(form);
       await performAction(
@@ -7625,6 +7750,31 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "creator-hub-update": {
+      const formData = new FormData(form);
+      const payload = {
+        creatorBlurb: formData.get("creatorBlurb"),
+        creatorLinks: formData.get("creatorLinks"),
+        creatorVisible: formData.get("creatorVisible") === "on",
+        creatorSlug: formData.get("creatorSlug"),
+        creatorCommunityName: formData.get("creatorCommunityName"),
+        creatorCommunitySummary: formData.get("creatorCommunitySummary"),
+        creatorCommunityInviteUrl: formData.get("creatorCommunityInviteUrl"),
+        creatorPresence: formData.get("creatorPresence"),
+        creatorPresenceText: formData.get("creatorPresenceText"),
+        creatorPresenceUrl: formData.get("creatorPresenceUrl")
+      };
+      await performAction(
+        () =>
+          api("/api/profile", {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          }),
+        "Creator-Hub wurde aktualisiert."
+      );
+      break;
+    }
+
     case "availability-update": {
       const { payload } = buildAvailabilityPayload(form);
       await performAction(
@@ -7743,6 +7893,152 @@ function renderSystemNoticeBanner() {
             ? `<span class="timeline-meta">Aktualisiert ${escapeHtml(formatDateTime(notice.updatedAt))}${notice.updatedByName ? ` von ${escapeHtml(notice.updatedByName)}` : ""}</span>`
             : ""
         }
+      </div>
+    </section>
+  `;
+}
+
+function getPromoVideo() {
+  const video = state.data?.promoVideo || state.publicData?.promoVideo || null;
+  if (!video?.enabled || !String(video.url || "").trim()) return null;
+  return video;
+}
+
+function buildAbsoluteAppUrl(relativePath) {
+  const normalized = String(relativePath || "").trim();
+  if (!normalized) return "";
+
+  try {
+    return new URL(normalized, window.location.origin).toString();
+  } catch {
+    return normalized;
+  }
+}
+
+function getCreatorAutomationMeta(user) {
+  const token = String(user?.creatorWebhookToken || "").trim();
+  const webhookPath = token ? `/api/creator-presence/webhook/${encodeURIComponent(token)}` : "";
+  return {
+    token,
+    webhookPath,
+    webhookUrl: webhookPath ? buildAbsoluteAppUrl(webhookPath) : "",
+    lastSource: String(user?.creatorAutomationLastSource || "").trim(),
+    lastAt: user?.creatorAutomationLastAt ? formatDateTime(user.creatorAutomationLastAt) : ""
+  };
+}
+
+function getPromoVideoEmbedMeta(video) {
+  const rawUrl = String(video?.url || "").trim();
+  if (!rawUrl) return null;
+
+  try {
+    const parsedUrl = new URL(rawUrl, window.location.origin);
+    const host = parsedUrl.hostname.replace(/^www\./i, "").toLowerCase();
+    const segments = parsedUrl.pathname.split("/").filter(Boolean);
+
+    if (host === "youtu.be" || host.endsWith("youtube.com")) {
+      let videoId = "";
+      if (host === "youtu.be") {
+        videoId = segments[0] || "";
+      } else if (segments[0] === "shorts" || segments[0] === "embed" || segments[0] === "live") {
+        videoId = segments[1] || "";
+      } else {
+        videoId = parsedUrl.searchParams.get("v") || "";
+      }
+
+      if (videoId) {
+        return {
+          kind: "iframe",
+          platform: "YouTube",
+          src: `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1&mute=1&controls=1&rel=0&playsinline=1&loop=1&playlist=${encodeURIComponent(videoId)}`
+        };
+      }
+    }
+
+    if (host.endsWith("twitch.tv")) {
+      const parent = window.location.hostname || "localhost";
+      if (segments[0] === "videos" && segments[1]) {
+        return {
+          kind: "iframe",
+          platform: "Twitch",
+          src: `https://player.twitch.tv/?video=v${encodeURIComponent(segments[1])}&parent=${encodeURIComponent(parent)}&autoplay=true&muted=true`
+        };
+      }
+      if (segments[0]) {
+        return {
+          kind: "iframe",
+          platform: "Twitch",
+          src: `https://player.twitch.tv/?channel=${encodeURIComponent(segments[0])}&parent=${encodeURIComponent(parent)}&autoplay=true&muted=true`
+        };
+      }
+    }
+
+    if (/\.(mp4|webm|ogg)(?:$|\?)/i.test(parsedUrl.pathname)) {
+      return {
+        kind: "video",
+        platform: "Video",
+        src: parsedUrl.toString()
+      };
+    }
+
+    return {
+      kind: "link",
+      platform: getCreatorPlatformMeta({ label: "", url: rawUrl }).name || "Video",
+      src: rawUrl
+    };
+  } catch {
+    return {
+      kind: "link",
+      platform: "Video",
+      src: rawUrl
+    };
+  }
+}
+
+function renderPromoVideoPanel() {
+  const promoVideo = getPromoVideo();
+  if (!promoVideo) return "";
+
+  const embed = getPromoVideoEmbedMeta(promoVideo);
+  if (!embed) return "";
+
+  return `
+    <section class="panel span-12 promo-video-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Trailer</p>
+          <h2>${escapeHtml(promoVideo.title || "Ein erster Blick auf SONARA")}</h2>
+          <p class="section-copy">${escapeHtml(promoVideo.intro || "Hier startet direkt dein Werbevideo, damit Besucher die Stimmung von SONARA sofort sehen.")}</p>
+        </div>
+        <div class="chip-list">
+          <span class="pill amber">${escapeHtml(embed.platform)}</span>
+          ${promoVideo.updatedAt ? `<span class="pill neutral">Aktualisiert ${escapeHtml(formatDate(promoVideo.updatedAt))}</span>` : ""}
+        </div>
+      </div>
+
+      <div class="promo-video-layout">
+        <div class="promo-video-frame">
+          ${
+            embed.kind === "video"
+              ? `<video class="promo-video-media" src="${escapeHtml(embed.src)}" controls autoplay muted loop playsinline preload="metadata"></video>`
+              : embed.kind === "iframe"
+                ? `<iframe class="promo-video-media" src="${escapeHtml(embed.src)}" title="${escapeHtml(promoVideo.title || "SONARA Promo-Video")}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe>`
+                : `
+                  <div class="promo-video-fallback">
+                    <strong>Video extern oeffnen</strong>
+                    <p class="helper-text">Diese Plattform wird hier nicht direkt eingebettet. Der Link fuehrt aber direkt zum Video.</p>
+                    <a class="creator-action-link" href="${escapeHtml(embed.src)}" target="_blank" rel="noreferrer">Video oeffnen</a>
+                  </div>
+                `
+          }
+        </div>
+
+        <aside class="mini-card promo-video-aside">
+          <p class="eyebrow">Direkt im Einstieg</p>
+          <h3>Dein erster Eindruck fuer neue Besucher</h3>
+          <p class="helper-text">Das Video liegt jetzt bewusst weit oben, damit Menschen direkt sehen, fuehlen und hoeren koennen, was SONARA ist.</p>
+          <a class="creator-action-link" href="${escapeHtml(promoVideo.url)}" target="_blank" rel="noreferrer">Originalvideo oeffnen</a>
+        </aside>
       </div>
     </section>
   `;
@@ -8600,6 +8896,7 @@ function renderPublicPortal() {
 
       ${renderFlash()}
       ${renderSystemNoticeBanner()}
+      ${renderPromoVideoPanel()}
 
       <div class="auth-layout public-grid">
         <section class="panel">
@@ -9520,6 +9817,7 @@ function renderCreatorBuilderPanel() {
   const creatorPresence = getCreatorPresenceMeta(user);
   const creatorCommunity = getCreatorCommunityMeta(user);
   const creatorApplication = getCreatorApplicationMeta(user);
+  const creatorAutomation = getCreatorAutomationMeta(user);
   const publicPath = user.creatorSlug ? buildCreatorPublicPath(user) : "";
   const hubReady = Boolean(user.creatorSlug && creatorCommunity.name && (user.creatorCommunitySummary || user.creatorBlurb));
 
@@ -9613,6 +9911,30 @@ function renderCreatorBuilderPanel() {
           <p class="helper-text">Die Slash-Seite wird automatisch unter <code>/creator/dein-slug</code> aufgebaut. Wenn die Creator-Pruefung noch offen ist, speicherst du hier trotzdem schon alles vor.</p>
           <button type="submit">Creator-Hub speichern</button>
         </form>
+
+        <article class="mini-card creator-automation-card">
+          <div class="status-row">
+            <span class="pill sky">Automation</span>
+            <span class="pill ${creatorAutomation.webhookUrl ? "success" : "neutral"}">${escapeHtml(creatorAutomation.webhookUrl ? "Webhook bereit" : "Noch nicht bereit")}</span>
+          </div>
+          <h3>Live und Uploads automatisch melden</h3>
+          <p class="helper-text">Wenn Twitch, YouTube oder ein Automationsdienst diesen Webhook anpingt, setzt SONARA deinen Live-Status selbst auf <strong>live</strong>, <strong>offline</strong> oder <strong>neu hochgeladen</strong>.</p>
+          <div class="field">
+            <label for="creatorWebhookUrl">Webhook-URL</label>
+            <input id="creatorWebhookUrl" type="text" value="${escapeHtml(creatorAutomation.webhookUrl || "")}" readonly>
+          </div>
+          <p class="timeline-meta">
+            ${
+              creatorAutomation.lastAt
+                ? `Letztes Signal: ${escapeHtml(creatorAutomation.lastAt)}${creatorAutomation.lastSource ? ` | ${escapeHtml(creatorAutomation.lastSource)}` : ""}`
+                : "Noch kein automatisches Signal angekommen."
+            }
+          </p>
+          <p class="helper-text"><code>{"status":"live","url":"https://...","text":"Jetzt live","source":"twitch"}</code></p>
+          <div class="creator-community-actions">
+            <button type="button" class="ghost small" data-action="rotate-creator-webhook">Webhook neu erzeugen</button>
+          </div>
+        </article>
       </div>
     </section>
   `;
@@ -9725,7 +10047,7 @@ function renderLivePreviewPanel(limit = 4, spanClass = "span-12") {
         <div>
           <p class="eyebrow">Sonara Live</p>
           <h2>Was bei den Creatorn gerade laeuft</h2>
-          <p class="section-copy">Streams und frische Uploads tauchen hier direkt auf, sobald Creator ihren Status im Profil setzen.</p>
+          <p class="section-copy">Streams und frische Uploads tauchen hier direkt auf, sobald Creator ihren Status im Profil setzen oder eine Automation den Webhook anpingt.</p>
         </div>
         <div class="chip-list">
           <span class="pill amber">${escapeHtml(String(liveCount))} live</span>
@@ -9757,7 +10079,7 @@ function renderLivePanel() {
         <div>
           <p class="eyebrow">Sonara Live</p>
           <h2>Streams, Uploads und Creator-Signale</h2>
-          <p class="section-copy">Hier buendelt SONARA alle aktuellen Creator-Momente. Plattformen werden aus den Creator-Links erkannt, waehrend Creator ihren Live- oder Upload-Status gezielt selbst setzen.</p>
+          <p class="section-copy">Hier buendelt SONARA alle aktuellen Creator-Momente. Plattformen werden aus den Creator-Links erkannt, waehrend Status entweder manuell im Profil oder automatisch per Webhook kommen kann.</p>
         </div>
         <div class="chip-list">
           <span class="pill amber">${escapeHtml(String(liveEntries.length))} live</span>
