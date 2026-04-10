@@ -4040,3 +4040,99 @@ input[type="file"]::-webkit-file-upload-button {
     grid-template-columns: 1fr;
   }
 }
+
+/* Dashboard navigation cleanup */
+
+.dashboard-layout {
+  grid-template-columns: minmax(220px, 236px) minmax(0, 1fr);
+  gap: 0.9rem;
+}
+
+.dashboard-sidebar {
+  position: sticky;
+  top: 18px;
+  align-self: start;
+  max-height: none;
+  overflow: visible;
+  padding: 0.95rem;
+  gap: 0.8rem;
+}
+
+.dashboard-sidebar-head {
+  gap: 0.3rem;
+  padding-bottom: 0.7rem;
+}
+
+.dashboard-sidebar-sections {
+  gap: 0.7rem;
+}
+
+.dashboard-sidebar-section {
+  gap: 0.4rem;
+  padding-top: 0.15rem;
+}
+
+.dashboard-sidebar-section + .dashboard-sidebar-section {
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(255, 208, 144, 0.08);
+}
+
+.dashboard-sidebar-buttons {
+  gap: 0.4rem;
+}
+
+.dashboard-sidebar .tab-chip {
+  min-height: 0;
+  padding: 0.62rem 0.78rem;
+  border-radius: 12px;
+  clip-path: none;
+  background: rgba(10, 18, 32, 0.74);
+  border: 1px solid rgba(255, 208, 144, 0.08);
+  color: var(--ink);
+  box-shadow: none;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.dashboard-sidebar .tab-chip::before,
+.dashboard-sidebar .tab-chip::after {
+  content: none;
+}
+
+.dashboard-sidebar .tab-chip:hover,
+.dashboard-sidebar .tab-chip:focus-visible {
+  transform: none;
+  border-color: rgba(255, 208, 144, 0.22);
+  box-shadow: none;
+}
+
+.dashboard-sidebar .tab-chip.active {
+  background: linear-gradient(180deg, rgba(255, 196, 103, 0.92), rgba(222, 151, 38, 0.92));
+  color: #1c1307;
+  border-color: rgba(255, 226, 186, 0.36);
+  box-shadow: none;
+}
+
+.team-activity-strip {
+  margin-bottom: 1rem;
+}
+
+.team-activity-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.team-activity-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 0.95rem;
+  border-radius: 16px 10px 16px 10px;
+  border: 1px solid rgba(255, 208, 144, 0.1);
+  background: linear-gradient(180deg, rgba(10, 19, 35, 0.78), rgba(7, 14, 28, 0.7));
+}
+
+.team-activity-card .helper-text,
+.team-activity-card .timeline-meta {
+  margin: 0;
+}

@@ -5692,6 +5692,14 @@ function renderTeamPanelV2() {
   const moderationLeadCount = users.filter((entry) => entry.role === "moderation_lead").length;
   const moderatorCount = users.filter((entry) => entry.role === "moderator").length;
   const traineeCount = users.filter((entry) => entry.role === "member").length;
+  const activityRows = users
+    .filter((entry) => entry.role !== "member")
+    .slice()
+    .sort((left, right) => {
+      const rightSeen = Date.parse(String(right.lastSeenAt || "")) || 0;
+      const leftSeen = Date.parse(String(left.lastSeenAt || "")) || 0;
+      return rightSeen - leftSeen;
+    });
 
   return `
     <section class="panel span-12">
@@ -5775,6 +5783,37 @@ function renderTeamPanelV2() {
           `
           : ""
       }
+
+      <section class="mini-card team-activity-strip">
+        <div class="section-head compact-section-head">
+          <div>
+            <p class="eyebrow">Portal-Aktivitaet</p>
+            <h3>Zuletzt online im Team</h3>
+          </div>
+        </div>
+        <div class="team-activity-grid">
+          ${
+            activityRows.length
+              ? activityRows
+                  .map((user) => {
+                    const activityMeta = getUserActivityMeta(user);
+                    return `
+                      <article class="team-activity-card">
+                        <div class="status-row">
+                          <strong>${escapeHtml(getPrimaryDisplayName(user))}</strong>
+                          <span class="pill ${activityMeta.tone}">${escapeHtml(activityMeta.title)}</span>
+                        </div>
+                        <p class="timeline-meta">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</p>
+                        <p class="helper-text"><strong>Zuletzt online:</strong> ${escapeHtml(activityMeta.seenLabel)}</p>
+                        <p class="helper-text"><strong>Letzter Login:</strong> ${escapeHtml(activityMeta.loginLabel)}</p>
+                      </article>
+                    `;
+                  })
+                  .join("")
+              : renderEmptyState("Noch keine Aktivitaet", "Sobald Team-Mitglieder das Portal nutzen, erscheint hier ihr letzter Besuch.")
+          }
+        </div>
+      </section>
 
       <div class="wide-team-grid">
         ${users
@@ -10653,6 +10692,7 @@ function renderDashboardTabs(activeTab) {
         <h3>${escapeHtml(getPrimaryDisplayName(state.session || {}))}</h3>
         <p class="timeline-meta">${escapeHtml(ROLE_LABELS[state.session?.role] || state.session?.role || "")}</p>
         <span class="pill ${activityMeta.tone}">${escapeHtml(activityMeta.title)}</span>
+        <p class="timeline-meta">Zuletzt online: ${escapeHtml(activityMeta.seenLabel)}</p>
       </div>
       <div class="dashboard-sidebar-sections">
         ${sections
