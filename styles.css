@@ -4136,3 +4136,105 @@ input[type="file"]::-webkit-file-upload-button {
 .team-activity-card .timeline-meta {
   margin: 0;
 }
+
+/* Planner readability cleanup */
+
+.planner-groups {
+  gap: 0.9rem;
+}
+
+.planner-summary-row {
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.planner-summary-row .pill,
+.planner-summary-row span {
+  margin: 0;
+}
+
+.planner-jump-top {
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.planner-jump-button {
+  gap: 0.35rem;
+  padding: 0.78rem 0.88rem;
+}
+
+.planner-jump-button .timeline-meta {
+  line-height: 1.35;
+}
+
+.planner-group {
+  gap: 0.85rem;
+}
+
+.planner-card-list {
+  grid-template-columns: 1fr;
+  gap: 0.7rem;
+}
+
+.planner-shift-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+  border-radius: 18px 10px 18px 10px;
+  border: 1px solid rgba(255, 208, 144, 0.1);
+  background: linear-gradient(180deg, rgba(10, 19, 35, 0.8), rgba(7, 14, 28, 0.72));
+}
+
+.planner-shift-card.live {
+  border-color: rgba(88, 197, 180, 0.28);
+}
+
+.planner-shift-card.complete {
+  border-color: rgba(120, 202, 120, 0.22);
+}
+
+.planner-shift-card.pending {
+  border-color: rgba(255, 196, 103, 0.18);
+}
+
+.planner-shift-top {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.planner-shift-top h3,
+.planner-shift-meta-item strong {
+  margin: 0;
+}
+
+.planner-shift-meta-grid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.planner-shift-meta-item {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.72rem 0.8rem;
+  border-radius: 14px 10px 14px 10px;
+  border: 1px solid rgba(255, 208, 144, 0.08);
+  background: linear-gradient(180deg, rgba(12, 22, 40, 0.66), rgba(7, 15, 29, 0.5));
+}
+
+.planner-shift-meta-item span {
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(236, 219, 190, 0.68);
+}
+
+.planner-shift-note {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .planner-shift-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}

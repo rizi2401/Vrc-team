@@ -1724,6 +1724,7 @@ function buildPlannerOverviewGroups(shifts) {
   return Array.from(groups.values())
     .map((group) => ({
       ...group,
+      ...summarizePlannerEntries(group.entries),
       shiftCount: group.entries.length,
       dayCount: new Set(group.entries.map((entry) => entry.date)).size,
       entries: group.entries.slice().sort((left, right) => compareShiftValues(left, right))
@@ -1735,6 +1736,41 @@ function compareShiftValues(left, right) {
   if ((left.date || "") !== (right.date || "")) return String(left.date || "").localeCompare(String(right.date || ""));
   if ((left.startTime || "") !== (right.startTime || "")) return compareTimeValues(left.startTime || "", right.startTime || "");
   return String(left.world || "").localeCompare(String(right.world || ""), "de");
+}
+
+function getShiftProgressMeta(shift) {
+  const openEntry = getOpenEntryForShift(shift.id);
+  const latestEntry = getLatestEntryForShift(shift.id);
+  const status = openEntry ? "live" : latestEntry?.checkOutAt ? "complete" : "pending";
+  const label = openEntry ? "Aktiv" : latestEntry?.checkOutAt ? "Erledigt" : "Geplant";
+  const tone = openEntry ? "teal" : latestEntry?.checkOutAt ? "success" : "amber";
+  const detail = openEntry
+    ? `Aktiv seit ${formatTime(openEntry.checkInAt)}`
+    : latestEntry?.checkOutAt
+      ? `Erfasst ${formatTime(latestEntry.checkInAt)} bis ${formatTime(latestEntry.checkOutAt)}`
+      : "Noch nicht gestartet";
+
+  return {
+    openEntry,
+    latestEntry,
+    status,
+    label,
+    tone,
+    detail
+  };
+}
+
+function summarizePlannerEntries(entries) {
+  return (entries || []).reduce(
+    (summary, shift) => {
+      const meta = getShiftProgressMeta(shift);
+      if (meta.status === "live") summary.liveCount += 1;
+      else if (meta.status === "complete") summary.completedCount += 1;
+      else summary.plannedCount += 1;
+      return summary;
+    },
+    { liveCount: 0, completedCount: 0, plannedCount: 0 }
+  );
 }
 
 function renderPlannerSidebar(groups) {
@@ -1768,9 +1804,12 @@ function renderPlannerSidebarGroup(group) {
         </div>
         <span class="pill amber">${escapeHtml(String(group.shiftCount))} Schichten</span>
       </div>
-      <div class="inline-stats planner-inline-stats">
+      <div class="inline-stats planner-inline-stats planner-summary-row">
         <span>${escapeHtml(String(group.dayCount))} Tage</span>
         <span>${escapeHtml(formatHoursValue(group.totalHours))}</span>
+        ${group.liveCount ? `<span class="pill teal">${escapeHtml(String(group.liveCount))} aktiv</span>` : ""}
+        ${group.completedCount ? `<span class="pill success">${escapeHtml(String(group.completedCount))} erledigt</span>` : ""}
+        ${group.plannedCount ? `<span class="pill amber">${escapeHtml(String(group.plannedCount))} geplant</span>` : ""}
       </div>
       <div class="planner-jump-list">
         ${group.entries.map((entry) => renderPlannerJumpButton(entry)).join("")}
@@ -1780,6 +1819,7 @@ function renderPlannerSidebarGroup(group) {
 }
 
 function renderPlannerJumpButton(shift) {
+  const progress = getShiftProgressMeta(shift);
   return `
     <button
       type="button"
@@ -1787,7 +1827,10 @@ function renderPlannerJumpButton(shift) {
       data-action="focus-shift"
       data-shift-id="${escapeHtml(shift.id)}"
     >
-      <span class="planner-jump-day">${escapeHtml(formatDate(shift.date))}</span>
+      <div class="status-row planner-jump-top">
+        <span class="planner-jump-day">${escapeHtml(formatDate(shift.date))}</span>
+        <span class="pill ${progress.tone}">${escapeHtml(progress.label)}</span>
+      </div>
       <strong>${escapeHtml(`${formatShiftWindow(shift)} · ${shift.world}`)}</strong>
       <span class="timeline-meta">${escapeHtml(`${shift.shiftType}${shift.isLead ? " · Leitung" : ""}`)}</span>
     </button>
@@ -1804,10 +1847,13 @@ function renderPlannerGroupedShiftSections(groups) {
               <p class="eyebrow">Moderator</p>
               <h3>${escapeHtml(group.memberName)}</h3>
             </div>
-            <div class="inline-stats planner-inline-stats">
+            <div class="inline-stats planner-inline-stats planner-summary-row">
               <span>${escapeHtml(String(group.shiftCount))} Schichten</span>
               <span>${escapeHtml(String(group.dayCount))} Tage</span>
               <span>${escapeHtml(formatHoursValue(group.totalHours))}</span>
+              ${group.liveCount ? `<span class="pill teal">${escapeHtml(String(group.liveCount))} aktiv</span>` : ""}
+              ${group.completedCount ? `<span class="pill success">${escapeHtml(String(group.completedCount))} erledigt</span>` : ""}
+              ${group.plannedCount ? `<span class="pill amber">${escapeHtml(String(group.plannedCount))} geplant</span>` : ""}
             </div>
           </div>
           <div class="card-list planner-card-list">
@@ -1820,13 +1866,51 @@ function renderPlannerGroupedShiftSections(groups) {
 }
 
 function renderShiftCard(shift, options = {}) {
-  const openEntry = getOpenEntryForShift(shift.id);
-  const latestEntry = getLatestEntryForShift(shift.id);
-  const status = openEntry ? "live" : latestEntry?.checkOutAt ? "complete" : "pending";
-  const statusLabel = openEntry ? "Eingestempelt" : latestEntry?.checkOutAt ? "Abgeschlossen" : "Geplant";
-  const statusTone = openEntry ? "teal" : latestEntry?.checkOutAt ? "success" : "amber";
+  const progress = getShiftProgressMeta(shift);
+  const openEntry = progress.openEntry;
+  const latestEntry = progress.latestEntry;
+  const status = progress.status;
+  const statusLabel = progress.label;
+  const statusTone = progress.tone;
   const todayShift = shift.date === getLocalDateKey();
   const focused = state.ui.editingShiftId === shift.id;
+
+  if (options.adminView) {
+    return `
+      <article id="shift-card-${escapeHtml(shift.id)}" class="mini-card planner-shift-card ${status} ${focused ? "focused" : ""}">
+        <div class="planner-shift-top">
+          <div class="status-row">
+            <span class="pill ${todayShift ? "teal" : "neutral"}">${escapeHtml(formatDate(shift.date))}</span>
+            ${shift.isLead ? '<span class="pill rose">Leitung</span>' : ""}
+            <span class="pill ${statusTone}">${escapeHtml(statusLabel)}</span>
+          </div>
+          <div>
+            <h3>${escapeHtml(`${formatShiftWindow(shift)} Â· ${shift.world}`)}</h3>
+            <p class="timeline-meta">${escapeHtml(`${shift.shiftType} Â· ${roleLabelForUserId(shift.memberId)}`)}</p>
+          </div>
+        </div>
+        <div class="planner-shift-meta-grid">
+          <div class="planner-shift-meta-item">
+            <span>Moderator</span>
+            <strong>${escapeHtml(shift.memberName)}</strong>
+          </div>
+          <div class="planner-shift-meta-item">
+            <span>Aufgabe</span>
+            <strong>${escapeHtml(shift.task)}</strong>
+          </div>
+          <div class="planner-shift-meta-item">
+            <span>Status</span>
+            <strong>${escapeHtml(progress.detail)}</strong>
+          </div>
+        </div>
+        ${shift.notes ? `<p class="helper-text planner-shift-note">${escapeHtml(shift.notes)}</p>` : ""}
+        <div class="card-actions">
+          <button type="button" class="ghost small" data-action="edit-shift" data-shift-id="${escapeHtml(shift.id)}">Bearbeiten</button>
+          <button type="button" class="danger small" data-action="delete-shift" data-shift-id="${escapeHtml(shift.id)}">Loeschen</button>
+        </div>
+      </article>
+    `;
+  }
 
   return `
     <article id="shift-card-${escapeHtml(shift.id)}" class="mini-card ${status} ${focused ? "focused" : ""}">
