@@ -4046,14 +4046,20 @@ input[type="file"]::-webkit-file-upload-button {
 .dashboard-layout {
   grid-template-columns: minmax(220px, 236px) minmax(0, 1fr);
   gap: 0.9rem;
+  align-items: start;
+  overflow: visible;
 }
 
 .dashboard-sidebar {
   position: sticky;
-  top: 18px;
+  top: 0.85rem;
   align-self: start;
-  max-height: none;
-  overflow: visible;
+  height: fit-content;
+  max-height: calc(100vh - 1.7rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   padding: 0.95rem;
   gap: 0.8rem;
 }
@@ -4082,6 +4088,7 @@ input[type="file"]::-webkit-file-upload-button {
 }
 
 .dashboard-sidebar .tab-chip {
+  width: 100%;
   min-height: 0;
   padding: 0.62rem 0.78rem;
   border-radius: 12px;
@@ -4143,6 +4150,49 @@ input[type="file"]::-webkit-file-upload-button {
   gap: 0.9rem;
 }
 
+.planner-sidebar {
+  position: sticky;
+  top: 0.85rem;
+  align-self: start;
+}
+
+.planner-sidebar-expander,
+.planner-editor-expander,
+.planner-person-card,
+.planner-group {
+  overflow: hidden;
+}
+
+.planner-sidebar-expander .mystic-expander-body,
+.planner-editor-expander .mystic-expander-body,
+.planner-person-card .mystic-expander-body,
+.planner-group .mystic-expander-body {
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 0.95rem;
+}
+
+.planner-expander-copy {
+  margin: 0;
+}
+
+.planner-person-summary,
+.planner-group-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.planner-person-summary h3,
+.planner-group-summary h3 {
+  margin: 0;
+}
+
+.planner-group-stats {
+  margin-bottom: 0.1rem;
+}
+
 .planner-summary-row {
   gap: 0.45rem;
   align-items: center;
@@ -4169,6 +4219,12 @@ input[type="file"]::-webkit-file-upload-button {
 
 .planner-group {
   gap: 0.85rem;
+}
+
+.activity-overview-card p,
+.activity-overview-card .timeline-meta,
+.activity-overview-card .helper-text {
+  margin: 0;
 }
 
 .planner-card-list {
@@ -4234,8 +4290,219 @@ input[type="file"]::-webkit-file-upload-button {
 }
 
 @media (max-width: 900px) {
+  .planner-sidebar {
+    position: static;
+  }
+
   .planner-shift-meta-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Calendar polish */
+
+.calendar-weeks {
+  gap: 1.2rem;
+}
+
+.calendar-week {
+  position: relative;
+  padding: 1.15rem 1.2rem 1.2rem;
+  border-radius: 26px 14px 26px 14px;
+  border: 1px solid rgba(255, 220, 173, 0.16);
+  background:
+    linear-gradient(180deg, rgba(8, 15, 29, 0.92), rgba(9, 19, 39, 0.82)),
+    radial-gradient(circle at 12% 0%, rgba(255, 188, 98, 0.1), transparent 26%),
+    radial-gradient(circle at 88% 0%, rgba(116, 182, 255, 0.08), transparent 30%);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 244, 219, 0.04);
+}
+
+.calendar-week-head {
+  align-items: center;
+  padding-bottom: 0.95rem;
+  border-bottom: 1px solid rgba(255, 220, 173, 0.08);
+}
+
+.calendar-week-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.calendar-week-grid {
+  gap: 0.7rem;
+}
+
+.calendar-day-cell {
+  align-content: start;
+  gap: 0.7rem;
+  min-height: 230px;
+  padding: 0.9rem 0.85rem 0.95rem;
+  border-radius: 20px 12px 20px 12px;
+  border: 1px solid rgba(255, 220, 173, 0.12);
+  background:
+    linear-gradient(180deg, rgba(6, 12, 24, 0.72), rgba(9, 18, 36, 0.58)),
+    linear-gradient(180deg, rgba(255, 172, 49, 0.04), transparent 30%, rgba(102, 182, 255, 0.04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.calendar-day-cell.is-empty {
+  background:
+    linear-gradient(180deg, rgba(5, 10, 20, 0.52), rgba(7, 14, 28, 0.4));
+  border-color: rgba(255, 220, 173, 0.08);
+}
+
+.calendar-day-cell.today {
+  border-color: rgba(255, 192, 95, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 246, 226, 0.06),
+    0 0 0 1px rgba(255, 192, 95, 0.08),
+    0 18px 34px rgba(255, 164, 51, 0.08);
+}
+
+.calendar-day-cell-head {
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 220, 173, 0.08);
+}
+
+.calendar-day-cell-copy {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.calendar-day-cell-copy h4 {
+  font-size: 1rem;
+}
+
+.calendar-day-cell-badges {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+}
+
+.calendar-day-cell-badges .pill {
+  margin: 0;
+}
+
+.calendar-day-cell-list {
+  gap: 0.55rem;
+}
+
+.calendar-empty-copy {
+  opacity: 0.8;
+}
+
+.calendar-entry {
+  position: relative;
+  gap: 0.32rem;
+  padding: 0.8rem 0.82rem 0.82rem 1rem;
+  border-radius: 16px 10px 16px 10px;
+  border: 1px solid rgba(255, 220, 173, 0.1);
+  background:
+    linear-gradient(180deg, rgba(10, 18, 34, 0.9), rgba(9, 16, 31, 0.72));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.calendar-entry::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 183, 74, 0.9), rgba(95, 168, 255, 0.5));
+}
+
+.calendar-entry.lead::before {
+  background: linear-gradient(180deg, rgba(255, 184, 75, 0.96), rgba(232, 132, 29, 0.72));
+}
+
+.calendar-entry.event::before {
+  background: linear-gradient(180deg, rgba(115, 184, 255, 0.96), rgba(77, 129, 255, 0.72));
+}
+
+.calendar-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.calendar-entry-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.18rem 0.52rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 173, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(236, 219, 190, 0.84);
+  font-size: 0.73rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.calendar-entry-time {
+  font-size: 0.83rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 201, 123, 0.86);
+}
+
+.calendar-entry-world {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.calendar-entry-type {
+  margin: 0;
+  color: rgba(210, 224, 246, 0.8);
+  font-size: 0.86rem;
+}
+
+.calendar-entry-meta {
+  color: rgba(228, 220, 205, 0.78);
+  line-height: 1.45;
+}
+
+@media (max-width: 1180px) {
+  .calendar-week-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .calendar-week-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calendar-day-cell {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .calendar-week {
+    padding: 1rem;
+  }
+
+  .calendar-week-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-week-meta,
+  .calendar-day-cell-badges,
+  .calendar-entry-head {
+    justify-content: flex-start;
+  }
+
+  .calendar-day-cell-badges {
+    justify-items: start;
   }
 }
 
@@ -4310,5 +4577,347 @@ input[type="file"]::-webkit-file-upload-button {
   .promo-video-media,
   .promo-video-fallback {
     min-height: 260px;
+  }
+}
+
+/* Final mobile rebuild */
+
+@media (max-width: 900px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  .app-shell {
+    padding: 0.95rem;
+    gap: 0.95rem;
+  }
+
+  .app-shell > * {
+    min-width: 0;
+  }
+
+  .site-header,
+  .sonara-header,
+  .auth-layout,
+  .public-grid,
+  .community-overview-grid,
+  .feature-grid,
+  .dashboard-layout,
+  .creator-builder-grid,
+  .creator-public-grid,
+  .creator-public-columns,
+  .creator-stage-shell,
+  .live-stage-grid,
+  .creator-community-activity-grid,
+  .availability-overview-grid,
+  .activity-overview-grid,
+  .attendance-summary-grid,
+  .planner-support-grid,
+  .community-stat-grid,
+  .event-grid,
+  .team-grid,
+  .wide-team-grid,
+  .calendar-members,
+  .promo-video-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .stats-strip,
+  .inline-stats,
+  .capacity-card-metrics,
+  .availability-overview-meta,
+  .availability-summary-strip,
+  .team-activity-grid,
+  .live-creator-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .panel,
+  .warning-modal,
+  .request-card,
+  .team-user-card,
+  .auth-card,
+  .chat-card,
+  .dm-thread-card,
+  .forum-thread-card,
+  .profile-head,
+  .profile-preview,
+  .calendar-week,
+  .calendar-day-cell,
+  .creator-rail-button,
+  .live-stage-card,
+  .creator-builder-preview,
+  .creator-builder-form,
+  .creator-review-card,
+  .creator-community-activity-card,
+  .promo-video-frame,
+  .promo-video-aside {
+    width: 100%;
+    min-width: 0;
+    padding: 0.95rem !important;
+    border-radius: 22px 14px 22px 14px;
+  }
+
+  .site-header,
+  .dashboard-shell,
+  .profile-panel,
+  .dashboard-main-stack,
+  .creator-community-stack,
+  .creator-presence-preview,
+  .creator-community-shell,
+  .calendar-weeks {
+    gap: 0.95rem;
+  }
+
+  .sonara-header {
+    min-height: 0;
+    padding: 1rem !important;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .sonara-header::before {
+    opacity: 0.48;
+  }
+
+  .sonara-copy {
+    gap: 0.8rem;
+  }
+
+  .sonara-art-card {
+    display: grid !important;
+    order: -1;
+    width: 100%;
+    max-width: none;
+    min-height: 230px;
+    justify-self: stretch;
+  }
+
+  .sonara-art {
+    width: min(100%, 220px);
+  }
+
+  .toolbar,
+  .toolbar-user,
+  .toolbar-actions,
+  .card-actions,
+  .inline-form,
+  .section-head,
+  .status-row,
+  .shift-meta,
+  .chat-head-tools,
+  .chat-tools,
+  .chat-tool-stack,
+  .reaction-row,
+  .chat-meta,
+  .trim-actions,
+  .demo-item,
+  .roster-row,
+  .creator-community-head,
+  .creator-community-actions,
+  .calendar-week-head,
+  .calendar-day-cell-head,
+  .calendar-entry-head {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.7rem;
+  }
+
+  .toolbar-actions,
+  .card-actions,
+  .inline-form,
+  .chat-head-tools,
+  .chat-tools,
+  .chat-tool-stack,
+  .trim-actions {
+    width: 100%;
+  }
+
+  .toolbar-actions > *,
+  .card-actions > *,
+  .inline-form > *,
+  .chat-tool-stack > * {
+    width: 100%;
+  }
+
+  .toolbar-actions button,
+  .card-actions button,
+  .inline-form button,
+  .trim-actions button,
+  .creator-action-link {
+    width: 100%;
+  }
+
+  .dashboard-layout {
+    gap: 0.85rem;
+  }
+
+  .dashboard-sidebar {
+    position: static !important;
+    top: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    height: auto;
+    padding: 0.85rem !important;
+  }
+
+  .dashboard-sidebar-head {
+    padding-bottom: 0.55rem;
+  }
+
+  .dashboard-sidebar-sections {
+    gap: 0.65rem;
+  }
+
+  .dashboard-sidebar-section + .dashboard-sidebar-section {
+    padding-top: 0.6rem;
+  }
+
+  .dashboard-sidebar-buttons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .dashboard-sidebar .tab-chip {
+    min-height: 44px;
+    justify-content: center;
+    text-align: center;
+    padding: 0.72rem;
+    font-size: 0.9rem;
+  }
+
+  .planner-stat-strip,
+  .planner-card-list,
+  .planner-sidebar-list,
+  .capacity-detail-stack,
+  .creator-rail-list,
+  .creator-review-grid,
+  .creator-network-grid,
+  .overtime-adjustment-history {
+    gap: 0.8rem;
+  }
+
+  .planner-person-card,
+  .planner-group,
+  .planner-workspace-card,
+  .planner-compact-note,
+  .availability-summary-card,
+  .availability-form-shell.compact,
+  .creator-application-shell.compact,
+  .creator-presence-shell.compact {
+    padding: 0.9rem !important;
+  }
+
+  .planner-person-summary,
+  .planner-group-summary,
+  .team-user-card .profile-head,
+  .profile-preview {
+    grid-template-columns: 1fr !important;
+  }
+
+  .availability-form-grid,
+  .availability-slot-row,
+  .creator-presence-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .calendar-week {
+    padding: 0.95rem;
+  }
+
+  .calendar-week-meta,
+  .calendar-day-cell-badges {
+    justify-content: flex-start;
+    justify-items: start;
+  }
+
+  .calendar-entry-count {
+    align-self: flex-start;
+  }
+
+  .calendar-day-cell {
+    min-height: 0;
+  }
+
+  .chat-list {
+    max-height: 320px;
+  }
+
+  .promo-video-frame,
+  .promo-video-media,
+  .promo-video-fallback {
+    min-height: 220px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 620px) {
+  .app-shell {
+    padding: 0.75rem;
+  }
+
+  .panel,
+  .warning-modal,
+  .request-card,
+  .team-user-card,
+  .auth-card,
+  .chat-card,
+  .dm-thread-card,
+  .forum-thread-card,
+  .profile-head,
+  .profile-preview,
+  .calendar-week,
+  .calendar-day-cell,
+  .creator-rail-button,
+  .live-stage-card,
+  .creator-builder-preview,
+  .creator-builder-form,
+  .creator-review-card,
+  .creator-community-activity-card,
+  .promo-video-frame,
+  .promo-video-aside,
+  .dashboard-sidebar {
+    padding: 0.82rem !important;
+  }
+
+  .sonara-header {
+    padding: 0.9rem !important;
+  }
+
+  .sonara-art-card {
+    min-height: 190px;
+  }
+
+  .hero-chip-row,
+  .inline-stats,
+  .chip-list,
+  .dashboard-sidebar-buttons,
+  .stats-strip,
+  .capacity-card-metrics,
+  .availability-overview-meta,
+  .availability-summary-strip,
+  .team-activity-grid,
+  .live-creator-grid,
+  .trim-actions {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-sidebar .tab-chip {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .calendar-entry {
+    padding: 0.78rem 0.78rem 0.8rem 0.92rem;
+  }
+
+  .calendar-entry-world {
+    font-size: 0.92rem;
   }
 }
