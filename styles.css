@@ -4249,6 +4249,11 @@ input[type="file"]::-webkit-file-upload-button {
   border-color: rgba(120, 202, 120, 0.22);
 }
 
+.planner-shift-card.overdue {
+  border-color: rgba(255, 120, 120, 0.26);
+  background: linear-gradient(180deg, rgba(35, 16, 20, 0.84), rgba(17, 11, 21, 0.74));
+}
+
 .planner-shift-card.pending {
   border-color: rgba(255, 196, 103, 0.18);
 }
@@ -4587,6 +4592,11 @@ input[type="file"]::-webkit-file-upload-button {
     overflow-x: hidden;
   }
 
+  body::after {
+    animation: none;
+    opacity: 0.72;
+  }
+
   .app-shell {
     padding: 0.95rem;
     gap: 0.95rem;
@@ -4723,6 +4733,12 @@ input[type="file"]::-webkit-file-upload-button {
     gap: 0.7rem;
   }
 
+  .planner-person-summary,
+  .planner-group-summary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .toolbar-actions,
   .card-actions,
   .inline-form,
@@ -4809,10 +4825,18 @@ input[type="file"]::-webkit-file-upload-button {
   }
 
   .planner-person-summary,
-  .planner-group-summary,
   .team-user-card .profile-head,
   .profile-preview {
     grid-template-columns: 1fr !important;
+  }
+
+  .planner-group-summary {
+    grid-template-columns: 1fr !important;
+  }
+
+  .planner-jump-button,
+  .planner-shift-card {
+    scroll-margin-top: 1rem;
   }
 
   .availability-form-grid,
@@ -4858,6 +4882,17 @@ input[type="file"]::-webkit-file-upload-button {
 }
 
 @media (max-width: 620px) {
+  body::before {
+    background:
+      linear-gradient(180deg, rgba(2, 5, 11, 0.18) 0%, rgba(2, 5, 11, 0.28) 28%, rgba(3, 7, 13, 0.5) 60%, rgba(2, 5, 11, 0.86) 100%),
+      linear-gradient(90deg, rgba(255, 171, 63, 0.14) 0%, rgba(255, 171, 63, 0.06) 28%, transparent 56%, rgba(111, 177, 255, 0.08) 100%),
+      var(--hero-scene) center top / cover no-repeat;
+  }
+
+  body::after {
+    opacity: 0.56;
+  }
+
   .app-shell {
     padding: 0.75rem;
   }
@@ -4911,6 +4946,16 @@ input[type="file"]::-webkit-file-upload-button {
   .dashboard-sidebar .tab-chip {
     justify-content: flex-start;
     text-align: left;
+  }
+
+  .planner-summary-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .planner-jump-button strong,
+  .planner-shift-top h3 {
+    font-size: 0.97rem;
   }
 
   .calendar-entry {

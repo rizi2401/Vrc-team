@@ -1340,10 +1340,12 @@ function renderPlannerPanel() {
   const editingShift = (state.data.shifts || []).find((entry) => entry.id === state.ui.editingShiftId) || null;
   const plannerFormValues = getPlannerFormValues(editingShift);
   const users = getAssignableUsers();
-  const shifts = getSortedShifts(state.data.shifts || []);
+  const allShifts = state.data.shifts || [];
+  const shifts = getPlannerDisplayShifts(allShifts);
   const plannerGroups = buildPlannerOverviewGroups(shifts);
   const presetValue = getMatchingShiftPresetValue(plannerFormValues.startTime || "12:00", plannerFormValues.endTime || "16:00");
   const shiftsMarkup = renderPlannerGroupedShiftSections(plannerGroups);
+  const archivedShiftCount = getArchivedPlannerShiftCount(allShifts);
   const openRequests = (state.data.requests || []).filter((entry) => entry.status === "offen").length;
   const worldCount = new Set(shifts.map((entry) => entry.world).filter(Boolean)).size;
 
@@ -1359,7 +1361,7 @@ function renderPlannerPanel() {
       </div>
 
       <div class="stats-strip compact-stats planner-stat-strip">
-        ${renderStatCard("Schichten", shifts.length, "Aktuell im Plan", "amber")}
+        ${renderStatCard("Schichten", shifts.length, "Aktuell sichtbar", "amber")}
         ${renderStatCard("Personen", plannerGroups.length, "Gerade eingeplant", "sky")}
         ${renderStatCard("Welten", worldCount, "Aktive Einsatzorte", "teal")}
         ${renderStatCard("Offene Rueckmeldungen", openRequests, "Zur Planung noch offen", openRequests ? "rose" : "neutral")}
@@ -1369,87 +1371,87 @@ function renderPlannerPanel() {
         ${renderPlannerSidebar(plannerGroups)}
 
         <div class="planner-editor-stack">
-          <section class="mini-card planner-workspace-card">
-            <div class="section-head compact-section-head">
-              <div>
-                <p class="eyebrow">Einzelschicht</p>
-                <h3>${editingShift ? "Schicht anpassen" : "Neue Schicht anlegen"}</h3>
-                <p class="section-copy">Datum, Person, Zeitfenster und Aufgabe in einem Block. Nach dem Speichern bleibt der Arbeitsfluss ruhig stehen.</p>
-              </div>
-              ${editingShift ? '<span class="pill amber">Bearbeitung aktiv</span>' : '<span class="pill success">Neu</span>'}
+          <details class="mystic-expander planner-editor-expander" open>
+            <summary>
+              <span>${editingShift ? "Einzelschicht bearbeiten" : "Einzelschicht anlegen"}</span>
+              <span class="pill ${editingShift ? "amber" : "success"}">${editingShift ? "Bearbeitung aktiv" : "Neu"}</span>
+            </summary>
+            <div class="mystic-expander-body">
+              <p class="helper-text planner-expander-copy">Datum, Person, Zeitfenster und Aufgabe in einem Block. Nach dem Speichern bleibt der Arbeitsfluss ruhig stehen.</p>
+              <section class="mini-card planner-workspace-card">
+                <form class="stack-form planner-form-block" data-form="shift">
+                  <div class="form-grid">
+                    <div class="field">
+                      <label for="shiftDate">Datum</label>
+                      <input id="shiftDate" name="date" type="date" value="${escapeHtml(plannerFormValues.date || getLocalDateKey())}" required>
+                    </div>
+                    <div class="field">
+                      <label for="shiftMember">Moderator</label>
+                      <select id="shiftMember" name="memberId" required>
+                        ${buildUserOptions(users, plannerFormValues.memberId || "")}
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="shiftPreset">Schichtfenster</label>
+                      <select id="shiftPreset" data-change="shift-preset">
+                        ${renderShiftPresetOptions(presetValue)}
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="shiftStartTime">Beginn</label>
+                      <input id="shiftStartTime" name="startTime" type="time" value="${escapeHtml(plannerFormValues.startTime || "12:00")}" required>
+                    </div>
+                    <div class="field">
+                      <label for="shiftEndTime">Ende</label>
+                      <input id="shiftEndTime" name="endTime" type="time" value="${escapeHtml(plannerFormValues.endTime || "16:00")}" required>
+                    </div>
+                    <div class="field">
+                      <label for="shiftType">Schichttyp</label>
+                      <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Abloese" required>
+                    </div>
+                    <div class="field">
+                      <label for="shiftWorld">Welt</label>
+                      <input id="shiftWorld" name="world" list="worldOptions" value="${escapeHtml(plannerFormValues.world || state.data.settings.worlds?.[0] || "")}" placeholder="z. B. Community Hub" required>
+                    </div>
+                    <div class="field">
+                      <label for="shiftTask">Aufgabe</label>
+                      <input id="shiftTask" name="task" list="taskOptions" value="${escapeHtml(plannerFormValues.task || state.data.settings.tasks?.[0] || "")}" placeholder="z. B. Patrouille" required>
+                    </div>
+                    <div class="field checkbox-field">
+                      <label class="checkbox-row" for="shiftIsLead">
+                        <input id="shiftIsLead" name="isLead" type="checkbox" ${plannerFormValues.isLead ? "checked" : ""}>
+                        <span>Leitung in dieser Instanz</span>
+                      </label>
+                    </div>
+                    <div class="field span-all">
+                      <label for="shiftNotes">Interne Notiz</label>
+                      <textarea id="shiftNotes" name="notes" placeholder="Briefing, Besonderheiten oder Ansprechpartner">${escapeHtml(plannerFormValues.notes || "")}</textarea>
+                    </div>
+                  </div>
+
+                  <datalist id="shiftTypeOptions">${renderDatalistOptions(state.data.settings.shiftTypes)}</datalist>
+                  <datalist id="worldOptions">${renderDatalistOptions(state.data.settings.worlds)}</datalist>
+                  <datalist id="taskOptions">${renderDatalistOptions(state.data.settings.tasks)}</datalist>
+
+                  <div class="card-actions">
+                    <button type="submit">${editingShift ? "Aenderung speichern" : "Schicht speichern"}</button>
+                    ${editingShift ? '<button type="button" class="ghost small" data-action="cancel-shift-edit">Bearbeitung abbrechen</button>' : ""}
+                  </div>
+                  <p class="pill-note">Moderator, Welt und Aufgabe bleiben nach dem Speichern stehen. So kannst du mehrere Tage am Stueck ohne Hektik planen.</p>
+                </form>
+              </section>
             </div>
-
-            <form class="stack-form planner-form-block" data-form="shift">
-              <div class="form-grid">
-                <div class="field">
-                  <label for="shiftDate">Datum</label>
-                  <input id="shiftDate" name="date" type="date" value="${escapeHtml(plannerFormValues.date || getLocalDateKey())}" required>
-                </div>
-                <div class="field">
-                  <label for="shiftMember">Moderator</label>
-                  <select id="shiftMember" name="memberId" required>
-                    ${buildUserOptions(users, plannerFormValues.memberId || "")}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="shiftPreset">Schichtfenster</label>
-                  <select id="shiftPreset" data-change="shift-preset">
-                    ${renderShiftPresetOptions(presetValue)}
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="shiftStartTime">Beginn</label>
-                  <input id="shiftStartTime" name="startTime" type="time" value="${escapeHtml(plannerFormValues.startTime || "12:00")}" required>
-                </div>
-                <div class="field">
-                  <label for="shiftEndTime">Ende</label>
-                  <input id="shiftEndTime" name="endTime" type="time" value="${escapeHtml(plannerFormValues.endTime || "16:00")}" required>
-                </div>
-                <div class="field">
-                  <label for="shiftType">Schichttyp</label>
-                  <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Abloese" required>
-                </div>
-                <div class="field">
-                  <label for="shiftWorld">Welt</label>
-                  <input id="shiftWorld" name="world" list="worldOptions" value="${escapeHtml(plannerFormValues.world || state.data.settings.worlds?.[0] || "")}" placeholder="z. B. Community Hub" required>
-                </div>
-                <div class="field">
-                  <label for="shiftTask">Aufgabe</label>
-                  <input id="shiftTask" name="task" list="taskOptions" value="${escapeHtml(plannerFormValues.task || state.data.settings.tasks?.[0] || "")}" placeholder="z. B. Patrouille" required>
-                </div>
-                <div class="field checkbox-field">
-                  <label class="checkbox-row" for="shiftIsLead">
-                    <input id="shiftIsLead" name="isLead" type="checkbox" ${plannerFormValues.isLead ? "checked" : ""}>
-                    <span>Leitung in dieser Instanz</span>
-                  </label>
-                </div>
-                <div class="field span-all">
-                  <label for="shiftNotes">Interne Notiz</label>
-                  <textarea id="shiftNotes" name="notes" placeholder="Briefing, Besonderheiten oder Ansprechpartner">${escapeHtml(plannerFormValues.notes || "")}</textarea>
-                </div>
-              </div>
-
-              <datalist id="shiftTypeOptions">${renderDatalistOptions(state.data.settings.shiftTypes)}</datalist>
-              <datalist id="worldOptions">${renderDatalistOptions(state.data.settings.worlds)}</datalist>
-              <datalist id="taskOptions">${renderDatalistOptions(state.data.settings.tasks)}</datalist>
-
-              <div class="card-actions">
-                <button type="submit">${editingShift ? "Aenderung speichern" : "Schicht speichern"}</button>
-                ${editingShift ? '<button type="button" class="ghost small" data-action="cancel-shift-edit">Bearbeitung abbrechen</button>' : ""}
-              </div>
-              <p class="pill-note">Moderator, Welt und Aufgabe bleiben nach dem Speichern stehen. So kannst du mehrere Tage am Stueck ohne Hektik planen.</p>
-            </form>
-          </section>
+          </details>
 
           <div class="planner-support-grid">
             <article class="mini-card planner-compact-note">
               <h3>Archiv und Aufraeumen</h3>
-              <p class="helper-text">Sobald eine laufende Schicht ihr Ende erreicht, wird der offene Zeiteintrag automatisch abgeschlossen. Danach kannst du alte Schichten spaeter loeschen, ohne dass die geleisteten Stunden verloren gehen.</p>
+              <p class="helper-text">Erledigte Schichten aus frueheren Wochen verschwinden hier automatisch aus der Planungsansicht. Aktuell liegen ${escapeHtml(String(archivedShiftCount))} erledigte Alt-Schichten im Archiv, die Zeitdaten bleiben trotzdem gespeichert.</p>
             </article>
 
             <article class="mini-card planner-compact-note">
               <h3>Planungsrhythmus</h3>
-              <p class="helper-text">Nutze oben die Einzelschicht fuer Korrekturen und Sonderfaelle. Die Sammelplanung darunter ist fuer komplette Wochen oder wiederkehrende Muster gedacht.</p>
+              <p class="helper-text">Die Uebersicht sortiert jetzt nach aktiv, offen, geplant und zuletzt erledigt. Nutze oben die Einzelschicht fuer Korrekturen, die Sammelplanung darunter fuer ganze Wochen oder wiederkehrende Muster.</p>
             </article>
           </div>
 
@@ -1532,7 +1534,7 @@ function renderPlannerPanel() {
       </div>
 
       <div class="planner-groups">
-        ${shiftsMarkup || renderEmptyState("Noch keine Schichten", "Lege oben den ersten Einsatz an.")}
+        ${shiftsMarkup || renderEmptyState("Keine offenen oder aktuellen Schichten", archivedShiftCount ? `${escapeHtml(String(archivedShiftCount))} erledigte Alt-Schichten liegen bereits ruhig im Archiv.` : "Lege oben den ersten Einsatz an.")}
       </div>
     </section>
   `;
@@ -1702,6 +1704,22 @@ function buildBulkShiftEntries(formData) {
   return entries;
 }
 
+function getPlannerDisplayShifts(shifts, referenceDate = new Date()) {
+  const currentWeek = getCurrentWeekRange(referenceDate);
+  return getSortedShifts(shifts || []).filter((shift) => !shouldArchivePlannerShift(shift, currentWeek));
+}
+
+function getArchivedPlannerShiftCount(shifts, referenceDate = new Date()) {
+  const currentWeek = getCurrentWeekRange(referenceDate);
+  return (shifts || []).filter((shift) => shouldArchivePlannerShift(shift, currentWeek)).length;
+}
+
+function shouldArchivePlannerShift(shift, currentWeek = getCurrentWeekRange()) {
+  if (!shift?.date || shift.date >= currentWeek.startKey) return false;
+  const progress = getShiftProgressMeta(shift);
+  return progress.status === "complete";
+}
+
 function buildPlannerOverviewGroups(shifts) {
   const groups = new Map();
 
@@ -1723,33 +1741,68 @@ function buildPlannerOverviewGroups(shifts) {
   }
 
   return Array.from(groups.values())
-    .map((group) => ({
-      ...group,
-      ...summarizePlannerEntries(group.entries),
-      shiftCount: group.entries.length,
-      dayCount: new Set(group.entries.map((entry) => entry.date)).size,
-      entries: group.entries.slice().sort((left, right) => compareShiftValues(left, right))
-    }))
-    .sort((left, right) => left.memberName.localeCompare(right.memberName, "de"));
+    .map((group) => {
+      const sortedEntries = group.entries.slice().sort((left, right) => compareShiftValues(left, right));
+      return {
+        ...group,
+        ...summarizePlannerEntries(sortedEntries),
+        shiftCount: sortedEntries.length,
+        dayCount: new Set(sortedEntries.map((entry) => entry.date)).size,
+        nextShiftDate: sortedEntries[0]?.date || "",
+        entries: sortedEntries
+      };
+    })
+    .sort((left, right) => comparePlannerGroupValues(left, right));
 }
 
 function compareShiftValues(left, right) {
-  if ((left.date || "") !== (right.date || "")) return String(left.date || "").localeCompare(String(right.date || ""));
-  if ((left.startTime || "") !== (right.startTime || "")) return compareTimeValues(left.startTime || "", right.startTime || "");
-  return String(left.world || "").localeCompare(String(right.world || ""), "de");
+  const leftMeta = getPlannerSortMeta(left);
+  const rightMeta = getPlannerSortMeta(right);
+  if (leftMeta.rank !== rightMeta.rank) return leftMeta.rank - rightMeta.rank;
+  if (leftMeta.dateKey !== rightMeta.dateKey) return leftMeta.dateKey.localeCompare(rightMeta.dateKey);
+  if (leftMeta.timeValue !== rightMeta.timeValue) return leftMeta.timeValue - rightMeta.timeValue;
+  return leftMeta.worldLabel.localeCompare(rightMeta.worldLabel, "de");
+}
+
+function getPlannerSortMeta(shift) {
+  const progress = getShiftProgressMeta(shift);
+  let rank = 2;
+  if (progress.status === "live") rank = 0;
+  else if (progress.status === "overdue") rank = 1;
+  else if (progress.status === "pending") rank = 2;
+  else rank = 3;
+
+  return {
+    rank,
+    dateKey: String(shift?.date || "9999-12-31"),
+    timeValue: timeToMinutes(shift?.startTime || ""),
+    worldLabel: String(shift?.world || "")
+  };
+}
+
+function comparePlannerGroupValues(left, right) {
+  if ((right.liveCount || 0) !== (left.liveCount || 0)) return (right.liveCount || 0) - (left.liveCount || 0);
+  if ((right.overdueCount || 0) !== (left.overdueCount || 0)) return (right.overdueCount || 0) - (left.overdueCount || 0);
+  if ((right.plannedCount || 0) !== (left.plannedCount || 0)) return (right.plannedCount || 0) - (left.plannedCount || 0);
+  if ((left.nextShiftDate || "") !== (right.nextShiftDate || "")) return String(left.nextShiftDate || "").localeCompare(String(right.nextShiftDate || ""));
+  return left.memberName.localeCompare(right.memberName, "de");
 }
 
 function getShiftProgressMeta(shift) {
   const openEntry = getOpenEntryForShift(shift.id);
   const latestEntry = getLatestEntryForShift(shift.id);
-  const status = openEntry ? "live" : latestEntry?.checkOutAt ? "complete" : "pending";
-  const label = openEntry ? "Aktiv" : latestEntry?.checkOutAt ? "Erledigt" : "Geplant";
-  const tone = openEntry ? "teal" : latestEntry?.checkOutAt ? "success" : "amber";
+  const shiftWindow = getShiftRangeWindow(shift);
+  const isOverdue = !openEntry && !latestEntry?.checkOutAt && Boolean(shiftWindow && shiftWindow.end < new Date());
+  const status = openEntry ? "live" : latestEntry?.checkOutAt ? "complete" : isOverdue ? "overdue" : "pending";
+  const label = openEntry ? "Aktiv" : latestEntry?.checkOutAt ? "Erledigt" : isOverdue ? "Offen" : "Geplant";
+  const tone = openEntry ? "teal" : latestEntry?.checkOutAt ? "success" : isOverdue ? "rose" : "amber";
   const detail = openEntry
     ? `Aktiv seit ${formatTime(openEntry.checkInAt)}`
     : latestEntry?.checkOutAt
       ? `Erfasst ${formatTime(latestEntry.checkInAt)} bis ${formatTime(latestEntry.checkOutAt)}`
-      : "Noch nicht gestartet";
+      : isOverdue
+        ? "Schicht vorbei, aber noch nicht eingestempelt"
+        : "Noch nicht gestartet";
 
   return {
     openEntry,
@@ -1766,56 +1819,66 @@ function summarizePlannerEntries(entries) {
     (summary, shift) => {
       const meta = getShiftProgressMeta(shift);
       if (meta.status === "live") summary.liveCount += 1;
+      else if (meta.status === "overdue") summary.overdueCount += 1;
       else if (meta.status === "complete") summary.completedCount += 1;
       else summary.plannedCount += 1;
       return summary;
     },
-    { liveCount: 0, completedCount: 0, plannedCount: 0 }
+    { liveCount: 0, overdueCount: 0, completedCount: 0, plannedCount: 0 }
   );
 }
 
 function renderPlannerSidebar(groups) {
   return `
     <aside class="planner-sidebar">
-      <div class="planner-sidebar-head">
-        <div>
-          <p class="eyebrow">Wochenuebersicht</p>
-          <h3>Wer hat was?</h3>
+      <details class="mystic-expander planner-sidebar-expander" open>
+        <summary>
+          <span>Wochenuebersicht</span>
+          <span class="pill neutral">${escapeHtml(String(groups.length))} Personen</span>
+        </summary>
+        <div class="mystic-expander-body">
+          <p class="helper-text planner-expander-copy">Klappe einzelne Moderatoren auf und springe von dort direkt in ihre Schichten.</p>
+          <div class="planner-sidebar-list">
+            ${
+              groups.length
+                ? groups.map((group, index) => renderPlannerSidebarGroup(group, index)).join("")
+                : renderEmptyState("Noch keine Personen im Plan", "Sobald du Schichten speicherst, erscheint hier die Schnelluebersicht.")
+            }
+          </div>
         </div>
-        <span class="pill neutral">${escapeHtml(String(groups.length))} Personen</span>
-      </div>
-      <div class="planner-sidebar-list">
-        ${
-          groups.length
-            ? groups.map((group) => renderPlannerSidebarGroup(group)).join("")
-            : renderEmptyState("Noch keine Personen im Plan", "Sobald du Schichten speicherst, erscheint hier die Schnelluebersicht.")
-        }
-      </div>
+      </details>
     </aside>
   `;
 }
 
-function renderPlannerSidebarGroup(group) {
+function shouldOpenPlannerGroup(group, index = 0) {
+  return index === 0 || group.liveCount > 0 || group.overdueCount > 0 || group.entries.some((entry) => entry.id === state.ui.editingShiftId);
+}
+
+function renderPlannerSidebarGroup(group, index = 0) {
   return `
-    <section class="planner-person-card">
-      <div class="planner-person-head">
+    <details class="mystic-expander planner-person-card" ${shouldOpenPlannerGroup(group, index) ? "open" : ""}>
+      <summary class="planner-person-summary">
         <div>
           <h3>${escapeHtml(group.memberName)}</h3>
           <p class="timeline-meta">${escapeHtml(ROLE_LABELS[group.memberRole] || roleLabelForUserId(group.memberId))}</p>
         </div>
         <span class="pill amber">${escapeHtml(String(group.shiftCount))} Schichten</span>
+      </summary>
+      <div class="mystic-expander-body">
+        <div class="inline-stats planner-inline-stats planner-summary-row">
+          <span>${escapeHtml(String(group.dayCount))} Tage</span>
+          <span>${escapeHtml(formatHoursValue(group.totalHours))}</span>
+          ${group.liveCount ? `<span class="pill teal">${escapeHtml(String(group.liveCount))} aktiv</span>` : ""}
+          ${group.overdueCount ? `<span class="pill rose">${escapeHtml(String(group.overdueCount))} offen</span>` : ""}
+          ${group.completedCount ? `<span class="pill success">${escapeHtml(String(group.completedCount))} erledigt</span>` : ""}
+          ${group.plannedCount ? `<span class="pill amber">${escapeHtml(String(group.plannedCount))} geplant</span>` : ""}
+        </div>
+        <div class="planner-jump-list">
+          ${group.entries.map((entry) => renderPlannerJumpButton(entry)).join("")}
+        </div>
       </div>
-      <div class="inline-stats planner-inline-stats planner-summary-row">
-        <span>${escapeHtml(String(group.dayCount))} Tage</span>
-        <span>${escapeHtml(formatHoursValue(group.totalHours))}</span>
-        ${group.liveCount ? `<span class="pill teal">${escapeHtml(String(group.liveCount))} aktiv</span>` : ""}
-        ${group.completedCount ? `<span class="pill success">${escapeHtml(String(group.completedCount))} erledigt</span>` : ""}
-        ${group.plannedCount ? `<span class="pill amber">${escapeHtml(String(group.plannedCount))} geplant</span>` : ""}
-      </div>
-      <div class="planner-jump-list">
-        ${group.entries.map((entry) => renderPlannerJumpButton(entry)).join("")}
-      </div>
-    </section>
+    </details>
   `;
 }
 
@@ -1944,6 +2007,133 @@ function renderShiftCard(shift, options = {}) {
   `;
 }
 
+function renderPlannerJumpButton(shift) {
+  const progress = getShiftProgressMeta(shift);
+  return `
+    <button
+      type="button"
+      class="planner-jump-button ${state.ui.editingShiftId === shift.id ? "active" : ""}"
+      data-action="focus-shift"
+      data-shift-id="${escapeHtml(shift.id)}"
+    >
+      <div class="status-row planner-jump-top">
+        <span class="planner-jump-day">${escapeHtml(formatDate(shift.date))}</span>
+        <span class="pill ${progress.tone}">${escapeHtml(progress.label)}</span>
+      </div>
+      <strong>${escapeHtml(`${formatShiftWindow(shift)} | ${shift.world}`)}</strong>
+      <span class="timeline-meta">${escapeHtml(`${shift.shiftType}${shift.isLead ? " | Leitung" : ""}`)}</span>
+    </button>
+  `;
+}
+
+function renderPlannerGroupedShiftSections(groups) {
+  return groups
+    .map(
+      (group, index) => `
+        <details class="mystic-expander planner-group" ${shouldOpenPlannerGroup(group, index) ? "open" : ""}>
+          <summary class="planner-group-summary">
+            <div>
+              <p class="eyebrow">Moderator</p>
+              <h3>${escapeHtml(group.memberName)}</h3>
+            </div>
+            <span class="pill neutral">${escapeHtml(String(group.shiftCount))} Schichten</span>
+          </summary>
+          <div class="mystic-expander-body">
+            <div class="inline-stats planner-inline-stats planner-summary-row planner-group-stats">
+              <span>${escapeHtml(String(group.dayCount))} Tage</span>
+              <span>${escapeHtml(formatHoursValue(group.totalHours))}</span>
+              ${group.liveCount ? `<span class="pill teal">${escapeHtml(String(group.liveCount))} aktiv</span>` : ""}
+              ${group.overdueCount ? `<span class="pill rose">${escapeHtml(String(group.overdueCount))} offen</span>` : ""}
+              ${group.completedCount ? `<span class="pill success">${escapeHtml(String(group.completedCount))} erledigt</span>` : ""}
+              ${group.plannedCount ? `<span class="pill amber">${escapeHtml(String(group.plannedCount))} geplant</span>` : ""}
+            </div>
+            <div class="card-list planner-card-list">
+              ${group.entries.map((shift) => renderShiftCard(shift, { adminView: true })).join("")}
+            </div>
+          </div>
+        </details>
+      `
+    )
+    .join("");
+}
+
+function renderShiftCard(shift, options = {}) {
+  const progress = getShiftProgressMeta(shift);
+  const openEntry = progress.openEntry;
+  const status = progress.status;
+  const statusLabel = progress.label;
+  const statusTone = progress.tone;
+  const todayShift = shift.date === getLocalDateKey();
+  const focused = state.ui.editingShiftId === shift.id;
+
+  if (options.adminView) {
+    return `
+      <article id="shift-card-${escapeHtml(shift.id)}" class="mini-card planner-shift-card ${status} ${focused ? "focused" : ""}">
+        <div class="planner-shift-top">
+          <div class="status-row">
+            <span class="pill ${todayShift ? "teal" : "neutral"}">${escapeHtml(formatDate(shift.date))}</span>
+            ${shift.isLead ? '<span class="pill rose">Leitung</span>' : ""}
+            <span class="pill ${statusTone}">${escapeHtml(statusLabel)}</span>
+          </div>
+          <div>
+            <h3>${escapeHtml(`${formatShiftWindow(shift)} | ${shift.world}`)}</h3>
+            <p class="timeline-meta">${escapeHtml(`${shift.shiftType} | ${roleLabelForUserId(shift.memberId)}`)}</p>
+          </div>
+        </div>
+        <div class="planner-shift-meta-grid">
+          <div class="planner-shift-meta-item">
+            <span>Moderator</span>
+            <strong>${escapeHtml(shift.memberName)}</strong>
+          </div>
+          <div class="planner-shift-meta-item">
+            <span>Aufgabe</span>
+            <strong>${escapeHtml(shift.task)}</strong>
+          </div>
+          <div class="planner-shift-meta-item">
+            <span>Status</span>
+            <strong>${escapeHtml(progress.detail)}</strong>
+          </div>
+        </div>
+        ${shift.notes ? `<p class="helper-text planner-shift-note">${escapeHtml(shift.notes)}</p>` : ""}
+        <div class="card-actions">
+          <button type="button" class="ghost small" data-action="edit-shift" data-shift-id="${escapeHtml(shift.id)}">Bearbeiten</button>
+          <button type="button" class="danger small" data-action="delete-shift" data-shift-id="${escapeHtml(shift.id)}">Loeschen</button>
+        </div>
+      </article>
+    `;
+  }
+
+  return `
+    <article id="shift-card-${escapeHtml(shift.id)}" class="mini-card ${status} ${focused ? "focused" : ""}">
+      <div class="status-row">
+        <span class="pill ${todayShift ? "teal" : "neutral"}">${escapeHtml(formatDate(shift.date))}</span>
+        ${shift.isLead ? '<span class="pill rose">Leitung</span>' : ""}
+        <span class="pill ${statusTone}">${escapeHtml(statusLabel)}</span>
+      </div>
+      <div>
+        <h3>${escapeHtml(options.adminView ? shift.memberName : `${formatShiftWindow(shift)} in ${shift.world}`)}</h3>
+        <p>${escapeHtml(options.adminView ? `${formatShiftWindow(shift)} | ${shift.shiftType} | ${shift.world}` : `Aufgabe: ${shift.task}`)}</p>
+      </div>
+      <div class="shift-meta">
+        <span class="subtle">${escapeHtml(options.adminView ? `Aufgabe: ${shift.task}` : `Schicht: ${shift.shiftType} | ${formatShiftWindow(shift)}`)}</span>
+        ${options.adminView ? `<span class="subtle">${escapeHtml(roleLabelForUserId(shift.memberId))}</span>` : ""}
+      </div>
+      <p class="helper-text">Zeitfenster: ${escapeHtml(formatShiftWindow(shift))}</p>
+      ${shift.notes ? `<p class="helper-text">${escapeHtml(shift.notes)}</p>` : ""}
+      ${
+        options.adminView
+          ? `
+            <div class="card-actions">
+              <button type="button" class="ghost small" data-action="edit-shift" data-shift-id="${escapeHtml(shift.id)}">Bearbeiten</button>
+              <button type="button" class="danger small" data-action="delete-shift" data-shift-id="${escapeHtml(shift.id)}">Loeschen</button>
+            </div>
+          `
+          : renderShiftActionRow(shift, openEntry)
+      }
+    </article>
+  `;
+}
+
 function renderShiftCalendarPanel() {
   const shifts = getSortedShifts(state.data?.calendarShifts || state.data?.shifts || []);
   const days = buildShiftCalendarDays(shifts);
@@ -1959,7 +2149,7 @@ function renderShiftCalendarPanel() {
         <div>
           <p class="eyebrow">Kalender</p>
           <h2>Wochenkalender fuer Schichten</h2>
-          <p class="section-copy">Ein normaler Wochenkalender: pro Tag direkt Uhrzeit, Welt, Leitung und Team.</p>
+          <p class="section-copy">Ein ruhiges Wochenboard statt Kartenchaos. Pro Tag siehst du direkt Zeiten, Welt, Leitung, Team und Events in klaren Bahnen.</p>
         </div>
       </div>
 
@@ -2095,6 +2285,7 @@ function buildCalendarEventAnchorDates(events) {
 }
 
 function renderShiftCalendarWeek(week) {
+  const activeDays = week.days.filter((day) => day.slots.length || day.events.length).length;
   return `
     <article class="calendar-week">
       <div class="calendar-week-head">
@@ -2102,7 +2293,10 @@ function renderShiftCalendarWeek(week) {
           <p class="eyebrow">Kalenderwoche</p>
           <h3>${escapeHtml(`${formatDate(week.startDate)} bis ${formatDate(week.endDate)}`)}</h3>
         </div>
-        <span class="pill neutral">${escapeHtml(String(week.totalSlots))} Schichtfenster</span>
+        <div class="calendar-week-meta">
+          <span class="pill neutral">${escapeHtml(String(week.totalSlots))} Schichtfenster</span>
+          <span class="pill sky">${escapeHtml(String(activeDays))} aktive Tage</span>
+        </div>
       </div>
       <div class="calendar-week-grid">
         ${week.days.map((day) => renderShiftCalendarDayCell(day)).join("")}
@@ -2113,14 +2307,20 @@ function renderShiftCalendarWeek(week) {
 
 function renderShiftCalendarDayCell(day) {
   const totalItems = day.slots.length + day.events.length;
+  const slotCount = day.slots.length;
+  const eventCount = day.events.length;
   return `
-    <section class="calendar-day-cell ${day.isToday ? "today" : ""}">
+    <section class="calendar-day-cell ${day.isToday ? "today" : ""} ${totalItems ? "" : "is-empty"}">
       <div class="calendar-day-cell-head">
-        <div>
+        <div class="calendar-day-cell-copy">
           <p class="eyebrow">${escapeHtml(day.weekdayLabel)}</p>
           <h4>${escapeHtml(day.dayLabel)}</h4>
         </div>
-        <span class="pill ${totalItems ? "teal" : "neutral"}">${escapeHtml(String(totalItems))}</span>
+        <div class="calendar-day-cell-badges">
+          <span class="pill ${totalItems ? "teal" : "neutral"}">${escapeHtml(String(totalItems))} Eintraege</span>
+          ${slotCount ? `<span class="pill amber">${escapeHtml(String(slotCount))} Schichten</span>` : ""}
+          ${eventCount ? `<span class="pill sky">${escapeHtml(String(eventCount))} Events</span>` : ""}
+        </div>
       </div>
       <div class="calendar-day-cell-list">
         ${day.events.length ? day.events.map((entry) => renderCalendarEventEntry(entry)).join("") : ""}
@@ -2128,7 +2328,7 @@ function renderShiftCalendarDayCell(day) {
           day.slots.length
             ? day.slots.map((slot) => renderShiftCalendarEntry(slot)).join("")
             : !day.events.length
-              ? '<p class="helper-text">Nichts geplant</p>'
+              ? '<p class="helper-text calendar-empty-copy">Heute ist nichts geplant.</p>'
               : ""
         }
       </div>
@@ -2140,11 +2340,16 @@ function renderShiftCalendarEntry(slot) {
   const leaders = slot.members.filter((entry) => entry.isLead);
   const leaderText = leaders.length ? leaders.map((entry) => entry.memberName).join(", ") : "Keine Leitung";
   const teamText = slot.members.map((entry) => entry.memberName).join(", ");
+  const shiftTypeText = slot.shiftTypes.join(" | ");
 
   return `
     <article class="calendar-entry ${leaders.length ? "lead" : ""}">
-      <p class="calendar-entry-time">${escapeHtml(slot.windowLabel)}</p>
+      <div class="calendar-entry-head">
+        <p class="calendar-entry-time">${escapeHtml(slot.windowLabel)}</p>
+        <span class="calendar-entry-count">${escapeHtml(String(slot.members.length))} Personen</span>
+      </div>
       <p class="calendar-entry-world">${escapeHtml(slot.world)}</p>
+      <p class="calendar-entry-type">${escapeHtml(shiftTypeText)}</p>
       <p class="calendar-entry-meta"><strong>Leitung:</strong> ${escapeHtml(leaderText)}</p>
       <p class="calendar-entry-meta"><strong>Team:</strong> ${escapeHtml(teamText)}</p>
     </article>
@@ -2172,8 +2377,12 @@ function eventOccursOnDate(event, dateKey) {
 function renderCalendarEventEntry(event) {
   return `
     <article class="calendar-entry event">
-      <p class="calendar-entry-time">${escapeHtml(event.eventTimeLabel || event.dateLabel || "Event")}</p>
+      <div class="calendar-entry-head">
+        <p class="calendar-entry-time">${escapeHtml(event.eventTimeLabel || event.dateLabel || "Event")}</p>
+        <span class="calendar-entry-count">Event</span>
+      </div>
       <p class="calendar-entry-world">${escapeHtml(event.title)}</p>
+      <p class="calendar-entry-type">${escapeHtml(event.summary || "Community-Termin")}</p>
       <p class="calendar-entry-meta"><strong>Ort:</strong> ${escapeHtml(event.world || "-")}</p>
       <p class="calendar-entry-meta"><strong>Host:</strong> ${escapeHtml(event.host || "-")}</p>
     </article>
@@ -2292,7 +2501,9 @@ function renderCapacityCard(entry) {
       <p><strong>Letzte Woche:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekHours || 0))}${entry.capacityHours > 0 ? ` | ${escapeHtml(formatSignedHoursValue(entry.previousWeekBalanceHours || 0))}` : ""}</p>
       <p><strong>Aktueller Saldo:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatSignedHoursValue(entry.hourBalance) : "Kein Wochenrahmen gesetzt")}</p>
       <p><strong>Ueberstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
+      ${entry.shiftOverrunHours > 0 ? `<p class="helper-text"><strong>Schicht-Mehrzeit diese Woche:</strong> ${escapeHtml(formatHoursValue(entry.shiftOverrunHours))}</p>` : ""}
       ${entry.overtimeHours > 0 ? `<p class="helper-text"><strong>Diese Woche ueber Soll:</strong> ${escapeHtml(formatHoursValue(entry.overtimeHours))}</p>` : ""}
+      ${entry.previousWeekShiftOverrunHours > 0 ? `<p class="helper-text"><strong>Schicht-Mehrzeit letzte Woche:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekShiftOverrunHours))}</p>` : ""}
       ${entry.previousWeekOvertimeHours > 0 ? `<p class="helper-text"><strong>Letzte Woche ueber Soll:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekOvertimeHours))}</p>` : ""}
       ${Math.abs(entry.overtimeAdjustmentHours || 0) > 0.001 ? `<p class="helper-text"><strong>Ausgleich gebucht:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeAdjustmentHours))}</p>` : ""}
       ${renderOvertimeAdjustmentHistory(entry.recentOvertimeAdjustments || [])}
@@ -2559,6 +2770,7 @@ function buildPortalActivityRows() {
           const leftTime = Date.parse(String(left.checkOutAt || left.checkInAt || ""));
           return rightTime - leftTime;
         })[0];
+      const overtime = buildUserOvertimeSummary(user);
 
       return {
         user,
@@ -2567,7 +2779,10 @@ function buildPortalActivityRows() {
         latestRequestAt: latestRequest?.createdAt || "",
         latestAvailabilityAt: user.availabilityUpdatedAt || "",
         latestTimeEntryAt: latestTimeEntry?.checkOutAt || latestTimeEntry?.checkInAt || "",
-        currentlyClockedIn: Boolean(latestTimeEntry && !latestTimeEntry.checkOutAt)
+        currentlyClockedIn: Boolean(latestTimeEntry && !latestTimeEntry.checkOutAt),
+        currentWeekExtraHours: overtime.currentWeek.overtimeHours || 0,
+        currentWeekShiftOverrunHours: overtime.currentWeek.shiftOverrunHours || 0,
+        overtimeBankHours: overtime.bankHours || 0
       };
     })
     .sort((left, right) => {
@@ -2588,9 +2803,11 @@ function renderPortalActivityPanel() {
         <div>
           <p class="eyebrow">Portal-Aktivitaet</p>
           <h2>Nur die wichtigen Signale aus dem Portal</h2>
-          <p class="section-copy">Das ist bewusst keine Komplett-Ueberwachung. Du siehst hier nur, ob Leute online waren, ihre Verfuegbarkeit gepflegt haben und ob es aktuelle Rueckmeldungen oder Zeiteneintraege gibt.</p>
+          <p class="section-copy">Das ist bewusst keine Komplett-Ueberwachung. Du siehst hier nur, ob Leute online waren, wann sie ihre Wochenangaben gepflegt haben und wann die letzte Stempelung passiert ist.</p>
         </div>
       </div>
+
+      <p class="pill-note"><strong>Verfuegbarkeit zuletzt gepflegt</strong> zeigt den letzten Speichervorgang fuer Wochenrahmen oder Slots. <strong>Letzte Stempelung</strong> ist der letzte Check-in oder Check-out. <strong>Mehrzeit diese Woche</strong> rechnet laengeres Arbeiten als geplant automatisch mit ein.</p>
 
       <div class="activity-overview-grid">
         ${
@@ -2605,11 +2822,13 @@ function renderPortalActivityPanel() {
                     <p class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</p>
                     <p><strong>Letzter Login:</strong> ${escapeHtml(entry.activityMeta.loginLabel)}</p>
                     <p><strong>Zuletzt online:</strong> ${escapeHtml(entry.activityMeta.seenLabel)}</p>
-                    <p><strong>Verfuegbarkeit:</strong> ${escapeHtml(entry.latestAvailabilityAt ? formatDateTime(entry.latestAvailabilityAt) : "Noch nicht gepflegt")}</p>
-                    <p><strong>Zeiten:</strong> ${escapeHtml(entry.latestTimeEntryAt ? formatDateTime(entry.latestTimeEntryAt) : "Noch kein Zeiteneintrag")}</p>
+                    <p><strong>Verfuegbarkeit zuletzt gepflegt:</strong> ${escapeHtml(entry.latestAvailabilityAt ? formatDateTime(entry.latestAvailabilityAt) : "Noch nicht gepflegt")}</p>
+                    <p><strong>Letzte Stempelung:</strong> ${escapeHtml(entry.latestTimeEntryAt ? formatDateTime(entry.latestTimeEntryAt) : "Noch kein Zeiteneintrag")}</p>
+                    <p><strong>Mehrzeit diese Woche:</strong> ${escapeHtml(entry.currentWeekExtraHours > 0 ? formatHoursValue(entry.currentWeekExtraHours) : "0 Std.")}</p>
+                    <p><strong>Ueberstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
                     <p><strong>Rueckmeldungen offen:</strong> ${escapeHtml(String(entry.openRequests))}</p>
                     ${entry.latestRequestAt ? `<p class="timeline-meta">Letzte Rueckmeldung: ${escapeHtml(formatDateTime(entry.latestRequestAt))}</p>` : ""}
-                    ${entry.currentlyClockedIn ? '<p class="helper-text">Gerade noch eingestempelt.</p>' : ""}
+                    ${entry.currentlyClockedIn ? '<p class="helper-text">Gerade noch eingestempelt.</p>' : entry.currentWeekShiftOverrunHours > 0 ? `<p class="helper-text">Davon gegen Schichtplan bereits ${escapeHtml(formatHoursValue(entry.currentWeekShiftOverrunHours))} Mehrzeit.</p>` : ""}
                   </article>
                 `)
                 .join("")
@@ -6527,6 +6746,7 @@ function buildCapacityRows() {
       const availabilityUpdatedAt = String(user.availabilityUpdatedAt || "").trim();
       const hourBalance = overtime.currentWeek.balanceHours;
       const overtimeHours = overtime.currentWeek.overtimeHours;
+      const shiftOverrunHours = overtime.currentWeek.shiftOverrunHours || 0;
       const overHours = capacityHours > 0 && plannedHours > capacityHours;
       const overDays = capacityDays > 0 && plannedDays > capacityDays;
       const fullyPlanned =
@@ -6558,9 +6778,11 @@ function buildCapacityRows() {
         capacityDays,
         hourBalance,
         overtimeHours,
+        shiftOverrunHours,
         previousWeekHours: overtime.previousWeek.workedHours,
         previousWeekBalanceHours: overtime.previousWeek.balanceHours,
         previousWeekOvertimeHours: overtime.previousWeek.overtimeHours,
+        previousWeekShiftOverrunHours: overtime.previousWeek.shiftOverrunHours || 0,
         overtimeBankHours: overtime.bankHours,
         overtimeAccruedHours: overtime.accruedHours,
         overtimeAdjustmentHours: overtime.adjustmentHours,
@@ -6712,13 +6934,17 @@ function buildUserOvertimeSummary(user) {
   const weeklyRows = trackedWeeks.map((range) => {
     const workedHours = calculateWorkedHoursForWeek(user.id, range);
     const balanceHours = capacityHours > 0 ? workedHours - capacityHours : 0;
-    const overtimeHours = capacityHours > 0 ? Math.max(0, balanceHours) : 0;
+    const capacityOvertimeHours = capacityHours > 0 ? Math.max(0, balanceHours) : 0;
+    const shiftOverrunHours = calculateShiftOverrunHoursForRange(user.id, range);
+    const overtimeHours = Math.max(capacityOvertimeHours, shiftOverrunHours);
 
     return {
       ...range,
       label: getWeekRangeLabel(range),
       workedHours,
       balanceHours,
+      capacityOvertimeHours,
+      shiftOverrunHours,
       overtimeHours
     };
   });
@@ -6729,7 +6955,12 @@ function buildUserOvertimeSummary(user) {
       label: getWeekRangeLabel(currentWeek),
       workedHours: calculateWorkedHoursForWeek(user.id, currentWeek),
       balanceHours: capacityHours > 0 ? calculateWorkedHoursForWeek(user.id, currentWeek) - capacityHours : 0,
-      overtimeHours: capacityHours > 0 ? Math.max(0, calculateWorkedHoursForWeek(user.id, currentWeek) - capacityHours) : 0
+      capacityOvertimeHours: capacityHours > 0 ? Math.max(0, calculateWorkedHoursForWeek(user.id, currentWeek) - capacityHours) : 0,
+      shiftOverrunHours: calculateShiftOverrunHoursForRange(user.id, currentWeek),
+      overtimeHours: Math.max(
+        capacityHours > 0 ? Math.max(0, calculateWorkedHoursForWeek(user.id, currentWeek) - capacityHours) : 0,
+        calculateShiftOverrunHoursForRange(user.id, currentWeek)
+      )
     };
   const previousWeekRow =
     weeklyRows.find((entry) => entry.startKey === previousWeek.startKey) || {
@@ -6737,7 +6968,12 @@ function buildUserOvertimeSummary(user) {
       label: getWeekRangeLabel(previousWeek),
       workedHours: calculateWorkedHoursForWeek(user.id, previousWeek),
       balanceHours: capacityHours > 0 ? calculateWorkedHoursForWeek(user.id, previousWeek) - capacityHours : 0,
-      overtimeHours: capacityHours > 0 ? Math.max(0, calculateWorkedHoursForWeek(user.id, previousWeek) - capacityHours) : 0
+      capacityOvertimeHours: capacityHours > 0 ? Math.max(0, calculateWorkedHoursForWeek(user.id, previousWeek) - capacityHours) : 0,
+      shiftOverrunHours: calculateShiftOverrunHoursForRange(user.id, previousWeek),
+      overtimeHours: Math.max(
+        capacityHours > 0 ? Math.max(0, calculateWorkedHoursForWeek(user.id, previousWeek) - capacityHours) : 0,
+        calculateShiftOverrunHoursForRange(user.id, previousWeek)
+      )
     };
 
   const adjustments = getUserOvertimeAdjustments(user);
@@ -6765,6 +7001,12 @@ function calculateWorkedHoursForRange(userId, range) {
 
 function calculateWorkedHoursForWeek(userId, week) {
   return calculateWorkedHoursForRange(userId, week);
+}
+
+function calculateShiftOverrunHoursForRange(userId, range) {
+  return (state.data?.timeEntries || [])
+    .filter((entry) => entry.userId === userId)
+    .reduce((sum, entry) => sum + calculateEntryShiftOverrunHours(entry, range), 0);
 }
 
 function calculateWorkedDaysForWeek(userId, week) {
@@ -6798,6 +7040,15 @@ function calculateEntryOverlapHours(entry, week) {
   return (overlap.end - overlap.start) / 3600000;
 }
 
+function calculateEntryShiftOverrunHours(entry, range) {
+  const overlap = getEntryOverlapWindow(entry, range);
+  if (!overlap || !entry?.shift) return 0;
+
+  const actualHours = (overlap.end - overlap.start) / 3600000;
+  const plannedHours = calculateShiftOverlapHours(entry.shift, range);
+  return Math.max(0, actualHours - plannedHours);
+}
+
 function getEntryOverlapWindow(entry, week) {
   const entryStart = new Date(entry.checkInAt);
   const entryEnd = entry.checkOutAt ? new Date(entry.checkOutAt) : new Date();
@@ -6805,6 +7056,48 @@ function getEntryOverlapWindow(entry, week) {
   const overlapEnd = entryEnd < week.end ? entryEnd : week.end;
   if (!(overlapEnd > overlapStart)) return null;
   return { start: overlapStart, end: overlapEnd };
+}
+
+function calculateShiftOverlapHours(shift, range) {
+  const shiftWindow = getShiftRangeWindow(shift);
+  if (!shiftWindow) return 0;
+
+  const overlapStart = shiftWindow.start > range.start ? shiftWindow.start : range.start;
+  const overlapEnd = shiftWindow.end < range.end ? shiftWindow.end : range.end;
+  if (!(overlapEnd > overlapStart)) return 0;
+  return (overlapEnd - overlapStart) / 3600000;
+}
+
+function getShiftRangeWindow(shift) {
+  const dateKey = String(shift?.date || "").trim();
+  const startTime = normalizeTimeValue(shift?.startTime);
+  const endTime = normalizeTimeValue(shift?.endTime);
+  if (!dateKey || !startTime || !endTime) return null;
+
+  const start = buildDateTimeFromDateKey(dateKey, startTime);
+  const end = buildDateTimeFromDateKey(dateKey, endTime);
+  if (!start || !end) return null;
+
+  if (end <= start) {
+    end.setDate(end.getDate() + 1);
+  }
+
+  return { start, end };
+}
+
+function buildDateTimeFromDateKey(dateKey, timeValue) {
+  const [year, month, day] = String(dateKey || "")
+    .split("-")
+    .map((value) => Number.parseInt(value, 10));
+  const [hour, minute] = String(timeValue || "")
+    .split(":")
+    .map((value) => Number.parseInt(value, 10));
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day) || !Number.isInteger(hour) || !Number.isInteger(minute)) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day, hour, minute, 0, 0);
 }
 
 function getShiftDurationHours(shift) {
@@ -11092,7 +11385,7 @@ function renderDashboardTabs(activeTab) {
   const activityMeta = getUserActivityMeta(state.session);
 
   return `
-    <aside class="panel tab-bar dashboard-sidebar" aria-label="Hauptbereiche">
+    <aside class="panel dashboard-sidebar" aria-label="Hauptbereiche">
       <div class="dashboard-sidebar-head">
         <p class="eyebrow">Navigation</p>
         <h3>${escapeHtml(getPrimaryDisplayName(state.session || {}))}</h3>
