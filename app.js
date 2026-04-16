@@ -75,8 +75,21 @@ root.addEventListener("click", handleClick);
 root.addEventListener("input", handleInput);
 root.addEventListener("change", handleChange);
 root.addEventListener("focusout", handleFocusOut);
+window.addEventListener("resize", updateViewportMetrics, { passive: true });
+window.addEventListener("orientationchange", updateViewportMetrics, { passive: true });
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", updateViewportMetrics, { passive: true });
+  window.visualViewport.addEventListener("scroll", updateViewportMetrics, { passive: true });
+}
 
+updateViewportMetrics();
 boot();
+
+function updateViewportMetrics() {
+  const viewportHeight = window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0;
+  if (!viewportHeight) return;
+  document.documentElement.style.setProperty("--app-height", `${Math.round(viewportHeight)}px`);
+}
 
 async function handleSubmitProxy(event) {
   const form = event.target;
@@ -93,7 +106,12 @@ async function handleSubmitProxy(event) {
   state.ui.lastActionSucceeded = false;
 
   try {
-    await handleSubmit(event);
+    try {
+      await handleSubmit(event);
+    } catch (error) {
+      setFlash(error?.message || "Das Formular konnte gerade nicht verarbeitet werden.", "danger");
+      render();
+    }
     if (state.ui.lastActionSucceeded) {
       if (shouldClearFormDraftAfterSuccess(formName)) {
         clearPersistentFormDraft(form);
@@ -2610,7 +2628,7 @@ function renderOvertimeAdjustmentForm(entry) {
 
 function renderAvailabilityReminderPanel() {
   const user = state.session;
-  if (!user || user.role === "member") return "";
+  if (!user) return "";
 
   const hasAvailability = Boolean(user.availabilitySchedule || Number(user.weeklyHoursCapacity || 0) || Number(user.weeklyDaysCapacity || 0));
   const availabilitySlots = getAvailabilitySlots(user);
@@ -2618,14 +2636,41 @@ function renderAvailabilityReminderPanel() {
   const hasAnyAvailability = Boolean(hasAvailability || hasStructuredAvailability);
   const updatedLabel = user.availabilityUpdatedAt ? formatDateTime(user.availabilityUpdatedAt) : "";
   const activeSlotCount = normalizeClientAvailabilitySlots(availabilitySlots).filter((slot) => slot.enabled && (slot.startTime || slot.endTime || slot.note)).length;
+  const memberView = user.role === "member";
+  const eyebrow = memberView ? "Meine Zeiten" : "Verfuegbarkeit";
+  const title = memberView ? "Wann du meistens in SONARA da bist" : "Dein Wochenrahmen fuer die Planung";
+  const copy = memberView
+    ? "Ein eigener Bereich nur fuer deine Zeiten. So sehen Community und Team besser, wann du oft erreichbar bist oder gern bei Events dabei waerst."
+    : "Ein eigener Bereich nur fuer freie Zeiten. Stunden, Tage und Slots stehen gesammelt an einer Stelle und bleiben bei Live-Updates stabil.";
+  const statusLabel = hasAnyAvailability ? "Eingetragen" : memberView ? "Noch offen" : "Fehlt noch";
+  const statusCopy = hasAnyAvailability
+    ? "Du kannst bestehende Angaben direkt anpassen."
+    : memberView
+      ? "Trag einmal grob ein, wann du meistens da bist."
+      : "Bitte einmal sauber fuer die kommende Woche ausfuellen.";
+  const scopeLabel = memberView ? "Community-Rahmen" : "Staff-Planung";
+  const headTitle = memberView ? "Deine typischen Zeitfenster" : "Dein Wochenrahmen";
+  const headCopy = memberView
+    ? "Stunden, Tage und Slots helfen bei Events, spontanen Treffen und besserer Uebersicht im Portal."
+    : "Erst die harten Zeiten, darunter nur noch kurze Sonderfaelle oder Hinweise.";
+  const slotCopy = memberView
+    ? "Hier traegst du pro Tag grob ein, wann du meistens online oder erreichbar bist."
+    : "Hier traegst du pro Tag direkt ein, wann du wirklich eingesetzt werden kannst.";
+  const scheduleLabel = memberView ? "Zusatzhinweise zu deinen Zeiten" : "Zusatzhinweise fuer diese Woche";
+  const schedulePlaceholder = memberView
+    ? "z. B. unter der Woche eher spaet, Sonntag oft spontan oder Freitag fast immer online."
+    : "z. B. Mittwoch eventuell spaeter, Samstag nur spontan oder Sonntag nur fuer kurze Absprachen.";
+  const scheduleCopy = memberView
+    ? "Nur fuer Ausnahmen, Hinweise oder kleine Erklaerungen."
+    : "Nur fuer Ausnahmen, flexible Hinweise oder kurze Erklaerungen.";
 
   return `
     <section class="panel span-12">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Verfuegbarkeit</p>
-          <h2>Dein Wochenrahmen fuer die Planung</h2>
-          <p class="section-copy">Ein eigener Bereich nur fuer freie Zeiten. Stunden, Tage und Slots stehen gesammelt an einer Stelle und bleiben bei Live-Updates stabil.</p>
+          <p class="eyebrow">${escapeHtml(eyebrow)}</p>
+          <h2>${escapeHtml(title)}</h2>
+          <p class="section-copy">${escapeHtml(copy)}</p>
         </div>
         <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Zum Profil</button>
       </div>
@@ -2633,8 +2678,8 @@ function renderAvailabilityReminderPanel() {
       <div class="availability-summary-strip">
         <article class="mini-card availability-summary-card">
           <span class="timeline-meta">Status</span>
-          <strong>${escapeHtml(hasAnyAvailability ? "Eingetragen" : "Fehlt noch")}</strong>
-          <p class="helper-text">${escapeHtml(hasAnyAvailability ? "Du kannst bestehende Angaben direkt anpassen." : "Bitte einmal sauber fuer die kommende Woche ausfuellen.")}</p>
+          <strong>${escapeHtml(statusLabel)}</strong>
+          <p class="helper-text">${escapeHtml(statusCopy)}</p>
         </article>
         <article class="mini-card availability-summary-card">
           <span class="timeline-meta">Rahmen</span>
@@ -2652,9 +2697,9 @@ function renderAvailabilityReminderPanel() {
         <div class="availability-form-shell">
           <div class="availability-form-head">
             <div>
-              <p class="eyebrow">Staff-Planung</p>
-              <h3>Dein Wochenrahmen</h3>
-              <p class="helper-text">Erst die harten Zeiten, darunter nur noch kurze Sonderfaelle oder Hinweise.</p>
+              <p class="eyebrow">${escapeHtml(scopeLabel)}</p>
+              <h3>${escapeHtml(headTitle)}</h3>
+              <p class="helper-text">${escapeHtml(headCopy)}</p>
             </div>
             <span class="pill ${hasAnyAvailability ? "success" : "rose"}">${escapeHtml(hasAnyAvailability ? "Eingetragen" : "Bitte ausfuellen")}</span>
           </div>
@@ -2670,12 +2715,12 @@ function renderAvailabilityReminderPanel() {
             <div class="field span-all">
               <label>Wochen-Slots</label>
               ${renderAvailabilitySlotsEditor(availabilitySlots, "dashboard-availability")}
-              <p class="helper-text">Hier traegst du pro Tag direkt ein, wann du wirklich eingesetzt werden kannst.</p>
+              <p class="helper-text">${escapeHtml(slotCopy)}</p>
             </div>
             <div class="field span-all">
-              <label for="dashboardAvailabilitySchedule">Zusatzhinweise fuer diese Woche</label>
-              <textarea id="dashboardAvailabilitySchedule" name="availabilitySchedule" placeholder="z. B. Mittwoch eventuell spaeter, Samstag nur spontan oder Sonntag nur fuer kurze Absprachen.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
-              <p class="helper-text">Nur fuer Ausnahmen, flexible Hinweise oder kurze Erklaerungen.</p>
+              <label for="dashboardAvailabilitySchedule">${escapeHtml(scheduleLabel)}</label>
+              <textarea id="dashboardAvailabilitySchedule" name="availabilitySchedule" placeholder="${escapeHtml(schedulePlaceholder)}">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+              <p class="helper-text">${escapeHtml(scheduleCopy)}</p>
             </div>
           </div>
         </div>
@@ -8878,6 +8923,162 @@ function renderEventCard(event) {
   `;
 }
 
+function renderPublicStarterPanel() {
+  const community = getCommunityData();
+  const starterSteps = [
+    {
+      title: "1. Konto anlegen",
+      body: "Melde dich mit VRChat- und Discord-Namen an, damit du in SONARA nicht nur liest, sondern wirklich dazugehst."
+    },
+    {
+      title: "2. Profil kurz fuellen",
+      body: "Ein kurzer Text und ein Bild helfen Team, Creatorn und Mitgliedern direkt zu erkennen, wer du bist."
+    },
+    {
+      title: "3. News und Events checken",
+      body: "So verpasst du keine Community-Abende, Event-Welten oder kurzfristigen Hinweise."
+    },
+    {
+      title: "4. Mitreden und mitmachen",
+      body: "Forum, Feedback, Creator-Hubs und Community-Chat sind die Stellen, an denen SONARA lebendig wird."
+    }
+  ];
+
+  return `
+    <section class="panel span-4 community-starter-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Neu hier?</p>
+          <h2>So kommst du in SONARA an</h2>
+          <p class="section-copy">Ein klarer Einstieg fuer neue Mitglieder, ohne dass man sich erst durchs ganze Portal suchen muss.</p>
+        </div>
+      </div>
+
+      <div class="community-checklist">
+        ${starterSteps
+          .map(
+            (step, index) => `
+              <article class="community-check-item">
+                <span class="community-check-index">${escapeHtml(String(index + 1))}</span>
+                <div class="community-check-copy">
+                  <h3>${escapeHtml(step.title)}</h3>
+                  <p>${escapeHtml(step.body)}</p>
+                </div>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="chip-list">
+        <span class="pill neutral">${escapeHtml(String(community.stats.members || 0))} Mitglieder</span>
+        <span class="pill amber">${escapeHtml(String((community.events || []).length))} Events</span>
+        <span class="pill sky">${escapeHtml(String(community.stats.creators || 0))} Creator</span>
+      </div>
+    </section>
+  `;
+}
+
+function renderCommunityPulsePanel() {
+  const community = getCommunityData();
+  const latestNews = getAnnouncementFeed()[0] || null;
+  const nextEvent = (community.events || [])[0] || null;
+  const featuredCreator = getCreatorActivityEntries(1)[0] || null;
+  const featuredCreatorPresence = featuredCreator ? getCreatorPresenceMeta(featuredCreator) : null;
+  const pulseCards = [
+    {
+      label: "Naechster Termin",
+      title: nextEvent ? nextEvent.title : "Noch nichts geplant",
+      body: nextEvent ? `${nextEvent.dateLabel || "-"} | ${nextEvent.world || "-"}` : "Sobald neue Termine feststehen, tauchen sie hier direkt auf.",
+      tone: "amber"
+    },
+    {
+      label: "Aktuelle News",
+      title: latestNews ? latestNews.title : "Zurzeit ruhig",
+      body: latestNews ? latestNews.body : "Wenn etwas wichtig wird, landet es hier fuer alle sichtbar.",
+      tone: "sky"
+    },
+    {
+      label: "Creator Radar",
+      title: featuredCreator ? getPrimaryDisplayName(featuredCreator) : "Noch kein Signal",
+      body: featuredCreatorPresence ? featuredCreatorPresence.summary : "Streams und neue Uploads erscheinen hier automatisch oder direkt aus dem Profil.",
+      tone: featuredCreatorPresence?.tone || "neutral"
+    }
+  ];
+
+  return `
+    <section class="panel span-4 community-pulse-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Community Puls</p>
+          <h2>Was gerade in SONARA passiert</h2>
+          <p class="section-copy">Nicht nur Regeln und Struktur, sondern auch der aktuelle Herzschlag der Community.</p>
+        </div>
+      </div>
+
+      <div class="community-moment-list">
+        ${pulseCards
+          .map(
+            (card) => `
+              <article class="community-moment-card">
+                <span class="pill ${escapeHtml(card.tone)}">${escapeHtml(card.label)}</span>
+                <h3>${escapeHtml(card.title)}</h3>
+                <p>${escapeHtml(card.body)}</p>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderCommunityParticipationPanel() {
+  const actions = [
+    {
+      title: "Events besuchen",
+      body: "Schau in den Event-Bereich, welche Welten, Hosts und Community-Abende gerade geplant sind."
+    },
+    {
+      title: "Feedback dalassen",
+      body: "Wuensche, Ideen und kleine Stolpersteine landen direkt bei der Leitung statt irgendwo verloren zu gehen."
+    },
+    {
+      title: "Creator entdecken",
+      body: "Creator-Hubs, Streams und neue Uploads laufen gesammelt unter einem Dach zusammen."
+    },
+    {
+      title: "Im Portal mitreden",
+      body: "Forum, Community-Chat und Profil machen das Portal zu einem aktiven Treffpunkt statt zu einer reinen Infoseite."
+    }
+  ];
+
+  return `
+    <section class="panel span-4 community-participation-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Mitmachen</p>
+          <h2>Was du hier wirklich tun kannst</h2>
+          <p class="section-copy">Eine Community-Seite lebt erst dann richtig, wenn Leute nicht nur lesen, sondern direkt etwas damit anfangen koennen.</p>
+        </div>
+      </div>
+
+      <div class="community-action-grid">
+        ${actions
+          .map(
+            (action) => `
+              <article class="community-action-card">
+                <h3>${escapeHtml(action.title)}</h3>
+                <p>${escapeHtml(action.body)}</p>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderRuleCard(entry) {
   return `
     <article class="mini-card community-rule-card">
@@ -9307,6 +9508,16 @@ function renderPublicPortal() {
             <button type="submit">${registerButtonLabel}</button>
           </form>
         </div>
+      </div>
+
+      <div class="dashboard-grid community-home-grid">
+        ${renderPublicStarterPanel()}
+        ${renderPublicCommunityOverview()}
+        ${renderPublicEventsPanel()}
+        ${renderCommunityPulsePanel()}
+        ${renderCommunityParticipationPanel()}
+        ${renderPublicRulesPanel()}
+        ${renderPublicTeamPanel()}
       </div>
     </div>
   `;
@@ -11302,7 +11513,7 @@ function getDashboardTabSections() {
 
   const memberSections = [
     { id: "community", title: "Community", tabs: communityTabs },
-    { id: "account", title: "Mein Bereich", tabs: [{ id: "feedback", label: "Feedback" }, { id: "profile", label: "Profil" }] }
+    { id: "account", title: "Mein Bereich", tabs: [{ id: "availability", label: "Verfuegbarkeit" }, { id: "feedback", label: "Feedback" }, { id: "profile", label: "Profil" }] }
   ];
 
   if (canManagePortal()) {
@@ -11419,6 +11630,196 @@ function renderDashboardTabs(activeTab) {
   `;
 }
 
+function renderMemberActionHubPanel() {
+  const user = state.session || {};
+  const community = getCommunityData();
+  const threads = state.data?.forumThreads || [];
+  const feedPosts = getFeedPosts();
+  const availabilitySlots = getAvailabilitySlots(user);
+  const hasAvailability = Boolean(
+    user.availabilitySchedule ||
+      Number(user.weeklyHoursCapacity || 0) ||
+      Number(user.weeklyDaysCapacity || 0) ||
+      hasAvailabilitySlots(availabilitySlots)
+  );
+  const availabilityLabel = user.availabilityUpdatedAt ? `Zuletzt ${formatDateTime(user.availabilityUpdatedAt)}` : "Noch nichts eingetragen";
+  const cards = [
+    {
+      tone: user.bio || user.avatarUrl ? "success" : "amber",
+      label: user.bio || user.avatarUrl ? "Profil aktiv" : "Profil aufbauen",
+      title: user.bio || user.avatarUrl ? "Zeig dich in SONARA" : "Mach dein Profil persoenlich",
+      body: user.bio || user.avatarUrl
+        ? "Mit Bild, Kurztext und Kontakt wirkt die Community gleich naeher und persoenlicher."
+        : "Ein kurzer Text und ein Bild helfen anderen direkt zu sehen, wer du bist.",
+      meta: getPrimaryDisplayName(user),
+      tab: "profile",
+      action: "Profil oeffnen"
+    },
+    {
+      tone: hasAvailability ? "success" : "rose",
+      label: hasAvailability ? "Zeiten da" : "Zeiten fehlen",
+      title: "Trag ein, wann du oft da bist",
+      body: "So koennen Events, spontane Treffen und Community-Abende besser auf echte Menschen abgestimmt werden.",
+      meta: availabilityLabel,
+      tab: "availability",
+      action: "Verfuegbarkeit oeffnen"
+    },
+    {
+      tone: "sky",
+      label: "Feed",
+      title: "Teil Momente mit der Community",
+      body: "Bilder, kurze Updates und kleine Eindruecke landen direkt im Community Feed.",
+      meta: `${feedPosts.length} Beitraege sichtbar`,
+      tab: "feed",
+      action: "Feed oeffnen"
+    },
+    {
+      tone: "teal",
+      label: "Forum",
+      title: "Starte Themen und Fragen",
+      body: "Ideen, Hilfe, Creator-Runden und Community-Fragen bleiben im Forum gesammelt an einem Ort.",
+      meta: `${threads.length} Threads aktuell`,
+      tab: "forum",
+      action: "Forum oeffnen"
+    },
+    {
+      tone: "amber",
+      label: "Events",
+      title: "Finde Welten und Termine",
+      body: "Kalender, Events und Sonara Live geben dir sofort einen Grund, wieder reinzuschauen.",
+      meta: `${(community.events || []).length} Events geplant`,
+      tab: "events",
+      action: "Events ansehen"
+    }
+  ];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Mitmachen</p>
+          <h2>Was du in SONARA direkt tun kannst</h2>
+          <p class="section-copy">Nicht nur lesen, sondern posten, fragen, entdecken und deine Zeiten sauber angeben.</p>
+        </div>
+      </div>
+
+      <div class="guide-grid member-action-grid">
+        ${cards
+          .map(
+            (card) => `
+              <article class="mini-card guide-card member-action-card">
+                <span class="pill ${escapeHtml(card.tone)}">${escapeHtml(card.label)}</span>
+                <h3>${escapeHtml(card.title)}</h3>
+                <p>${escapeHtml(card.body)}</p>
+                <p class="timeline-meta">${escapeHtml(card.meta)}</p>
+                <div class="card-actions">
+                  <button type="button" class="ghost small" data-action="set-tab" data-tab="${escapeHtml(card.tab)}">${escapeHtml(card.action)}</button>
+                </div>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderMemberPulsePanel() {
+  const community = getCommunityData();
+  const nextEvent = (community.events || [])[0] || null;
+  const latestNews = getAnnouncementFeed()[0] || null;
+  const liveCreator = getCreatorActivityEntries(1)[0] || null;
+  const liveMeta = liveCreator ? getCreatorPresenceMeta(liveCreator) : null;
+
+  return `
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Gerade los</p>
+          <h2>Der aktuelle Community-Puls</h2>
+          <p class="section-copy">So sieht man sofort, ob gerade etwas passiert oder was als Naechstes ansteht.</p>
+        </div>
+      </div>
+
+      <div class="stack-list member-pulse-list">
+        <article class="mini-card member-pulse-card">
+          <span class="pill amber">Naechstes Event</span>
+          <h3>${escapeHtml(nextEvent?.title || "Noch kein Termin geplant")}</h3>
+          <p>${escapeHtml(nextEvent ? `${nextEvent.dateLabel || "-"} | ${nextEvent.world || "-"}` : "Sobald etwas geplant ist, taucht es hier direkt auf.")}</p>
+          <div class="card-actions">
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="events">Events oeffnen</button>
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="calendar">Kalender oeffnen</button>
+          </div>
+        </article>
+
+        <article class="mini-card member-pulse-card">
+          <span class="pill sky">Neueste News</span>
+          <h3>${escapeHtml(latestNews?.title || "Gerade ruhig")}</h3>
+          <p>${escapeHtml(latestNews?.body || "Wenn etwas wichtig wird, landet es hier direkt fuer alle sichtbar.")}</p>
+          <div class="card-actions">
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="news">News oeffnen</button>
+          </div>
+        </article>
+
+        <article class="mini-card member-pulse-card">
+          <span class="pill ${escapeHtml(liveMeta?.tone || "neutral")}">${escapeHtml(liveMeta?.title || "Creator Radar")}</span>
+          <h3>${escapeHtml(liveCreator ? getPrimaryDisplayName(liveCreator) : "Zurzeit kein Live-Signal")}</h3>
+          <p>${escapeHtml(liveMeta?.summary || "Streams, Uploads und Creator-Hubs geben der Community mehr Bewegung.")}</p>
+          <div class="card-actions">
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="live">Sonara Live oeffnen</button>
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="creators">Creator ansehen</button>
+          </div>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderMemberForumSpotlightPanel() {
+  const threads = (state.data?.forumThreads || [])
+    .slice()
+    .sort((left, right) => Date.parse(String(right.createdAt || "")) - Date.parse(String(left.createdAt || "")))
+    .slice(0, 3);
+
+  return `
+    <section class="panel span-7">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Forum Spotlight</p>
+          <h2>Worueber gerade gesprochen wird</h2>
+          <p class="section-copy">Damit Mitglieder sofort sehen, welche Fragen, Ideen oder Themen gerade offen sind.</p>
+        </div>
+        <button type="button" class="ghost small" data-action="set-tab" data-tab="forum">Ganzes Forum oeffnen</button>
+      </div>
+
+      <div class="stack-list member-forum-preview-list">
+        ${
+          threads.length
+            ? threads
+                .map(
+                  (thread) => `
+                    <article class="mini-card member-forum-preview-card">
+                      <div class="status-row">
+                        <div class="chip-list">
+                          <span class="pill sky">${escapeHtml(thread.category || "Allgemein")}</span>
+                          ${renderCreatorCommunityBadge(thread.creatorCommunityName)}
+                        </div>
+                        <span class="timeline-meta">${escapeHtml(formatDateTime(thread.createdAt))}</span>
+                      </div>
+                      <h3>${escapeHtml(thread.title)}</h3>
+                      <p class="timeline-meta">von ${escapeHtml(thread.authorName || "Unbekannt")}</p>
+                      <p>${escapeHtml(truncateText(thread.content || thread.body || "", 220))}</p>
+                    </article>
+                  `
+                )
+                .join("")
+            : renderEmptyState("Noch keine Themen", "Sobald jemand eine Frage, Idee oder Creator-Runde startet, erscheint sie hier.")
+        }
+      </div>
+    </section>
+  `;
+}
+
 function renderManagerDashboard(activeTab) {
   switch (activeTab) {
     case "feed":
@@ -11514,7 +11915,14 @@ function renderMemberDashboard(activeTab) {
     case "feed":
       return renderFeedPanel();
     case "community":
-      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+      return [
+        renderMemberActionHubPanel(),
+        renderMemberPulsePanel(),
+        renderCommunityOverviewPanel(),
+        renderMemberForumSpotlightPanel(),
+        renderCommunityRulesPanel(),
+        renderCommunityTeamPanel()
+      ].join("");
     case "calendar":
       return renderShiftCalendarPanel();
     case "events":
@@ -11537,7 +11945,17 @@ function renderMemberDashboard(activeTab) {
       return renderProfileWorkspace(false);
     case "overview":
     default:
-      return [renderNotificationsPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderCommunityOverviewPanel()].join("");
+      return [
+        renderNotificationsPanel(),
+        renderMemberActionHubPanel(),
+        renderFeedPanel(),
+        renderMemberPulsePanel(),
+        renderMemberForumSpotlightPanel(),
+        renderLivePreviewPanel(3),
+        renderNewsSpotlightPanel(),
+        renderCreatorsPanel(false),
+        renderCommunityOverviewPanel()
+      ].join("");
   }
 }
 
@@ -11548,7 +11966,7 @@ function normalizeActiveTab(tab) {
       ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile"]
     : canAccessStaffArea()
       ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "schedule", "availability", "feedback", "chat", "time", "profile"]
-      : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "feedback", "chat", "profile"];
+      : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "availability", "feedback", "chat", "profile"];
 
   return allowed.includes(tab) ? tab : "overview";
 }

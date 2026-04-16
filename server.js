@@ -2114,9 +2114,7 @@ function preserveTimeEntryHistoryForShift(timeEntries, shift, store, options = {
     }
 
     if (closeOpenEntries && !entry.checkOutAt) {
-      const shiftEnd = getShiftEndDateTime(snapshot || shift);
-      const fallbackEnd = shiftEnd ? Math.min(Date.now(), shiftEnd.getTime()) : Date.now();
-      entry.checkOutAt = new Date(fallbackEnd).toISOString();
+      entry.checkOutAt = new Date().toISOString();
       changed = true;
     }
 
@@ -2141,17 +2139,48 @@ function hydrateHistoricalTimeEntries(store) {
       changed = true;
     }
 
-    if (!entry.checkOutAt) {
-      const referenceShift = liveShift || entry.shiftSnapshot;
-      const shiftEnd = getShiftEndDateTime(referenceShift);
-      if (shiftEnd && Date.now() >= shiftEnd.getTime()) {
-        entry.checkOutAt = shiftEnd.toISOString();
-        changed = true;
-      }
-    }
   }
 
   return changed;
+}
+
+function getCurrentWeekStartKey(referenceDate = new Date()) {
+  const start = new Date(referenceDate);
+  start.setHours(12, 0, 0, 0);
+  const weekday = start.getDay();
+  const deltaToMonday = weekday === 0 ? -6 : 1 - weekday;
+  start.setDate(start.getDate() + deltaToMonday);
+  return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+}
+
+function pruneArchivedCompletedShifts(store, referenceDate = new Date()) {
+  if (!store || !Array.isArray(store.shifts) || !Array.isArray(store.timeEntries)) return false;
+
+  const currentWeekStartKey = getCurrentWeekStartKey(referenceDate);
+  const shiftsToArchive = store.shifts.filter((shift) => {
+    if (!shift?.id || !shift?.date || shift.date >= currentWeekStartKey) return false;
+    const relatedEntries = store.timeEntries.filter((entry) => entry.shiftId === shift.id);
+    if (!relatedEntries.length) return false;
+    if (relatedEntries.some((entry) => !entry.checkOutAt)) return false;
+    return relatedEntries.some((entry) => entry.checkOutAt);
+  });
+
+  if (!shiftsToArchive.length) return false;
+
+  for (const shift of shiftsToArchive) {
+    preserveTimeEntryHistoryForShift(store.timeEntries, shift, store, {
+      detachEntries: true,
+      closeOpenEntries: false
+    });
+  }
+
+  const archivedIds = new Set(shiftsToArchive.map((shift) => shift.id));
+  store.shifts = store.shifts.filter((shift) => !archivedIds.has(shift.id));
+  store.swapRequests = Array.isArray(store.swapRequests) ? store.swapRequests.filter((entry) => !archivedIds.has(entry.shiftId)) : [];
+  store.chatMessages = Array.isArray(store.chatMessages)
+    ? store.chatMessages.map((entry) => (archivedIds.has(entry.relatedShiftId) ? { ...entry, relatedShiftId: "" } : entry))
+    : [];
+  return true;
 }
 
 function readStore() {
@@ -2160,7 +2189,9 @@ function readStore() {
     portalStoreCache = fallback;
   }
 
-  if (hydrateHistoricalTimeEntries(portalStoreCache)) {
+  const hydratedHistory = hydrateHistoricalTimeEntries(portalStoreCache);
+  const prunedArchivedShifts = pruneArchivedCompletedShifts(portalStoreCache);
+  if (hydratedHistory || prunedArchivedShifts) {
     persistPortalStore(portalStoreCache);
   }
 
@@ -2169,6 +2200,7 @@ function readStore() {
 
 function writeStore(store) {
   const normalized = normalizeStore(store);
+  pruneArchivedCompletedShifts(normalized);
   portalStoreCache = normalized;
   persistPortalStore(normalized);
   return structuredClone(normalized);
