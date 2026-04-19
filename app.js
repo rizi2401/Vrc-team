@@ -8391,7 +8391,7 @@ function getPublicRouteState() {
   if (creatorMatch) {
     return {
       kind: "creator",
-      slug: decodeURIComponent(creatorMatch[1] || "").trim().toLowerCase(),
+      slug: normalizeCreatorSlugValue(decodeURIComponent(creatorMatch[1] || "")),
       vrchatSource: ""
     };
   }
@@ -8466,37 +8466,107 @@ function formatVrchatLinkSourceLabel(source) {
   return "VRChat";
 }
 
+function normalizeCreatorSlugValue(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
 function buildCreatorPublicPath(user) {
-  const slug = String(user?.creatorSlug || user?.creatorCommunityName || user?.vrchatName || "").trim().toLowerCase();
+  const slug = normalizeCreatorSlugValue(user?.creatorSlug || user?.creatorCommunityName || user?.vrchatName || "");
   return slug ? `/creator/${encodeURIComponent(slug)}` : "/";
 }
 
 function getPublicCreatorBySlug(slug) {
-  const normalized = String(slug || "").trim().toLowerCase();
+  const normalized = normalizeCreatorSlugValue(slug);
   if (!normalized) return null;
-  return getCreatorEntries().find((entry) => String(entry.creatorSlug || "").trim().toLowerCase() === normalized) || null;
+  const sessionUserSlug = normalizeCreatorSlugValue(
+    state.session?.creatorSlug || state.session?.creatorCommunityName || state.session?.vrchatName || ""
+  );
+  if (state.session && sessionUserSlug === normalized) {
+    return state.session;
+  }
+
+  return (
+    getCreatorEntries().find(
+      (entry) => normalizeCreatorSlugValue(entry.creatorSlug || entry.creatorCommunityName || entry.vrchatName || "") === normalized
+    ) || null
+  );
 }
 
 function getPublicCreatorFeedPosts(creatorId, limit = 6) {
-  const source = (state.data?.feedPosts || state.publicData?.feedPosts || []).filter(
-    (post) => post.creatorCommunityId === creatorId || post.authorId === creatorId
-  );
+  const source = (state.data?.feedPosts || state.publicData?.feedPosts || [])
+    .filter((post) => post.creatorCommunityId === creatorId || post.authorId === creatorId)
+    .slice()
+    .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
   return Number.isFinite(limit) ? source.slice(0, limit) : source;
 }
 
 function getPublicCreatorThreads(creatorId, limit = 6) {
-  const source = (state.data?.forumThreads || state.publicData?.forumThreads || []).filter(
-    (thread) => thread.creatorCommunityId === creatorId || thread.authorId === creatorId
-  );
+  const source = (state.data?.forumThreads || state.publicData?.forumThreads || [])
+    .filter((thread) => thread.creatorCommunityId === creatorId || thread.authorId === creatorId)
+    .slice()
+    .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
   return Number.isFinite(limit) ? source.slice(0, limit) : source;
+}
+
+function getPublicCreatorTimelineItems(creatorId, limit = 8) {
+  const feedPosts = getPublicCreatorFeedPosts(creatorId, Number.POSITIVE_INFINITY).map((post) => ({
+    ...post,
+    entryType: "feed"
+  }));
+  const forumThreads = getPublicCreatorThreads(creatorId, Number.POSITIVE_INFINITY).map((thread) => ({
+    ...thread,
+    entryType: "thread"
+  }));
+
+  const entries = [...feedPosts, ...forumThreads].sort((left, right) => {
+    return new Date(right.createdAt || 0) - new Date(left.createdAt || 0);
+  });
+
+  return Number.isFinite(limit) ? entries.slice(0, limit) : entries;
+}
+
+function renderCreatorPublicTimelineItem(entry) {
+  if (entry.entryType === "thread") {
+    return `
+      <article class="mini-card creator-public-timeline-item">
+        <div class="status-row">
+          <span class="pill amber">${escapeHtml(entry.category || "Thema")}</span>
+          <span class="timeline-meta">${escapeHtml(formatDateTime(entry.createdAt))}</span>
+        </div>
+        <h3>${escapeHtml(entry.title || "Neues Thema")}</h3>
+        <p class="timeline-meta">von ${escapeHtml(entry.authorName || "Unbekannt")}</p>
+        <p class="helper-text">${escapeHtml(truncateText(entry.content || entry.body || "", 220))}</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="mini-card creator-public-timeline-item">
+      <div class="status-row">
+        <span class="pill sky">Feed</span>
+        <span class="timeline-meta">${escapeHtml(formatDateTime(entry.createdAt))}</span>
+      </div>
+      <h3>${escapeHtml(entry.authorName || "Creator Update")}</h3>
+      <p class="helper-text">${escapeHtml(truncateText(entry.content || "", 220))}</p>
+      ${entry.imageUrl ? `<img src="${escapeHtml(entry.imageUrl)}" alt="Creator Update" class="feed-image">` : ""}
+    </article>
+  `;
 }
 
 function renderCreatorPublicPage(creator) {
   const community = getCreatorCommunityMeta(creator);
   const presence = getCreatorPresenceMeta(creator);
-  const feedPosts = getPublicCreatorFeedPosts(creator.id, 4);
-  const forumThreads = getPublicCreatorThreads(creator.id, 4);
+  const feedPosts = getPublicCreatorFeedPosts(creator.id, 6);
+  const forumThreads = getPublicCreatorThreads(creator.id, 6);
+  const timelineEntries = getPublicCreatorTimelineItems(creator.id, 8);
   const announcements = getAnnouncementFeed().slice(0, 3);
+  const publicPath = buildCreatorPublicPath(creator);
+  const isVisibleCreator = getCreatorEntries().some((entry) => entry.id === creator.id);
+  const isOwnerPreview = Boolean(state.session?.id === creator.id && !isVisibleCreator);
 
   return `
     <div class="app-shell">
@@ -8504,7 +8574,12 @@ function renderCreatorPublicPage(creator) {
         eyebrow: "SONARA Creator",
         title: community.name,
         intro: community.summary,
-        chips: [getPrimaryDisplayName(creator), presence.title, creator.creatorSlug ? `/creator/${creator.creatorSlug}` : ""].filter(Boolean)
+        chips: [
+          getPrimaryDisplayName(creator),
+          presence.title,
+          creator.creatorSlug ? publicPath : "",
+          isOwnerPreview ? "Vorschau" : ""
+        ].filter(Boolean)
       })}
 
       ${renderFlash()}
@@ -8516,11 +8591,18 @@ function renderCreatorPublicPage(creator) {
             <div>
               <p class="eyebrow">Creator Seite</p>
               <h2>${escapeHtml(community.name)}</h2>
-              <p class="section-copy">Das ist die eigene kleine Creator-Seite innerhalb von SONARA. Hier landen Einstieg, Status und die letzten Inhalte an einem festen Ort.</p>
+              <p class="section-copy">
+                ${
+                  isOwnerPreview
+                    ? "Das ist deine Vorschau. Solange dein Hub noch nicht freigegeben oder sichtbar ist, siehst vor allem du selbst diese Slash-Seite."
+                    : "Das ist die eigene Creator-Seite innerhalb von SONARA. Hier sehen Mitglieder direkt, was in dieser Community gepostet, angekuendigt und besprochen wird."
+                }
+              </p>
             </div>
             <div class="chip-list">
               <span class="pill ${presence.tone}">${escapeHtml(presence.title)}</span>
-              ${creator.creatorSlug ? `<span class="pill neutral">/creator/${escapeHtml(creator.creatorSlug)}</span>` : ""}
+              ${creator.creatorSlug ? `<span class="pill neutral">${escapeHtml(publicPath)}</span>` : ""}
+              ${isOwnerPreview ? '<span class="pill amber">Noch nicht oeffentlich</span>' : ""}
             </div>
           </div>
 
@@ -8551,15 +8633,27 @@ function renderCreatorPublicPage(creator) {
             </article>
 
             <article class="mini-card">
-              <p class="eyebrow">Creator Feed</p>
-              <h3>Letzte Momente</h3>
-              <div class="stack-list compact-stack">
-                ${
-                  feedPosts.length
-                    ? feedPosts.map((post) => renderCompactCreatorFeedPost(post)).join("")
-                    : renderEmptyState("Noch keine Feed-Momente", "Sobald dieser Creator etwas teilt, landet es hier auf der Seite.")
-                }
+              <p class="eyebrow">Module</p>
+              <h3>So ist dieser Hub aufgebaut</h3>
+              <div class="creator-public-module-grid">
+                <div class="creator-public-module-card">
+                  <strong>${escapeHtml(String(feedPosts.length))}</strong>
+                  <span>Feed-Updates</span>
+                </div>
+                <div class="creator-public-module-card">
+                  <strong>${escapeHtml(String(forumThreads.length))}</strong>
+                  <span>Themen</span>
+                </div>
+                <div class="creator-public-module-card">
+                  <strong>${escapeHtml(String((creator.creatorLinks || []).length || 0))}</strong>
+                  <span>Links</span>
+                </div>
+                <div class="creator-public-module-card">
+                  <strong>${escapeHtml(isOwnerPreview ? "Entwurf" : "Live")}</strong>
+                  <span>${escapeHtml(isOwnerPreview ? "Vorschau-Modus" : "Community sichtbar")}</span>
+                </div>
               </div>
+              <p class="helper-text">Die Seite zeigt automatisch die Inhalte, die dieser Creator im eigenen Bereich postet. Feed und Themenraum laufen hier zusammen.</p>
             </article>
           </div>
         </section>
@@ -8567,12 +8661,48 @@ function renderCreatorPublicPage(creator) {
         <section class="panel span-12">
           <div class="section-head">
             <div>
-              <p class="eyebrow">Themenraum</p>
-              <h2>Threads aus dieser Creator-Ecke</h2>
+              <p class="eyebrow">Community Timeline</p>
+              <h2>Alles, was in dieser Creator-Ecke passiert</h2>
+              <p class="section-copy">Neue Feed-Beitraege und Themen laufen hier gemeinsam auf, damit die Community nichts verpasst.</p>
+            </div>
+          </div>
+          <div class="creator-public-timeline">
+            ${
+              timelineEntries.length
+                ? timelineEntries.map((entry) => renderCreatorPublicTimelineItem(entry)).join("")
+                : renderEmptyState("Noch keine Aktivitaet", "Sobald dieser Creator in seinem Hub postet, taucht es hier gesammelt auf.")
+            }
+          </div>
+        </section>
+
+        <section class="panel span-12">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Creator Module</p>
+              <h2>Feed, Themen und Sonara-Kontext</h2>
             </div>
           </div>
           <div class="creator-public-columns">
             <div class="stack-list compact-stack">
+              <div class="section-head compact-section-head">
+                <div>
+                  <p class="eyebrow">Creator Feed</p>
+                  <h3>Letzte Momente</h3>
+                </div>
+              </div>
+              ${
+                feedPosts.length
+                  ? feedPosts.map((post) => renderCompactCreatorFeedPost(post)).join("")
+                  : renderEmptyState("Noch keine Feed-Momente", "Sobald dieser Creator etwas teilt, landet es hier auf der Seite.")
+              }
+            </div>
+            <div class="stack-list compact-stack">
+              <div class="section-head compact-section-head">
+                <div>
+                  <p class="eyebrow">Themenraum</p>
+                  <h3>Threads aus dieser Creator-Ecke</h3>
+                </div>
+              </div>
               ${
                 forumThreads.length
                   ? forumThreads.map((thread) => renderCompactCreatorForumThread(thread)).join("")
@@ -10256,6 +10386,14 @@ function getFeedPosts() {
   );
 }
 
+function hasVisibleCreatorProfileClient(user) {
+  return Boolean(
+    String(user?.creatorApplicationStatus || "none").trim().toLowerCase() === "approved" &&
+      user?.creatorVisible &&
+      (((user?.creatorLinks || []).length > 0) || user?.creatorBlurb)
+  );
+}
+
 function getCreatorEntries() {
   const baseCommunity = state.data?.community || state.publicData?.community || {};
   const directCreators = Array.isArray(baseCommunity.creators) ? baseCommunity.creators : [];
@@ -10266,7 +10404,7 @@ function getCreatorEntries() {
   }
 
   return getCommunityDirectory()
-    .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
+    .filter((entry) => hasVisibleCreatorProfileClient(entry))
     .slice()
     .sort((left, right) => getPrimaryDisplayName(left).localeCompare(getPrimaryDisplayName(right), "de"));
 }
@@ -10317,10 +10455,14 @@ function getChatFeed(mode = "community") {
 function renderCreatorBuilderPanel() {
   const user = state.session;
   if (!user) return "";
+  const creatorApplication = getCreatorApplicationMeta(user);
+  const shouldShowWorkspace = Boolean(
+    canManagePortal() || creatorApplication.status !== "none" || user.creatorSlug || user.creatorCommunityName || user.creatorVisible
+  );
+  if (!shouldShowWorkspace) return "";
 
   const creatorPresence = getCreatorPresenceMeta(user);
   const creatorCommunity = getCreatorCommunityMeta(user);
-  const creatorApplication = getCreatorApplicationMeta(user);
   const creatorAutomation = getCreatorAutomationMeta(user);
   const publicPath = user.creatorSlug ? buildCreatorPublicPath(user) : "";
   const hubReady = Boolean(user.creatorSlug && creatorCommunity.name && (user.creatorCommunitySummary || user.creatorBlurb));
@@ -10444,6 +10586,116 @@ function renderCreatorBuilderPanel() {
   `;
 }
 
+function renderCreatorPublishingPanel() {
+  const user = state.session;
+  if (!user) return "";
+
+  const creatorApplication = getCreatorApplicationMeta(user);
+  const shouldShowWorkspace = Boolean(
+    canManagePortal() || creatorApplication.status !== "none" || user.creatorSlug || user.creatorCommunityName || user.creatorVisible
+  );
+  if (!shouldShowWorkspace) return "";
+
+  const creatorCommunity = getCreatorCommunityMeta(user);
+  const canPublish = creatorApplication.approved;
+  const recentFeedPosts = getCreatorCommunityFeedPosts(user.id, 3);
+  const recentThreads = getCreatorCommunityThreads(user.id, 3);
+
+  return `
+    <section class="panel span-12 creator-publishing-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Creator Publishing</p>
+          <h2>Deine eigene Creator-Seite direkt fuellen</h2>
+          <p class="section-copy">Alles, was du hier als Feed oder Thema postest, landet direkt in deiner Creator-Ecke und auf deiner Slash-Seite.</p>
+        </div>
+        <div class="chip-list">
+          <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
+          <span class="pill neutral">${escapeHtml(creatorCommunity.name)}</span>
+        </div>
+      </div>
+
+      ${
+        canPublish
+          ? `
+            <div class="creator-publishing-grid">
+              <form class="stack-form mini-card creator-publishing-form" data-form="feed-post">
+                <input type="hidden" name="creatorCommunityId" value="${escapeHtml(user.id)}">
+                <p class="eyebrow">Feed Update</p>
+                <h3>Kurzes Update an deine Community</h3>
+                <div class="field">
+                  <label for="creatorFeedContent">Was gibt es Neues?</label>
+                  <textarea id="creatorFeedContent" name="content" placeholder="Zum Beispiel: Heute 20 Uhr live, neuer Clip online oder kleines Community-Update." required></textarea>
+                </div>
+                <div class="field">
+                  <label for="creatorFeedImage">Bild optional</label>
+                  <input id="creatorFeedImage" name="imageFile" type="file" accept="image/*">
+                </div>
+                <button type="submit">Feed-Update veroeffentlichen</button>
+              </form>
+
+              <form class="stack-form mini-card creator-publishing-form" data-form="forum-thread">
+                <input type="hidden" name="creatorCommunityId" value="${escapeHtml(user.id)}">
+                <p class="eyebrow">Themenraum</p>
+                <h3>Neues Thema fuer deine Community</h3>
+                <div class="field">
+                  <label for="creatorThreadTitle">Titel</label>
+                  <input id="creatorThreadTitle" name="title" type="text" placeholder="z. B. Naechster Stream, Ideen, Fragen" required>
+                </div>
+                <div class="field">
+                  <label for="creatorThreadCategory">Kategorie</label>
+                  <input id="creatorThreadCategory" name="category" type="text" value="Creator Community" placeholder="Creator Community">
+                </div>
+                <div class="field">
+                  <label for="creatorThreadContent">Beschreibung</label>
+                  <textarea id="creatorThreadContent" name="content" placeholder="Worum geht es und was soll deine Community hier wissen oder besprechen?" required></textarea>
+                </div>
+                <button type="submit">Thema veroeffentlichen</button>
+              </form>
+            </div>
+          `
+          : `
+            <article class="mini-card">
+              <p class="eyebrow">Noch nicht freigegeben</p>
+              <h3>Publishing wird nach der Creator-Freigabe aktiv</h3>
+              <p class="helper-text">Du kannst deinen Hub schon bauen, aber das echte Posten in deine eigene Creator-Ecke schalten wir erst frei, wenn dein Creator-Status bestaetigt ist.</p>
+            </article>
+          `
+      }
+
+      <div class="creator-public-columns">
+        <div class="stack-list compact-stack">
+          <div class="section-head compact-section-head">
+            <div>
+              <p class="eyebrow">Letzte Feed-Updates</p>
+              <h3>Was bei dir zuletzt gelandet ist</h3>
+            </div>
+          </div>
+          ${
+            recentFeedPosts.length
+              ? recentFeedPosts.map((post) => renderCompactCreatorFeedPost(post)).join("")
+              : renderEmptyState("Noch keine Feed-Posts", "Sobald du deinen Hub fuellst, tauchen deine letzten Updates hier direkt auf.")
+          }
+        </div>
+
+        <div class="stack-list compact-stack">
+          <div class="section-head compact-section-head">
+            <div>
+              <p class="eyebrow">Letzte Themen</p>
+              <h3>Was deine Community gerade besprechen kann</h3>
+            </div>
+          </div>
+          ${
+            recentThreads.length
+              ? recentThreads.map((thread) => renderCompactCreatorForumThread(thread)).join("")
+              : renderEmptyState("Noch keine Themen", "Lege hier Themen an, damit deine Community auf deiner Slash-Seite direkt etwas zum Folgen hat.")
+          }
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function renderCreatorsPanel(managerView) {
   const creators = getCreatorEntries();
   const creatorActivity = getCreatorActivityEntries(4);
@@ -10464,6 +10716,7 @@ function renderCreatorsPanel(managerView) {
         </div>
       </div>
       ${renderCreatorBuilderPanel()}
+      ${renderCreatorPublishingPanel()}
       ${
         managerView
           ? `<p class="helper-text">Creator pflegen ihre Hub-Daten weiterhin im Profil. Freigaben selbst laufen jetzt getrennt ueber die Creator-Pruefung, damit niemand sich den Bereich einfach selbst zuschalten kann.</p>`

@@ -5285,7 +5285,7 @@ function buildCommunityPayload(store) {
     .map(sanitizeUser);
 
   const creators = activeUsers
-    .filter((entry) => entry.creatorVisible && (((entry.creatorLinks || []).length > 0) || entry.creatorBlurb))
+    .filter((entry) => hasVisibleCreatorProfile(entry))
     .slice()
     .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
     .map(sanitizeUser);

@@ -3328,7 +3328,60 @@ body::after {
 .creator-public-columns {
   display: grid;
   gap: 1rem;
+}
+
+.creator-public-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.creator-public-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.creator-public-module-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.8rem 0 1rem;
+}
+
+.creator-public-module-card {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(255, 208, 144, 0.12);
+  border-radius: 18px 10px 18px 10px;
+  background: linear-gradient(180deg, rgba(13, 22, 39, 0.88), rgba(9, 17, 31, 0.72));
+}
+
+.creator-public-module-card strong {
+  font-size: 1.1rem;
+}
+
+.creator-public-timeline {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.creator-public-timeline-item {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.creator-publishing-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.creator-publishing-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.creator-publishing-form textarea {
+  min-height: 130px;
 }
 
 .attendance-summary-grid {
@@ -3470,6 +3523,8 @@ input[type="file"]::-webkit-file-upload-button {
   }
 
   .creator-public-grid,
+  .creator-public-module-grid,
+  .creator-public-timeline,
   .creator-public-columns {
     grid-template-columns: 1fr;
   }
@@ -4700,7 +4755,10 @@ input[type="file"]::-webkit-file-upload-button {
   .feature-grid,
   .dashboard-layout,
   .creator-builder-grid,
+  .creator-publishing-grid,
   .creator-public-grid,
+  .creator-public-module-grid,
+  .creator-public-timeline,
   .creator-public-columns,
   .creator-stage-shell,
   .live-stage-grid,
@@ -4744,6 +4802,7 @@ input[type="file"]::-webkit-file-upload-button {
   .live-stage-card,
   .creator-builder-preview,
   .creator-builder-form,
+  .creator-publishing-form,
   .creator-review-card,
   .creator-community-activity-card,
   .promo-video-frame,
@@ -5007,6 +5066,7 @@ input[type="file"]::-webkit-file-upload-button {
   .live-stage-card,
   .creator-builder-preview,
   .creator-builder-form,
+  .creator-publishing-form,
   .creator-review-card,
   .creator-community-activity-card,
   .promo-video-frame,
