@@ -546,6 +546,44 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  const shiftWeekMatch = url.pathname.match(/^\/api\/shifts\/week\/(\d{4}-\d{2}-\d{2})$/);
+  if (shiftWeekMatch && req.method === "DELETE") {
+    requireModerationCoordinator(auth.user);
+    const weekStartKey = normalizeDateKeyOrThrow(decodeURIComponent(shiftWeekMatch[1]));
+    const weekEndKey = addDaysToDateKey(weekStartKey, 6);
+    const nextStore = structuredClone(auth.store);
+    const shiftsToDelete = nextStore.shifts.filter((entry) => entry.date >= weekStartKey && entry.date <= weekEndKey);
+
+    if (!shiftsToDelete.length) {
+      sendPortalData(res, 200, auth.user, auth.store);
+      return;
+    }
+
+    for (const shift of shiftsToDelete) {
+      preserveTimeEntryHistoryForShift(nextStore.timeEntries, shift, nextStore, {
+        detachEntries: true,
+        closeOpenEntries: true
+      });
+    }
+
+    const deletedIds = new Set(shiftsToDelete.map((entry) => entry.id));
+    nextStore.shifts = nextStore.shifts.filter((entry) => !deletedIds.has(entry.id));
+    nextStore.swapRequests = nextStore.swapRequests.filter((entry) => !deletedIds.has(entry.shiftId));
+    nextStore.chatMessages = nextStore.chatMessages.map((entry) =>
+      deletedIds.has(entry.relatedShiftId) ? { ...entry, relatedShiftId: "" } : entry
+    );
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", {
+      type: "shift-week-deleted",
+      count: shiftsToDelete.length,
+      weekStart: weekStartKey,
+      weekEnd: weekEndKey
+    });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
   const shiftMatch = url.pathname.match(/^\/api\/shifts\/([^/]+)$/);
   if (shiftMatch) {
     requireModerationCoordinator(auth.user);
@@ -2151,6 +2189,34 @@ function getCurrentWeekStartKey(referenceDate = new Date()) {
   const deltaToMonday = weekday === 0 ? -6 : 1 - weekday;
   start.setDate(start.getDate() + deltaToMonday);
   return `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+}
+
+function normalizeDateKeyOrThrow(value) {
+  const normalized = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const error = new Error("Ungueltige Kalenderwoche.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const [year, month, day] = normalized.split("-").map((entry) => Number.parseInt(entry, 10));
+  const parsed = new Date(year, (month || 1) - 1, day || 1, 12, 0, 0);
+  const reparsed = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+  if (reparsed !== normalized) {
+    const error = new Error("Ungueltige Kalenderwoche.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return normalized;
+}
+
+function addDaysToDateKey(dateKey, amount = 0) {
+  const normalized = normalizeDateKeyOrThrow(dateKey);
+  const [year, month, day] = normalized.split("-").map((entry) => Number.parseInt(entry, 10));
+  const parsed = new Date(year, (month || 1) - 1, day || 1, 12, 0, 0);
+  parsed.setDate(parsed.getDate() + Number(amount || 0));
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
 }
 
 function pruneArchivedCompletedShifts(store, referenceDate = new Date()) {

@@ -2157,26 +2157,43 @@ function renderShiftCalendarPanel() {
   const days = buildShiftCalendarDays(shifts);
   const events = getCommunityData().events || [];
   const weeks = buildShiftCalendarWeeks(days, events);
-  const leadCount = shifts.filter((entry) => entry.isLead).length;
+  const today = getLocalDateKey();
+  const pastWeeks = weeks.filter((week) => week.endDate < today).length;
+  const currentWeek = weeks.find((week) => week.startDate <= today && week.endDate >= today) || null;
   const worldCount = new Set(shifts.map((entry) => entry.world).filter(Boolean)).size;
-  const eventCount = events.length;
+  const assignedPeople = new Set(shifts.map((entry) => entry.memberId).filter(Boolean)).size;
 
   return `
     <section class="panel span-12">
-      <div class="section-head">
+      <div class="section-head calendar-panel-head">
         <div>
           <p class="eyebrow">Kalender</p>
           <h2>Wochenkalender fuer Schichten</h2>
-          <p class="section-copy">Ein ruhiges Wochenboard statt Kartenchaos. Pro Tag siehst du direkt Zeiten, Welt, Leitung, Team und Events in klaren Bahnen.</p>
+          <p class="section-copy">Jede Woche steht jetzt als eigenes Planungsboard da. Du erkennst schneller, was offen ist, was laeuft und welche alten Wochen du sauber rausnehmen kannst.</p>
         </div>
       </div>
 
-      <div class="stats-strip compact-stats">
-        ${renderStatCard("Schichten", shifts.length, "Aktuell sichtbare Eintraege", "amber")}
-        ${renderStatCard("Kalenderwochen", weeks.length, "Wochen mit geplanter Besetzung", "sky")}
-        ${renderStatCard("Leitungen", leadCount, "Markierte Instanz-Leitungen", "rose")}
-        ${renderStatCard("Welten", worldCount, "Einsatzorte im Plan", "teal")}
-        ${renderStatCard("Events", eventCount, "Community-Termine im Kalender", "sky")}
+      <div class="calendar-overview-grid">
+        <article class="calendar-overview-card">
+          <p class="eyebrow">Wochen im Blick</p>
+          <h3>${escapeHtml(String(weeks.length))}</h3>
+          <p class="helper-text">Alle Kalenderwochen mit Schichten oder Events, die gerade sichtbar sind.</p>
+        </article>
+        <article class="calendar-overview-card">
+          <p class="eyebrow">Aktuelle Woche</p>
+          <h3>${escapeHtml(currentWeek ? `KW ${String(currentWeek.weekNumber).padStart(2, "0")}` : "Keine aktive Woche")}</h3>
+          <p class="helper-text">${escapeHtml(currentWeek ? `${currentWeek.totalSlots} Schichtfenster in dieser Woche` : "Sobald etwas geplant ist, taucht die laufende Woche hier auf.")}</p>
+        </article>
+        <article class="calendar-overview-card">
+          <p class="eyebrow">Eingeplant</p>
+          <h3>${escapeHtml(String(assignedPeople))}</h3>
+          <p class="helper-text">${escapeHtml(String(worldCount))} Welten sind aktuell im Kalender vertreten.</p>
+        </article>
+        <article class="calendar-overview-card">
+          <p class="eyebrow">Vergangene Wochen</p>
+          <h3>${escapeHtml(String(pastWeeks))}</h3>
+          <p class="helper-text">Diese Wochen kannst du bei Bedarf als Ganzes entfernen, ohne die Zeithistorie zu verlieren.</p>
+        </article>
       </div>
 
       <div class="calendar-weeks">
@@ -2285,6 +2302,7 @@ function buildShiftCalendarWeeks(days, events = []) {
     weeks.push({
       startDate: weekDays[0].date,
       endDate: weekDays[6].date,
+      weekNumber: getCalendarWeekNumber(weekDays[0].date),
       totalSlots: weekDays.reduce((sum, day) => sum + day.slots.length, 0),
       days: weekDays
     });
@@ -2304,16 +2322,28 @@ function buildCalendarEventAnchorDates(events) {
 
 function renderShiftCalendarWeek(week) {
   const activeDays = week.days.filter((day) => day.slots.length || day.events.length).length;
+  const assignedPeople = new Set(
+    week.days.flatMap((day) => day.slots.flatMap((slot) => slot.members.map((entry) => entry.memberId).filter(Boolean)))
+  ).size;
+  const weekLabel = `KW ${String(week.weekNumber).padStart(2, "0")} | ${formatDate(week.startDate)} bis ${formatDate(week.endDate)}`;
   return `
     <article class="calendar-week">
       <div class="calendar-week-head">
         <div>
           <p class="eyebrow">Kalenderwoche</p>
-          <h3>${escapeHtml(`${formatDate(week.startDate)} bis ${formatDate(week.endDate)}`)}</h3>
+          <h3>${escapeHtml(weekLabel)}</h3>
+          <p class="timeline-meta calendar-week-summary">${escapeHtml(String(assignedPeople))} eingeteilte Personen | ${escapeHtml(String(activeDays))} aktive Tage</p>
         </div>
-        <div class="calendar-week-meta">
-          <span class="pill neutral">${escapeHtml(String(week.totalSlots))} Schichtfenster</span>
-          <span class="pill sky">${escapeHtml(String(activeDays))} aktive Tage</span>
+        <div class="calendar-week-actions">
+          <div class="calendar-week-meta">
+            <span class="pill neutral">${escapeHtml(String(week.totalSlots))} Schichtfenster</span>
+            <span class="pill sky">${escapeHtml(String(activeDays))} aktive Tage</span>
+          </div>
+          ${
+            canCoordinateStaff() && week.totalSlots
+              ? `<button type="button" class="danger small" data-action="delete-calendar-week" data-week-start="${escapeHtml(week.startDate)}" data-week-label="${escapeHtml(weekLabel)}">Woche loeschen</button>`
+              : ""
+          }
         </div>
       </div>
       <div class="calendar-week-grid">
@@ -2327,12 +2357,14 @@ function renderShiftCalendarDayCell(day) {
   const totalItems = day.slots.length + day.events.length;
   const slotCount = day.slots.length;
   const eventCount = day.events.length;
+  const teamCount = new Set(day.slots.flatMap((slot) => slot.members.map((entry) => entry.memberId).filter(Boolean))).size;
   return `
     <section class="calendar-day-cell ${day.isToday ? "today" : ""} ${totalItems ? "" : "is-empty"}">
       <div class="calendar-day-cell-head">
         <div class="calendar-day-cell-copy">
           <p class="eyebrow">${escapeHtml(day.weekdayLabel)}</p>
           <h4>${escapeHtml(day.dayLabel)}</h4>
+          ${totalItems ? `<p class="timeline-meta">${escapeHtml(slotCount ? `${teamCount} Personen eingeplant` : `${eventCount} Event${eventCount === 1 ? "" : "s"}`)}</p>` : ""}
         </div>
         <div class="calendar-day-cell-badges">
           <span class="pill ${totalItems ? "teal" : "neutral"}">${escapeHtml(String(totalItems))} Eintraege</span>
@@ -2357,7 +2389,10 @@ function renderShiftCalendarDayCell(day) {
 function renderShiftCalendarEntry(slot) {
   const leaders = slot.members.filter((entry) => entry.isLead);
   const leaderText = leaders.length ? leaders.map((entry) => entry.memberName).join(", ") : "Keine Leitung";
-  const teamText = slot.members.map((entry) => entry.memberName).join(", ");
+  const teamNames = slot.members.map((entry) => entry.memberName).filter(Boolean);
+  const visibleTeamNames = teamNames.slice(0, 4).join(", ");
+  const teamText = visibleTeamNames ? `${visibleTeamNames}${teamNames.length > 4 ? ` + ${teamNames.length - 4} weitere` : ""}` : "Noch offen";
+  const taskSummary = [...new Set(slot.members.map((entry) => entry.task).filter(Boolean))].slice(0, 3).join(" · ");
   const shiftTypeText = slot.shiftTypes.join(" | ");
 
   return `
@@ -2370,6 +2405,7 @@ function renderShiftCalendarEntry(slot) {
       <p class="calendar-entry-type">${escapeHtml(shiftTypeText)}</p>
       <p class="calendar-entry-meta"><strong>Leitung:</strong> ${escapeHtml(leaderText)}</p>
       <p class="calendar-entry-meta"><strong>Team:</strong> ${escapeHtml(teamText)}</p>
+      ${taskSummary ? `<p class="calendar-entry-meta"><strong>Aufgaben:</strong> ${escapeHtml(taskSummary)}</p>` : ""}
     </article>
   `;
 }
@@ -2435,6 +2471,15 @@ function formatWeekdayLabel(dateKey) {
 
 function formatCalendarDayLabel(dateKey) {
   return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(parseDateKey(dateKey));
+}
+
+function getCalendarWeekNumber(dateKey) {
+  const date = parseDateKey(dateKey);
+  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNumber = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - dayNumber);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  return Math.ceil((((target - yearStart) / 86400000) + 1) / 7);
 }
 
 function renderCapacityPanel() {
@@ -5513,6 +5558,24 @@ async function handleClick(event) {
       }
       render();
       break;
+
+    case "delete-calendar-week": {
+      const weekStart = String(actionElement.dataset.weekStart || "").trim();
+      const weekLabel = String(actionElement.dataset.weekLabel || weekStart).trim();
+      if (!weekStart) return;
+      if (!window.confirm(`Die ganze Kalenderwoche wirklich loeschen?\n\n${weekLabel}\n\nAlle Schichten dieser Woche werden entfernt, die Zeithistorie bleibt aber erhalten.`)) return;
+      await performAction(
+        () =>
+          api(`/api/shifts/week/${encodeURIComponent(weekStart)}`, {
+            method: "DELETE"
+          }),
+        `Kalenderwoche ${weekLabel} wurde bereinigt.`,
+        "warning"
+      );
+      state.ui.editingShiftId = "";
+      render();
+      break;
+    }
 
     case "delete-announcement":
       if (!window.confirm("Diesen Infoboard-Eintrag entfernen?")) return;
@@ -9584,7 +9647,19 @@ function renderPublicPortal() {
         </section>
 
         <div class="auth-stack public-auth-stack">
-          <form class="panel auth-card" data-form="login">
+          <section class="panel auth-card public-auth-cta">
+            <div>
+              <p class="eyebrow">Schnellzugang</p>
+              <h3>Hier geht es rein</h3>
+              <p class="helper-text">Wenn du schon ein Konto hast, geh direkt auf <strong>Einloggen</strong>. Wenn du neu bist, geh auf <strong>Registrierung</strong>.</p>
+            </div>
+            <div class="public-auth-cta-actions">
+              <a class="creator-action-link" href="#portal-login">${escapeHtml(loginButtonLabel)}</a>
+              <a class="creator-action-link" href="#portal-register">${escapeHtml(registerButtonLabel)}</a>
+            </div>
+          </section>
+
+          <form class="panel auth-card" data-form="login" id="portal-login">
             <div>
               <p class="eyebrow">${vrchatLink ? "VRChat Login" : "Login"}</p>
               <h3>${vrchatLink ? "Mit deinem SONARA-Konto verbinden" : "Einloggen"}</h3>
@@ -9603,7 +9678,7 @@ function renderPublicPortal() {
             <button type="submit">${loginButtonLabel}</button>
           </form>
 
-          <form class="panel auth-card" data-form="register">
+          <form class="panel auth-card" data-form="register" id="portal-register">
             <div>
               <p class="eyebrow">${vrchatLink ? "Neu verbinden" : "Registrierung"}</p>
               <h3>${vrchatLink ? "Noch kein Konto? Direkt hier anlegen" : "Konto anlegen"}</h3>
@@ -9918,6 +9993,7 @@ async function buildProfilePayload(form) {
   const formData = new FormData(form);
   const draftKey = getAvatarDraftKey(form);
   const draft = getAvatarDraftInfo(draftKey);
+  const manualAvatarUrl = String(formData.get("avatarUrl") || "").trim();
   const payload = {
     vrchatName: formData.get("vrchatName"),
     discordName: formData.get("discordName"),
@@ -9943,7 +10019,11 @@ async function buildProfilePayload(form) {
     payload.avatarUrl = draft.dataUrl;
   } else {
     const avatarData = await readImageFileInput(form.querySelector('input[name="avatarFile"]'));
-    if (avatarData) payload.avatarUrl = avatarData;
+    if (avatarData) {
+      payload.avatarUrl = avatarData;
+    } else if (manualAvatarUrl) {
+      payload.avatarUrl = manualAvatarUrl;
+    }
   }
 
   return { formData, payload, draftKey };
@@ -10125,6 +10205,7 @@ async function handleChange(event) {
 function renderProfilePanel(managerView) {
   const user = state.session;
   const draftKey = "profile-update:";
+  const editableAvatarUrl = /^https?:\/\//i.test(String(user.avatarUrl || "").trim()) ? String(user.avatarUrl || "").trim() : "";
   const showAvailabilityFields = user.role !== "member";
   const creatorPresence = getCreatorPresenceMeta(user);
   const creatorCommunity = getCreatorCommunityMeta(user);
@@ -10191,6 +10272,10 @@ function renderProfilePanel(managerView) {
               <label for="profileAvatarFile">Profilbild</label>
               <input id="profileAvatarFile" name="avatarFile" type="file" accept="image/*">
               ${renderAvatarDraftHint(draftKey, Boolean(user.avatarUrl))}
+            </div>
+            <div class="field">
+              <label for="profileAvatarUrl">Profilbild-URL</label>
+              <input id="profileAvatarUrl" name="avatarUrl" type="url" value="${escapeHtml(editableAvatarUrl)}" placeholder="https://...">
             </div>
             <div class="field">
               <label for="profilePassword">Neues Passwort</label>
