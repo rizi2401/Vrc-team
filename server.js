@@ -1130,8 +1130,8 @@ async function handleApi(req, res, url) {
       return;
     }
 
-    if (shift.date !== todayKey()) {
-      sendJson(res, 400, { error: "Einstempeln ist nur am Einsatztag moeglich." });
+    if (!canCheckIntoShiftNow(shift)) {
+      sendJson(res, 400, { error: "Diese Schicht ist gerade nicht im Einstempel-Fenster." });
       return;
     }
 
@@ -1166,9 +1166,13 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     const shiftId = String(body.shiftId || "");
     const nextStore = structuredClone(auth.store);
-    const entry = nextStore.timeEntries.find(
+    let entry = nextStore.timeEntries.find(
       (item) => item.shiftId === shiftId && item.userId === auth.user.id && !item.checkOutAt
     );
+
+    if (!entry) {
+      entry = nextStore.timeEntries.find((item) => item.userId === auth.user.id && !item.checkOutAt) || null;
+    }
 
     if (!entry) {
       sendJson(res, 404, { error: "Kein offener Zeiteintrag fuer diese Schicht gefunden." });
@@ -1176,7 +1180,7 @@ async function handleApi(req, res, url) {
     }
 
     if (!entry.shiftSnapshot) {
-      const liveShift = nextStore.shifts.find((item) => item.id === shiftId);
+      const liveShift = nextStore.shifts.find((item) => item.id === (entry.shiftId || shiftId));
       entry.shiftSnapshot = buildTimeEntryShiftSnapshot(liveShift, nextStore);
     }
     entry.checkOutAt = new Date().toISOString();
@@ -2123,6 +2127,16 @@ function getShiftDateTime(dateKey, timeValue) {
   const [year, month, day] = String(dateKey).split("-").map(Number);
   const [hours, minutes] = String(timeValue).split(":").map(Number);
   return new Date(year, month - 1, day, hours, minutes, 0, 0);
+}
+
+function canCheckIntoShiftNow(shift, referenceDate = new Date()) {
+  const shiftStart = getShiftDateTime(shift?.date, shift?.startTime);
+  const shiftEnd = getShiftEndDateTime(shift);
+  if (!shiftStart || !shiftEnd) return false;
+
+  const earliestCheckIn = new Date(shiftStart);
+  earliestCheckIn.setHours(earliestCheckIn.getHours() - 6);
+  return referenceDate >= earliestCheckIn && referenceDate <= shiftEnd;
 }
 
 function getShiftEndDateTime(shift) {

@@ -2930,10 +2930,10 @@ function renderPortalActivityPanel() {
 }
 
 function renderShiftActionRow(shift, openEntry) {
-  const isToday = shift.date === getLocalDateKey();
   const activeElsewhere = getOpenEntryForViewer();
   const blockByOtherShift = activeElsewhere && activeElsewhere.shiftId !== shift.id;
   const openSwapRequest = getOpenSwapRequestForShift(shift.id);
+  const canCheckInNow = canCheckIntoShiftNow(shift);
 
   return `
     <div class="card-actions">
@@ -2942,7 +2942,7 @@ function renderShiftActionRow(shift, openEntry) {
         class="${openEntry ? "" : "ghost"} small"
         data-action="check-in"
         data-shift-id="${escapeHtml(shift.id)}"
-        ${!isToday || openEntry || blockByOtherShift ? "disabled" : ""}
+        ${!canCheckInNow || openEntry || blockByOtherShift ? "disabled" : ""}
       >
         Einstempeln
       </button>
@@ -7191,6 +7191,15 @@ function getShiftRangeWindow(shift) {
   }
 
   return { start, end };
+}
+
+function canCheckIntoShiftNow(shift, referenceDate = new Date()) {
+  const window = getShiftRangeWindow(shift);
+  if (!window) return false;
+
+  const earliestCheckIn = new Date(window.start);
+  earliestCheckIn.setHours(earliestCheckIn.getHours() - 6);
+  return referenceDate >= earliestCheckIn && referenceDate <= window.end;
 }
 
 function buildDateTimeFromDateKey(dateKey, timeValue) {
