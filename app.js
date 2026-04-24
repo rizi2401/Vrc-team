@@ -2934,6 +2934,7 @@ function renderShiftActionRow(shift, openEntry) {
   const blockByOtherShift = activeElsewhere && activeElsewhere.shiftId !== shift.id;
   const openSwapRequest = getOpenSwapRequestForShift(shift.id);
   const canCheckInNow = canCheckIntoShiftNow(shift);
+  const isToday = String(shift?.date || "") === getLocalDateKey();
 
   return `
     <div class="card-actions">
