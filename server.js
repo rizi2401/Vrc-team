@@ -7,8 +7,18 @@ const crypto = require("node:crypto");
 const HOST = "0.0.0.0";
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
-const STORE_PATH = process.env.STORE_PATH ? path.resolve(process.env.STORE_PATH) : path.join(ROOT, "data", "store.json");
+const LEGACY_STORE_PATH = path.join(ROOT, "data", "store.json");
+const CONFIGURED_DATA_DIR = String(process.env.DATA_DIR || "").trim()
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(ROOT, "data");
+const STORE_PATH = process.env.STORE_PATH
+  ? path.resolve(process.env.STORE_PATH)
+  : path.join(CONFIGURED_DATA_DIR, "store.json");
 const DATA_DIR = path.dirname(STORE_PATH);
+const SHOULD_MIGRATE_LEGACY_STORE =
+  !process.env.STORE_PATH &&
+  String(process.env.DATA_DIR || "").trim().length > 0 &&
+  path.resolve(STORE_PATH) !== path.resolve(LEGACY_STORE_PATH);
 const PORTAL_STORE_KEY = "primary";
 const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const USER_ACTIVITY_TOUCH_INTERVAL_MS = normalizePositiveInteger(process.env.USER_ACTIVITY_TOUCH_INTERVAL_MS, 5 * 60 * 1000);
@@ -97,6 +107,7 @@ const CHAT_TRIM_COUNTS = new Set([20, 30, 40, 50]);
 const AVAILABILITY_DAY_IDS = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 let PortalPoolCtor = null;
 let portalPool = null;
+let portalStoreDbDisabled = false;
 let portalStoreCache = null;
 let portalStoreInitPromise = null;
 let portalStorePersistChain = Promise.resolve();
@@ -1504,6 +1515,16 @@ function ensureFileStoreExists() {
   }
 
   if (!fs.existsSync(STORE_PATH)) {
+    if (SHOULD_MIGRATE_LEGACY_STORE && fs.existsSync(LEGACY_STORE_PATH)) {
+      try {
+        const legacyStore = normalizeStore(JSON.parse(fs.readFileSync(LEGACY_STORE_PATH, "utf8") || "{}"));
+        fs.writeFileSync(STORE_PATH, JSON.stringify(legacyStore, null, 2));
+        return;
+      } catch {
+        // If the old file is unreadable, fall back to a fresh normalized store.
+      }
+    }
+
     fs.writeFileSync(STORE_PATH, JSON.stringify(normalizeStore(buildDefaultStore()), null, 2));
   }
 }
@@ -1519,21 +1540,42 @@ function readFileStore() {
 }
 
 function getPortalStorePool() {
+  if (portalStoreDbDisabled) return null;
+
   const connectionString = String(process.env.DATABASE_URL || "").trim();
   if (!connectionString) return null;
 
-  if (!PortalPoolCtor) {
-    ({ Pool: PortalPoolCtor } = require("pg"));
-  }
+  try {
+    if (!PortalPoolCtor) {
+      ({ Pool: PortalPoolCtor } = require("pg"));
+    }
 
-  if (!portalPool) {
-    portalPool = new PortalPoolCtor({
-      connectionString,
-      ssl: connectionString.includes("render.com") ? { rejectUnauthorized: false } : undefined
-    });
+    if (!portalPool) {
+      portalPool = new PortalPoolCtor({
+        connectionString,
+        ssl: connectionString.includes("render.com") ? { rejectUnauthorized: false } : undefined
+      });
+    }
+  } catch (error) {
+    disablePortalStoreDb(error);
+    return null;
   }
 
   return portalPool;
+}
+
+function disablePortalStoreDb(error) {
+  if (!portalStoreDbDisabled) {
+    const message = error?.message ? ` (${error.message})` : "";
+    console.error(`Portal store database unavailable, falling back to file store${message}.`);
+  }
+
+  portalStoreDbDisabled = true;
+
+  if (portalPool) {
+    portalPool.end().catch(() => {});
+    portalPool = null;
+  }
 }
 
 async function initializePortalStore() {
@@ -1546,34 +1588,41 @@ async function initializePortalStore() {
     return;
   }
 
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS portal_state_store (
-      store_key TEXT PRIMARY KEY,
-      data JSONB NOT NULL DEFAULT '{}'::jsonb,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS portal_state_store (
+        store_key TEXT PRIMARY KEY,
+        data JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
 
-  const existing = await db.query(
-    `SELECT data FROM portal_state_store WHERE store_key = $1`,
-    [PORTAL_STORE_KEY]
-  );
+    const existing = await db.query(
+      `SELECT data FROM portal_state_store WHERE store_key = $1`,
+      [PORTAL_STORE_KEY]
+    );
 
-  if (existing.rows[0]?.data) {
-    portalStoreCache = normalizeStore(existing.rows[0].data);
-    return;
+    if (existing.rows[0]?.data) {
+      portalStoreCache = normalizeStore(existing.rows[0].data);
+      return;
+    }
+
+    const fallback = normalizeStore(readFileStore());
+    await db.query(
+      `
+        INSERT INTO portal_state_store (store_key, data, updated_at)
+        VALUES ($1, $2::jsonb, NOW())
+        ON CONFLICT (store_key) DO NOTHING
+      `,
+      [PORTAL_STORE_KEY, JSON.stringify(fallback)]
+    );
+    portalStoreCache = fallback;
+  } catch (error) {
+    disablePortalStoreDb(error);
+    const normalized = normalizeStore(readFileStore());
+    fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
+    portalStoreCache = normalized;
   }
-
-  const fallback = normalizeStore(readFileStore());
-  await db.query(
-    `
-      INSERT INTO portal_state_store (store_key, data, updated_at)
-      VALUES ($1, $2::jsonb, NOW())
-      ON CONFLICT (store_key) DO NOTHING
-    `,
-    [PORTAL_STORE_KEY, JSON.stringify(fallback)]
-  );
-  portalStoreCache = fallback;
 }
 
 async function ensurePortalStoreReady() {
@@ -1606,7 +1655,8 @@ function persistPortalStore(normalized) {
       )
     )
     .catch((error) => {
-      console.error("Portal store persist failed:", error);
+      disablePortalStoreDb(error);
+      fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
     });
 }
 
