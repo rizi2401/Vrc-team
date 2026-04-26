@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL,
   vrchat_name TEXT NOT NULL,
   discord_name TEXT NOT NULL,
+  discord_user_id TEXT NOT NULL DEFAULT '',
   avatar_url TEXT NOT NULL DEFAULT '',
   bio TEXT NOT NULL DEFAULT '',
   contact_note TEXT NOT NULL DEFAULT '',
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_sort_index ON users(sort_index);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_user_id TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS availability_slots (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

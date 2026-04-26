@@ -75,28 +75,33 @@ Hinweis:
 
 ## Discord Benachrichtigungen
 
-Die App kann automatisch in einen Discord-Channel schreiben, wenn:
+Die App nutzt jetzt einen Bot-Token plus Channel-ID statt nur eines Webhooks.
 
-- eine Schicht neu erstellt wird
-- eine Schicht geaendert wird
-- eine Schicht geloescht wird
-- eine neue Team-Info veroeffentlicht wird
-
-Einrichtung auf Render:
-
-1. In Discord im gewuenschten Channel einen Webhook erstellen
-2. In Render beim Service unter `Environment` folgende Variable setzen:
+Wichtige Variablen auf Render:
 
 ```text
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+DISCORD_BOT_TOKEN=...
+DISCORD_CHANNEL_ID=...
+DISCORD_AUTO_NOTIFICATIONS_ENABLED=1
+DISCORD_SHIFT_CHANGE_NOTIFICATIONS_ENABLED=0
+DISCORD_SHIFT_REMINDERS_ENABLED=1
+DISCORD_SHIFT_REMINDER_LOOKAHEAD_MINUTES=15
+DISCORD_SHIFT_REMINDER_INTERVAL_MS=60000
 ```
 
-Danach sendet die App die Meldungen automatisch.
+Bedeutung:
+
+- `DISCORD_AUTO_NOTIFICATIONS_ENABLED=1`: allgemeine automatische Discord-Nachrichten sind erlaubt
+- `DISCORD_SHIFT_CHANGE_NOTIFICATIONS_ENABLED=0`: neue/geaenderte/geloeschte Schichten werden standardmaessig nicht mehr in den Channel gespammt
+- `DISCORD_SHIFT_REMINDERS_ENABLED=1`: Moderatoren bekommen Schicht-Erinnerungen
+- `DISCORD_SHIFT_REMINDER_LOOKAHEAD_MINUTES=15`: wie viele Minuten vor Schichtstart erinnert wird
+- `DISCORD_SHIFT_REMINDER_INTERVAL_MS=60000`: wie oft der Reminder-Sweep laeuft
 
 Hinweise:
 
-- Gepinnte Team-Infos senden `@everyone`
-- Normale Team-Infos senden ohne Massen-Erwaehnung
+- Wenn ein User `discordUserId` gespeichert hat, versucht die App zuerst eine Direktnachricht.
+- Ohne `discordUserId` faellt die Erinnerung auf den eingestellten Discord-Channel zurueck.
+- Team-Infos koennen weiter automatisch in den Channel gesendet werden.
 
 ## Fuer echten Online-Betrieb empfohlen
 

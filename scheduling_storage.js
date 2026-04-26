@@ -1,5 +1,4 @@
 const fs = require("node:fs");
-const { sendShiftNotification } = require("./discord_notify");
 
 const DAY_IDS = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 
@@ -64,6 +63,7 @@ function mapUserToRow(user, index) {
     role: normalizeText(user.role),
     vrchatName: normalizeText(user.vrchatName),
     discordName: normalizeText(user.discordName),
+    discordUserId: normalizeText(user.discordUserId),
     avatarUrl: normalizeText(user.avatarUrl),
     bio: normalizeText(user.bio),
     contactNote: normalizeText(user.contactNote),
@@ -152,7 +152,7 @@ async function syncSchedulingDomainToDb(db, store) {
       await db.query(
         `
           INSERT INTO users (
-            id, sort_index, username, display_name, role, vrchat_name, discord_name, avatar_url, bio, contact_note,
+            id, sort_index, username, display_name, role, vrchat_name, discord_name, discord_user_id, avatar_url, bio, contact_note,
             creator_blurb, creator_links, creator_visible, creator_slug, creator_application_status, creator_follower_count,
             creator_primary_platform, creator_proof_url, creator_application_note, creator_review_note, creator_reviewed_at,
             creator_reviewed_by, creator_community_name, creator_community_summary, creator_community_invite_url,
@@ -162,14 +162,14 @@ async function syncSchedulingDomainToDb(db, store) {
             last_login_at, last_seen_at, is_blocked, block_reason, blocked_at, blocked_by, password_hash
           )
           VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-            $11, $12::jsonb, $13, $14, $15, $16,
-            $17, $18, $19, $20, $21,
-            $22, $23, $24, $25,
-            $26, $27, $28, $29, $30,
-            $31, $32, $33, $34,
-            $35, $36, $37, $38,
-            $39, $40, $41, $42, $43, $44, $45
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+            $12, $13::jsonb, $14, $15, $16, $17,
+            $18, $19, $20, $21, $22,
+            $23, $24, $25, $26,
+            $27, $28, $29, $30, $31,
+            $32, $33, $34, $35,
+            $36, $37, $38, $39,
+            $40, $41, $42, $43, $44, $45, $46
           )
         `,
         [
@@ -180,6 +180,7 @@ async function syncSchedulingDomainToDb(db, store) {
           row.role,
           row.vrchatName,
           row.discordName,
+          row.discordUserId,
           row.avatarUrl,
           row.bio,
           row.contactNote,
@@ -285,7 +286,6 @@ async function syncSchedulingDomainToDb(db, store) {
           row.isLead
         ]
       );
-      await sendShiftNotification("created", shift);
     }
 
     for (const [index, entry] of timeEntries.entries()) {
@@ -365,6 +365,7 @@ async function loadSchedulingDomainFromDb(db, store) {
     role: normalizeText(row.role),
     vrchatName: normalizeText(row.vrchat_name),
     discordName: normalizeText(row.discord_name),
+    discordUserId: normalizeText(row.discord_user_id),
     avatarUrl: normalizeText(row.avatar_url),
     bio: normalizeText(row.bio),
     contactNote: normalizeText(row.contact_note),
