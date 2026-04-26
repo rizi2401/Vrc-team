@@ -155,10 +155,10 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (url.pathname.startsWith("/creator/")) {
-      serveStatic(res, staticFiles["/"]);
-      return;
-    }
+   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/discord/")) {
+  await handleApi(req, res, url);
+  return;
+}
 
     sendJson(res, 404, { error: "Nicht gefunden." });
   } catch (error) {
