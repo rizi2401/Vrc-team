@@ -190,6 +190,35 @@ async function handleApi(req, res, url) {
     openEventStream(req, res);
     return;
   }
+  if (req.method === "GET" && url.pathname === "/auth/discord/login") {
+  const userId = getSessionUserId(req);
+
+  if (!userId) {
+    sendJson(res, 401, { error: "Nicht eingeloggt." });
+    return;
+  }
+
+  if (!DISCORD_CLIENT_ID || !DISCORD_REDIRECT_URI) {
+    sendJson(res, 500, { error: "Discord OAuth ist nicht vollständig konfiguriert." });
+    return;
+  }
+
+  const state = crypto.randomUUID();
+
+  const discordUrl =
+    `https://discord.com/oauth2/authorize` +
+    `?client_id=${encodeURIComponent(DISCORD_CLIENT_ID)}` +
+    `&response_type=code` +
+    `&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}` +
+    `&scope=identify` +
+    `&state=${encodeURIComponent(state)}`;
+
+  res.writeHead(302, {
+    Location: discordUrl
+  });
+  res.end();
+  return;
+}
 
   if (req.method === "POST" && url.pathname === "/api/login") {
     const body = await readJson(req);
@@ -218,6 +247,30 @@ async function handleApi(req, res, url) {
       responseStore = writeStore(nextStore);
       responseUser = target;
     }
+    function getSessionUserId(req) {
+  const cookieHeader = req.headers.cookie || "";
+  const cookies = Object.fromEntries(
+    cookieHeader
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const index = part.indexOf("=");
+        return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+      })
+  );
+
+  const sessionId = cookies.sid;
+  if (!sessionId) return null;
+
+  const session = sessionStore.get(sessionId);
+  if (!session || session.expiresAt < Date.now()) {
+    sessionStore.delete(sessionId);
+    return null;
+  }
+
+  return session.userId;
+}
 
     const sessionId = createSession(user.id);
     sendPortalData(res, 200, responseUser, responseStore, { "Set-Cookie": createSessionCookie(sessionId) });
