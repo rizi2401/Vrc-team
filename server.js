@@ -3,9 +3,7 @@ const https = require("node:https");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const fs = require(...)
-const path = require(...)
-const http = require(...)
+
 const {
   ensureSchedulingSchema,
   schedulingTablesHaveData,
