@@ -38,8 +38,8 @@ async function sendShiftNotification(type, shift) {
   const content = [
     title,
     "",
-    `👤 **Person:** ${shift.userName || shift.name || "Unbekannt"}`,
-    `🎭 **Rolle/Bereich:** ${shift.role || shift.area || shift.title || "Nicht angegeben"}`,
+  `👤 **Person:** ${shift.userName || shift.name || shift.memberId || "Unbekannt"}`, 
+`🎭 **Rolle/Bereich:** ${shift.role || shift.area || shift.title || shift.shiftType || "Nicht angegeben"}`,
     `📅 **Datum:** ${shift.date || shift.day || "Nicht angegeben"}`,
     `🕒 **Zeit:** ${shift.startTime || shift.start_time || "?"} – ${shift.endTime || shift.end_time || "?"}`,
     `📝 **Aufgabe:** ${shift.task || shift.notes || "Keine Angabe"}`
