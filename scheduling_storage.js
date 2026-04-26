@@ -285,6 +285,7 @@ async function syncSchedulingDomainToDb(db, store) {
           row.isLead
         ]
       );
+      await sendShiftNotification("created", shift);
     }
 
     for (const [index, entry] of timeEntries.entries()) {
