@@ -1,0 +1,306 @@
+{
+  "slots": [],
+  "users": [
+    {
+      "id": "79d4d417-c38b-4479-afdf-5f3093523d65",
+      "username": "admin",
+      "displayName": "System Admin",
+      "role": "admin",
+      "vrchatName": "System Admin",
+      "discordName": "admin",
+      "avatarUrl": "",
+      "bio": "",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
+      "creatorSlug": "system-admin",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
+      "creatorWebhookToken": "5460494cb838869e7de6e8c41d37c01170718404a4931d2c",
+      "creatorAutomationLastAt": "",
+      "creatorAutomationLastSource": "",
+      "vrchatLinkedAt": "",
+      "vrchatLinkSource": "",
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
+      "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
+      "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
+      "passwordHash": "ee0e53f6ceb47dcef6f9fe5cb345261d:4eac92098e4ac33a67ec191e90c62f9b657c3cf112caa4d95c37e8cd5248f98c786af4cd9b756930f7653bcdacf17195310c23e798a5585d776d1119a2ce9594"
+    },
+    {
+      "id": "ba196651-1980-4724-99ee-105d220fecf2",
+      "username": "kian",
+      "displayName": "Kian",
+      "role": "member",
+      "vrchatName": "Kian",
+      "discordName": "kian",
+      "avatarUrl": "",
+      "bio": "",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
+      "creatorSlug": "kian",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
+      "creatorWebhookToken": "31f51a63d47b3b61550fed1ecd430dbe89278f560f3e2109",
+      "creatorAutomationLastAt": "",
+      "creatorAutomationLastSource": "",
+      "vrchatLinkedAt": "",
+      "vrchatLinkSource": "",
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
+      "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
+      "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
+      "passwordHash": "bca7771658e6e5e407617e6c68597837:11f0f1a7bb5c60ad868f299fff0015d53caa3c701298765c115e9ce0354e2cb443ca1b5323a4b9175701fef4482ddf01349a5acb6736d6dadd9ee14162d85af8"
+    }
+  ],
+  "settings": {
+    "shiftTypes": [
+      "Frueh",
+      "Mittel",
+      "Spaet",
+      "Event"
+    ],
+    "worlds": [
+      "Community Hub",
+      "Sunset Lounge",
+      "Event Arena",
+      "Support Room"
+    ],
+    "tasks": [
+      "Begruessung / Eingang",
+      "Streife / Regelueberwachung",
+      "Event-Betreuung",
+      "Support / Hilfe",
+      "Leitung / Koordination"
+    ]
+  },
+  "systemNotice": {
+    "enabled": false,
+    "tone": "warning",
+    "title": "",
+    "body": "",
+    "contactHint": "",
+    "updatedAt": "",
+    "updatedBy": ""
+  },
+  "promoVideo": {
+    "enabled": false,
+    "title": "",
+    "intro": "",
+    "url": "",
+    "updatedAt": "",
+    "updatedBy": ""
+  },
+  "shifts": [],
+  "events": [
+    {
+      "id": "welcome-night",
+      "title": "Welcome Night",
+      "world": "Community Hub",
+      "host": "SONARA Team",
+      "summary": "Neue Mitglieder kennenlernen, Gruppeninfos teilen und entspannt in den Abend starten.",
+      "scheduleType": "single",
+      "eventDate": "",
+      "eventTime": "",
+      "weekday": -1,
+      "reminderEnabled": true,
+      "reminderLeadMinutes": 120,
+      "dateLabel": "Freitag · 20:00 Uhr",
+      "createdAt": "2026-03-29T16:46:36.255Z",
+      "createdBy": ""
+    },
+    {
+      "id": "world-tour",
+      "title": "World Tour",
+      "world": "Event Arena",
+      "host": "Event Team",
+      "summary": "Gemeinsame Weltreise mit Stopps fuer Screenshots, Spiele und kleine Community-Momente.",
+      "scheduleType": "single",
+      "eventDate": "",
+      "eventTime": "",
+      "weekday": -1,
+      "reminderEnabled": true,
+      "reminderLeadMinutes": 120,
+      "dateLabel": "Samstag · 21:00 Uhr",
+      "createdAt": "2026-03-29T16:46:36.255Z",
+      "createdBy": ""
+    },
+    {
+      "id": "late-lounge",
+      "title": "Late Lounge",
+      "world": "Sunset Lounge",
+      "host": "Night Crew",
+      "summary": "Ruhiger Community-Abend mit Musik, offenen Gespraechen und lockerer Moderationspraesenz.",
+      "scheduleType": "single",
+      "eventDate": "",
+      "eventTime": "",
+      "weekday": -1,
+      "reminderEnabled": true,
+      "reminderLeadMinutes": 120,
+      "dateLabel": "Sonntag · 22:00 Uhr",
+      "createdAt": "2026-03-29T16:46:36.255Z",
+      "createdBy": ""
+    }
+  ],
+  "requests": [],
+  "announcements": [],
+  "chatMessages": [],
+  "timeEntries": [],
+  "swapRequests": [],
+  "discordStatus": {
+    "lastAttemptAt": "",
+    "lastSuccessAt": "",
+    "lastError": "",
+    "lastStatusCode": 0
+  },
+  "vrchatAnalytics": {},
+  "directMessages": [],
+  "forumThreads": [],
+  "warnings": [],
+  "feedPosts": []
+}

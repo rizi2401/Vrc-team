@@ -1,0 +1,3 @@
+Portal store database unavailable, falling back to file store (Cannot find module 'pg'
+Require stack:
+- C:\Users\rizi4\Documents\New project\server.js).

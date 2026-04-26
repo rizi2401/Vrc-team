@@ -1,0 +1,39 @@
+=10002 : Die Benennung "=10002" wurde nicht als Name eines Cmdlet, einer Funktion, einer Skriptdatei oder eines 
+ausfÅhrbaren Programms erkannt. öberprÅfen Sie die Schreibweise des Namens, oder ob der Pfad korrekt ist (sofern 
+enthalten), und wiederholen Sie den Vorgang.
+In Zeile:1 Zeichen:1
++ ='10002'; ='postgresql://user:pass@definitely-invalid-hostname-xyz:54 ...
++ ~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=10002:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+=postgresql://user:pass@definitely-invalid-hostname-xyz:5432/test : Die Benennung 
+"=postgresql://user:pass@definitely-invalid-hostname-xyz:5432/test" wurde nicht als Name eines Cmdlet, einer Funktion, 
+einer Skriptdatei oder eines ausfÅhrbaren Programms erkannt. öberprÅfen Sie die Schreibweise des Namens, oder ob der 
+Pfad korrekt ist (sofern enthalten), und wiederholen Sie den Vorgang.
+In Zeile:1 Zeichen:11
++ ='10002'; ='postgresql://user:pass@definitely-invalid-hostname-xyz:54 ...
++           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=postgresql://u...e-xyz:5432/test:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+node:events:486
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3000
+}
+
+Node.js v24.13.0

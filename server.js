@@ -3,11 +3,18 @@ const https = require("node:https");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const {
+  ensureSchedulingSchema,
+  schedulingTablesHaveData,
+  syncSchedulingDomainToDb,
+  loadSchedulingDomainFromDb
+} = require("./scheduling_storage");
 
 const HOST = "0.0.0.0";
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 const LEGACY_STORE_PATH = path.join(ROOT, "data", "store.json");
+const SCHEDULING_SCHEMA_PATH = path.join(ROOT, "db", "scheduling.sql");
 const CONFIGURED_DATA_DIR = String(process.env.DATA_DIR || "").trim()
   ? path.resolve(process.env.DATA_DIR)
   : path.join(ROOT, "data");
@@ -111,6 +118,7 @@ let portalStoreDbDisabled = false;
 let portalStoreCache = null;
 let portalStoreInitPromise = null;
 let portalStorePersistChain = Promise.resolve();
+let schedulingStoreInitPromise = null;
 const discordState = {
   lastAttemptAt: "",
   lastSuccessAt: "",
@@ -1578,6 +1586,30 @@ function disablePortalStoreDb(error) {
   }
 }
 
+async function initializeSchedulingStoreFromDb() {
+  const db = getPortalStorePool();
+  if (!db || !portalStoreCache) return;
+
+  if (!schedulingStoreInitPromise) {
+    schedulingStoreInitPromise = (async () => {
+      try {
+        await ensureSchedulingSchema(db, SCHEDULING_SCHEMA_PATH);
+        await syncSchedulingDomainToDb(db, portalStoreCache);
+        const hydratedStore = await loadSchedulingDomainFromDb(db, portalStoreCache);
+        if (hydratedStore) {
+          portalStoreCache = normalizeStore(hydratedStore);
+        }
+      } catch (error) {
+        disablePortalStoreDb(error);
+      }
+    })().finally(() => {
+      schedulingStoreInitPromise = null;
+    });
+  }
+
+  await schedulingStoreInitPromise;
+}
+
 async function initializePortalStore() {
   const db = getPortalStorePool();
 
@@ -1623,6 +1655,8 @@ async function initializePortalStore() {
     fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
     portalStoreCache = normalized;
   }
+
+  await initializeSchedulingStoreFromDb();
 }
 
 async function ensurePortalStoreReady() {
@@ -1642,8 +1676,8 @@ function persistPortalStore(normalized) {
   }
 
   portalStorePersistChain = portalStorePersistChain
-    .then(() =>
-      db.query(
+    .then(async () => {
+      await db.query(
         `
           INSERT INTO portal_state_store (store_key, data, updated_at)
           VALUES ($1, $2::jsonb, NOW())
@@ -1652,8 +1686,11 @@ function persistPortalStore(normalized) {
               updated_at = NOW()
         `,
         [PORTAL_STORE_KEY, JSON.stringify(normalized)]
-      )
-    )
+      );
+
+      await ensureSchedulingSchema(db, SCHEDULING_SCHEMA_PATH);
+      await syncSchedulingDomainToDb(db, normalized);
+    })
     .catch((error) => {
       disablePortalStoreDb(error);
       fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));

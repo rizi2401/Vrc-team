@@ -37,6 +37,42 @@ http://localhost:3000
 - `styles.css`: UI und responsives Layout
 - `data/store.json`: gespeicherte Benutzer- und Portaldaten
 
+## PostgreSQL fuer Scheduling
+
+Die App kann Schichten, Zeiten und Verfuegbarkeiten jetzt parallel in echte PostgreSQL-Tabellen spiegeln:
+
+- `users`
+- `shifts`
+- `time_entries`
+- `availability_slots`
+- `overtime_adjustments`
+
+Voraussetzungen:
+
+- `DATABASE_URL` gesetzt
+- `pg` installiert
+
+Beim Start erstellt die App die Scheduling-Tabellen automatisch, wenn PostgreSQL erreichbar ist. Wenn die Tabellen noch leer sind, wird der bestehende Portal-Store als erste Quelle uebernommen.
+
+Manueller Backfill:
+
+```powershell
+npm run db:scheduling:backfill
+```
+
+Optional:
+
+```powershell
+npm run db:scheduling:backfill:file
+npm run db:scheduling:backfill:portal
+```
+
+Hinweis:
+
+- `pgAdmin` ist nur zum Anschauen und Pruefen der Tabellen da
+- die Website bleibt die laufende App-Logik
+- bei einer kaputten Datenbankverbindung faellt der Start auf den Dateistore zurueck
+
 ## Discord Benachrichtigungen
 
 Die App kann automatisch in einen Discord-Channel schreiben, wenn:
