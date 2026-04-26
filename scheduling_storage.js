@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { sendShiftNotification } = require("./discord_notify");
 
 const DAY_IDS = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 
