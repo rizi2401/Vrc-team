@@ -159,6 +159,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (/^\/(datenschutz|privacy|nutzungsbedingungen|terms)\/?$/i.test(url.pathname)) {
+      serveStatic(res, staticFiles["/"]);
+      return;
+    }
+
     if (url.pathname.startsWith("/creator/")) {
       serveStatic(res, staticFiles["/"]);
       return;
@@ -493,7 +498,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && url.pathname === "/api/admin/discord/status") {
     requireRole(auth.user, "planner");
-    sendJson(res, 410, { error: "Der Discord-Webhook-Bereich wurde entfernt." });
+    sendJson(res, 200, { ok: true, status: getDiscordStatus() });
     return;
   }
 
@@ -5253,8 +5258,19 @@ function buildShiftDiscordMessage(action, shift, store, previousShift = null) {
 function buildDiscordApiErrorMessage(result) {
   const status = Number(result?.status || result?.statusCode || 0);
   const rawText = String(result?.text || result?.message || "").trim();
+  const reason = String(result?.reason || "").trim();
+  const reasonMap = {
+    missing_token: "DISCORD_BOT_TOKEN fehlt.",
+    missing_channel_id: "DISCORD_CHANNEL_ID fehlt.",
+    missing_discord_user_id: "Discord User-ID fehlt.",
+    missing_dm_channel_id: "Discord-DM-Kanal konnte nicht erstellt werden.",
+    empty_payload: "Discord-Nachricht ist leer."
+  };
   if (rawText) {
     return status ? `Discord returned ${status}: ${rawText}` : rawText;
+  }
+  if (reason) {
+    return reasonMap[reason] || reason;
   }
   return status ? `Discord returned ${status}` : "Discord konnte nicht erreicht werden.";
 }
@@ -5699,6 +5715,9 @@ function getDiscordStatus() {
   return {
     configured: Boolean(String(process.env.DISCORD_BOT_TOKEN || "").trim() && String(process.env.DISCORD_CHANNEL_ID || "").trim()),
     autoNotificationsEnabled: DISCORD_AUTO_NOTIFICATIONS_ENABLED,
+    shiftChangeNotificationsEnabled: DISCORD_SHIFT_CHANGE_NOTIFICATIONS_ENABLED,
+    shiftRemindersEnabled: DISCORD_SHIFT_REMINDERS_ENABLED,
+    shiftReminderLookaheadMinutes: DISCORD_SHIFT_REMINDER_LOOKAHEAD_MINUTES,
     lastAttemptAt: discordState.lastAttemptAt,
     lastSuccessAt: discordState.lastSuccessAt,
     lastError: discordState.lastError,

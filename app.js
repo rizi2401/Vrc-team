@@ -455,6 +455,7 @@ async function api(path, options = {}) {
   if (!response.ok) {
     const error = new Error(payload?.error || "Anfrage fehlgeschlagen.");
     error.status = response.status;
+    error.payload = payload;
     throw error;
   }
 
@@ -492,14 +493,42 @@ async function refreshVrchatOverview(showErrors = true) {
 }
 
 async function refreshDiscordStatus(showErrors = true) {
-  state.discordStatus = null;
-  state.discordLoading = false;
-  if (showErrors) setFlash("Der Discord-Webhook-Bereich wurde entfernt.", "info");
+  state.discordLoading = true;
+  if (showErrors) setFlash("Discord-Status wird geprueft.", "info");
   render();
+
+  try {
+    const payload = await api("/api/admin/discord/status");
+    state.discordStatus = payload?.status || null;
+    if (showErrors) setFlash("Discord-Status wurde geladen.", "success");
+  } catch (error) {
+    state.discordStatus = null;
+    if (showErrors) setFlash(error.message, "danger");
+  } finally {
+    state.discordLoading = false;
+    render();
+  }
 }
 
 async function runDiscordTest() {
-  await refreshDiscordStatus(true);
+  state.discordLoading = true;
+  setFlash("Discord-Testnachricht wird gesendet.", "info");
+  render();
+
+  try {
+    const payload = await api("/api/admin/discord/test", {
+      method: "POST",
+      body: "{}"
+    });
+    state.discordStatus = payload?.status || null;
+    setFlash("Discord-Testnachricht wurde gesendet.", "success");
+  } catch (error) {
+    state.discordStatus = error?.payload?.status || state.discordStatus;
+    setFlash(error.message, "danger");
+  } finally {
+    state.discordLoading = false;
+    render();
+  }
 }
 
 async function runVrchatSync() {
@@ -3484,7 +3513,7 @@ function renderProfileFallback(managerView, error = null) {
           ${renderUserAvatar(user, "hero-avatar")}
           <div>
             <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
-            <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
+            <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")} | Bot-DM: ${user.discordUserId ? "verknuepft" : "fehlt"}</p>
             ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
             ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
             ${showAvailabilityFields ? renderAvailabilitySlotList(availabilitySlots, "Noch keine Zeitfenster eingetragen.") : ""}
@@ -3630,6 +3659,7 @@ async function buildProfilePayload(form) {
   const payload = {
     vrchatName: formData.get("vrchatName"),
     discordName: formData.get("discordName"),
+    discordUserId: formData.get("discordUserId"),
     bio: formData.get("bio"),
     contactNote: formData.get("contactNote"),
     weeklyHoursCapacity: formData.get("weeklyHoursCapacity"),
@@ -4694,6 +4724,8 @@ function renderSettingsPanel() {
         </div>
       </form>
     </section>
+
+    ${renderDiscordPanel()}
   `;
 }
 
@@ -4705,8 +4737,8 @@ function renderDiscordPanel() {
       <div class="section-head">
         <div>
           <p class="eyebrow">Discord</p>
-          <h2>Webhook und Test</h2>
-          <p class="section-copy">Hier siehst du, ob der Webhook gesetzt ist und ob Discord wirklich erreichbar ist.</p>
+          <h2>Bot, Kanal und Reminder</h2>
+          <p class="section-copy">Hier pruefst du, ob der Bot-Token, der Zielkanal und die Schicht-Erinnerungen sauber erreichbar sind.</p>
         </div>
         <div class="card-actions">
           <button type="button" class="ghost small" data-action="refresh-discord-status" ${state.discordLoading ? "disabled" : ""}>Status neu laden</button>
@@ -4716,16 +4748,18 @@ function renderDiscordPanel() {
 
       ${
         !status
-          ? renderEmptyState("Noch kein Discord-Status", "Sobald du den Status laedst, erscheint hier die aktuelle Webhook-Pruefung.")
+          ? renderEmptyState("Noch kein Discord-Status", "Sobald du den Status laedst, erscheint hier die aktuelle Bot-Pruefung.")
           : `
             <div class="stats-strip compact-stats">
-              ${renderStatCard("Webhook", status.configured ? "Gesetzt" : "Fehlt", status.configured ? "DISCORD_WEBHOOK_URL ist vorhanden" : "Bitte in Render unter Umwelt eintragen", status.configured ? "teal" : "rose")}
+              ${renderStatCard("Bot", status.configured ? "Bereit" : "Fehlt", status.configured ? "DISCORD_BOT_TOKEN und DISCORD_CHANNEL_ID sind gesetzt" : "Bitte in Render unter Umwelt eintragen", status.configured ? "teal" : "rose")}
+              ${renderStatCard("Reminder", status.shiftRemindersEnabled ? "Aktiv" : "Aus", status.shiftRemindersEnabled ? `${status.shiftReminderLookaheadMinutes || 15} Minuten vor Schichtstart` : "DISCORD_SHIFT_REMINDERS_ENABLED ist aus", status.shiftRemindersEnabled ? "success" : "neutral")}
+              ${renderStatCard("Plan-Aenderungen", status.shiftChangeNotificationsEnabled ? "An" : "Ruhig", status.shiftChangeNotificationsEnabled ? "Schicht-Aenderungen gehen in den Kanal" : "Nur Reminder/Test, keine Plan-Spam-Nachrichten", status.shiftChangeNotificationsEnabled ? "amber" : "sky")}
               ${renderStatCard("Letzter Versuch", status.lastAttemptAt ? formatDateTime(status.lastAttemptAt) : "-", status.lastStatusCode ? `HTTP ${status.lastStatusCode}` : "Noch kein Versand", "amber")}
               ${renderStatCard("Letzter Erfolg", status.lastSuccessAt ? formatDateTime(status.lastSuccessAt) : "-", status.lastSuccessAt ? "Discord hat die Nachricht angenommen" : "Noch kein erfolgreicher Versand", status.lastSuccessAt ? "success" : "sky")}
             </div>
             ${status.blockedUntil ? `<div class="flash flash-warning"><span>${escapeHtml(`Discord-Sends pausieren aktuell bis ${formatDateTime(status.blockedUntil)}. Ein neuer Webhook hilft bei 1015 meistens nicht, weil die Sperre an der Server-IP haengt.`)}</span></div>` : ""}
             ${status.lastError ? `<div class="flash flash-danger"><span>${escapeHtml(status.lastError)}</span></div>` : ""}
-            <p class="pill-note">Wenn die Testnachricht nicht ankommt, pruefe zuerst den Discord-Webhook und dann den letzten Fehler hier im Portal.</p>
+            <p class="pill-note">Wenn die Testnachricht nicht ankommt, pruefe zuerst DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID und ob der Bot in diesem Kanal schreiben darf.</p>
           `
       }
     </section>
@@ -5450,17 +5484,11 @@ async function handleClick(event) {
       break;
 
     case "refresh-discord-status":
-      setFlash("Der Discord-Webhook-Bereich wurde entfernt.", "info");
-      state.discordStatus = null;
-      state.discordLoading = false;
-      render();
+      await refreshDiscordStatus(true);
       break;
 
     case "run-discord-test":
-      setFlash("Der Discord-Webhook-Bereich wurde entfernt.", "info");
-      state.discordStatus = null;
-      state.discordLoading = false;
-      render();
+      await runDiscordTest();
       break;
 
     case "run-vrchat-sync":
@@ -6591,6 +6619,11 @@ function renderProfilePanel(managerView) {
             <div class="field">
               <label for="profileDiscordName">Discord-Name</label>
               <input id="profileDiscordName" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
+            </div>
+            <div class="field">
+              <label for="profileDiscordUserId">Discord User-ID fuer Bot-DMs</label>
+              <input id="profileDiscordUserId" name="discordUserId" type="text" inputmode="numeric" value="${escapeHtml(user.discordUserId || "")}" placeholder="z. B. 123456789012345678">
+              <p class="helper-text">Damit der Bot einzelne Moderatoren privat an Schichten erinnern kann. In Discord: Entwicklermodus aktivieren, Rechtsklick auf Profil, ID kopieren.</p>
             </div>
             <div class="field">
               <label for="profileAvatarFile">Profilbild</label>
@@ -8461,6 +8494,22 @@ function getPublicRouteState() {
   const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   const vrchatSource = normalizeVrchatLinkSourceValue(currentUrl.searchParams.get("source") || currentUrl.searchParams.get("vrchatLink"));
   const creatorMatch = normalizedPath.match(/^\/creator\/([^/]+)$/);
+  const legalRoutes = {
+    "/datenschutz": "privacy",
+    "/privacy": "privacy",
+    "/nutzungsbedingungen": "terms",
+    "/terms": "terms"
+  };
+
+  if (legalRoutes[normalizedPath.toLowerCase()]) {
+    return {
+      kind: "legal",
+      page: legalRoutes[normalizedPath.toLowerCase()],
+      slug: "",
+      vrchatSource: ""
+    };
+  }
+
   if (creatorMatch) {
     return {
       kind: "creator",
@@ -8998,6 +9047,165 @@ function renderPublicTeamPanel() {
         }
       </div>
     </section>
+  `;
+}
+
+function getLegalDocument(page) {
+  const updatedAt = "27.04.2026";
+
+  if (page === "terms") {
+    return {
+      eyebrow: "Rechtliches",
+      title: "Nutzungsbedingungen",
+      intro:
+        "Diese Regeln beschreiben, wie SONARA genutzt werden soll, damit Community, Creator und Staff-Bereich fuer alle fair und sicher bleiben.",
+      path: "/nutzungsbedingungen",
+      updatedAt,
+      sections: [
+        {
+          title: "1. Nutzung des Portals",
+          body:
+            "Das Portal ist fuer SONARA-Mitglieder, Creator und Teammitglieder gedacht. Accounts sollen ehrlich gepflegt werden, damit Planung, Community-Funktionen und Kontaktwege funktionieren."
+        },
+        {
+          title: "2. Verhalten in der Community",
+          body:
+            "Respektvoller Umgang ist Pflicht. Beleidigungen, Belaestigung, Spam, Identitaetstaeuschung, gezielte Stoerungen und das Verbreiten schaedlicher Inhalte sind nicht erlaubt."
+        },
+        {
+          title: "3. Team- und Schichtfunktionen",
+          body:
+            "Schichtplanung, Verfuegbarkeiten, Ein- und Ausstempeln sowie Ueberstunden dienen der internen Organisation. Falsche Eintraege oder absichtliche Manipulationen koennen eingeschraenkt oder korrigiert werden."
+        },
+        {
+          title: "4. Creator-Bereiche",
+          body:
+            "Creator koennen eigene Inhalte, Links und Community-Hinweise pflegen, sofern sie freigegeben wurden. Inhalte muessen zur Community passen und duerfen keine Rechte Dritter verletzen."
+        },
+        {
+          title: "5. Aenderungen und Kontakt",
+          body:
+            "SONARA kann Funktionen, Regeln oder Zugriffe anpassen, wenn es fuer Sicherheit, Stabilitaet oder Community-Organisation notwendig ist. Bei Problemen bitte die Leitung direkt kontaktieren."
+        }
+      ]
+    };
+  }
+
+  return {
+    eyebrow: "Datenschutz",
+    title: "Datenschutz und Datenverarbeitung",
+    intro:
+      "Diese Seite erklaert, welche Daten SONARA im Portal nutzt und warum sie fuer Community, Planung und Sicherheit gebraucht werden.",
+    path: "/datenschutz",
+    updatedAt,
+    sections: [
+      {
+        title: "1. Verantwortlicher Kontakt",
+        body:
+          "Verantwortlich ist das SONARA-Team. Bis ein offizieller Kontakt hinterlegt ist, werden Datenschutz- und Account-Anfragen direkt ueber die bekannte SONARA-Leitung oder den Community-Kontakt bearbeitet."
+      },
+      {
+        title: "2. Welche Daten gespeichert werden",
+        body:
+          "Gespeichert werden koennen Kontodaten wie VRChat-Name, Discord-Name, optionale Discord User-ID, Profilbild, Profiltext, Creator-Links, Verfuegbarkeiten, Schichten, Zeitstempel, Ueberstunden, Forum-/Feed-Beitraege und technische Sitzungsdaten."
+      },
+      {
+        title: "3. Wofuer die Daten genutzt werden",
+        body:
+          "Die Daten werden genutzt, um Login, Profile, Community-Ansichten, Creator-Seiten, Moderationsplanung, Ein- und Ausstempeln, Schichterinnerungen und interne Organisation bereitzustellen."
+      },
+      {
+        title: "4. Discord und Benachrichtigungen",
+        body:
+          "Wenn eine Discord User-ID gepflegt ist, kann der Bot einzelne Schicht-Erinnerungen per Direktnachricht senden. Kanalnachrichten oder Bot-Fehler koennen technisch protokolliert werden, damit der Versand geprueft werden kann."
+      },
+      {
+        title: "5. Zugriff, Aufbewahrung und Rechte",
+        body:
+          "Zugriff erhalten nur berechtigte Rollen wie Admin, Planung oder Moderationsleitung. Mitglieder koennen Auskunft, Korrektur oder Loeschung ihrer personenbezogenen Daten anfragen, soweit keine internen Nachweise zwingend erhalten bleiben muessen."
+      }
+    ]
+  };
+}
+
+function renderLegalSection(section) {
+  return `
+    <article class="mini-card legal-document-card">
+      <h3>${escapeHtml(section.title)}</h3>
+      <p>${escapeHtml(section.body)}</p>
+    </article>
+  `;
+}
+
+function renderPublicLegalPanel() {
+  return `
+    <section class="panel span-12 legal-overview-panel" id="rechtliches">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Rechtliches</p>
+          <h2>Datenschutz und Nutzungsbedingungen</h2>
+          <p class="section-copy">Neue Mitglieder finden hier die wichtigsten Regeln und Datenschutzhinweise, bevor sie sich anmelden oder registrieren.</p>
+        </div>
+      </div>
+
+      <div class="feature-grid legal-link-grid">
+        <article class="feature-card legal-link-card">
+          <h3>Datenschutz</h3>
+          <p>Welche Portal-, Discord-, Schicht- und Profildaten SONARA verarbeitet.</p>
+          <a class="creator-action-link" href="/datenschutz">Datenschutz oeffnen</a>
+        </article>
+        <article class="feature-card legal-link-card">
+          <h3>Nutzungsbedingungen</h3>
+          <p>Die Grundregeln fuer Community, Staff-Bereich, Creator-Hubs und Portalnutzung.</p>
+          <a class="creator-action-link" href="/nutzungsbedingungen">Bedingungen oeffnen</a>
+        </article>
+      </div>
+
+      <p class="pill-note">Hinweis: Das ist ein technischer Starttext fuer die Webseite. Betreiberangaben und finaler Rechtstext sollten vor dem oeffentlichen Betrieb nochmal geprueft werden.</p>
+    </section>
+  `;
+}
+
+function renderPublicLegalPage(page) {
+  const document = getLegalDocument(page);
+  const otherPage = page === "terms" ? getLegalDocument("privacy") : getLegalDocument("terms");
+
+  return `
+    <div class="app-shell">
+      ${renderSonaraHero({
+        eyebrow: document.eyebrow,
+        title: document.title,
+        intro: document.intro,
+        chips: ["SONARA", `Stand ${document.updatedAt}`, document.path]
+      })}
+
+      ${renderFlash()}
+      ${renderSystemNoticeBanner()}
+
+      <div class="dashboard-grid community-home-grid legal-document-grid">
+        <section class="panel span-12 legal-document-panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Stand ${escapeHtml(document.updatedAt)}</p>
+              <h2>${escapeHtml(document.title)}</h2>
+              <p class="section-copy">${escapeHtml(document.intro)}</p>
+            </div>
+            <div class="card-actions">
+              <a class="creator-action-link" href="/">Zur Startseite</a>
+              <a class="creator-action-link" href="${escapeHtml(otherPage.path)}">${escapeHtml(otherPage.title)}</a>
+            </div>
+          </div>
+
+          <div class="legal-document-list">
+            ${document.sections.map((section) => renderLegalSection(section)).join("")}
+          </div>
+
+          <div class="flash flash-warning">
+            <span>Bitte noch echte Betreiber-/Kontaktangaben eintragen und den Text rechtlich pruefen, bevor die Seite gross beworben wird.</span>
+          </div>
+        </section>
+      </div>
+    </div>
   `;
 }
 
@@ -9569,6 +9777,10 @@ function renderPublicPortal() {
     return creator ? renderCreatorPublicPage(creator) : renderCreatorPublicNotFound(route.slug);
   }
 
+  if (route.kind === "legal") {
+    return renderPublicLegalPage(route.page);
+  }
+
   const community = getCommunityData();
   const stats = community.stats || {};
   const creators = (community.creators || []).slice(0, 3);
@@ -9733,6 +9945,7 @@ function renderPublicPortal() {
         ${renderCommunityParticipationPanel()}
         ${renderPublicRulesPanel()}
         ${renderPublicTeamPanel()}
+        ${renderPublicLegalPanel()}
       </div>
     </div>
   `;
@@ -10007,6 +10220,7 @@ async function buildProfilePayload(form) {
   const payload = {
     vrchatName: formData.get("vrchatName"),
     discordName: formData.get("discordName"),
+    discordUserId: formData.get("discordUserId"),
     bio: formData.get("bio"),
     contactNote: formData.get("contactNote"),
     weeklyHoursCapacity: formData.get("weeklyHoursCapacity"),
@@ -10249,7 +10463,7 @@ function renderProfilePanel(managerView) {
           ${renderUserAvatar(user, "hero-avatar")}
           <div>
             <h3>${escapeHtml(getPrimaryDisplayName(user))}</h3>
-            <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
+            <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")} | Bot-DM: ${user.discordUserId ? "verknuepft" : "fehlt"}</p>
             ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
             ${user.contactNote ? `<p class="helper-text">${escapeHtml(user.contactNote)}</p>` : ""}
             <div class="profile-summary-list">
@@ -10277,6 +10491,11 @@ function renderProfilePanel(managerView) {
             <div class="field">
               <label for="profileDiscordName">Discord-Name</label>
               <input id="profileDiscordName" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
+            </div>
+            <div class="field">
+              <label for="profileDiscordUserId">Discord User-ID fuer Bot-DMs</label>
+              <input id="profileDiscordUserId" name="discordUserId" type="text" inputmode="numeric" value="${escapeHtml(user.discordUserId || "")}" placeholder="z. B. 123456789012345678">
+              <p class="helper-text">Damit der Bot einzelne Moderatoren privat an Schichten erinnern kann. In Discord: Entwicklermodus aktivieren, Rechtsklick auf Profil, ID kopieren.</p>
             </div>
             <div class="field">
               <label for="profileAvatarFile">Profilbild</label>
