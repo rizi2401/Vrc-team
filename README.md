@@ -123,6 +123,14 @@ LIVEKIT_COMMUNITY_ROOM=sonara-community
 LIVEKIT_STAFF_ROOM=sonara-staff
 ```
 
+LiveKit Cloud:
+
+- In deinem LiveKit-Projekt links `Project API keys` oeffnen.
+- Eine API-Key/Secret-Kombination erstellen oder anzeigen lassen.
+- Fuer `LIVEKIT_URL` die WebSocket-URL des Projekts verwenden, meistens `wss://...livekit.cloud`.
+- Nicht die Browser-URL aus dem Dashboard verwenden, also nicht `https://cloud.livekit.io/projects/...`.
+- `Agents`, `Telephony`, `Ingresses` und `Egresses` werden fuer normale Portal-Sprachkanaele nicht gebraucht.
+
 Die erste Version ist Audio-only:
 
 - `Community Voice` ist fuer alle eingeloggten Mitglieder.

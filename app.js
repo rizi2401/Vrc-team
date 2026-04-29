@@ -11471,7 +11471,7 @@ function renderVoicePanel() {
 
       ${
         config && !config.enabled
-          ? `<div class="flash flash-warning"><span>LiveKit ist noch nicht verbunden. Bitte LIVEKIT_URL, LIVEKIT_API_KEY und LIVEKIT_API_SECRET in Render setzen.</span></div>`
+          ? `<div class="flash flash-warning"><span>LiveKit ist noch nicht verbunden. In LiveKit Cloud unter Project API keys die WebSocket-URL, API Key und API Secret holen und in Render als LIVEKIT_URL, LIVEKIT_API_KEY und LIVEKIT_API_SECRET setzen.</span></div>`
           : ""
       }
       ${state.voice.error ? `<div class="flash flash-danger"><span>${escapeHtml(state.voice.error)}</span></div>` : ""}
