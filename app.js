@@ -8204,6 +8204,20 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "collection-update": {
+      const collectionId = form.dataset.collectionId;
+      const payload = collectCollectionUpdatePayload(form);
+      await performAction(
+        () =>
+          api(`/api/admin/collections/${encodeURIComponent(collectionId)}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          }),
+        "Collection-Felder wurden aktualisiert."
+      );
+      break;
+    }
+
     case "custom-record-create": {
       const collectionId = form.dataset.collectionId;
       const payload = collectCustomRecordPayload(form);
@@ -10539,6 +10553,40 @@ function collectCustomRecordPayload(form) {
   return payload;
 }
 
+function collectCollectionUpdatePayload(form) {
+  const formData = new FormData(form);
+  const fields = [...form.querySelectorAll("[data-collection-field-row]")]
+    .map((row, index) => ({
+      key: row.querySelector('[name="fieldKey"]')?.value || "",
+      label: row.querySelector('[name="fieldLabel"]')?.value || "",
+      type: row.querySelector('[name="fieldType"]')?.value || "text",
+      options: String(row.querySelector('[name="fieldOptions"]')?.value || "")
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+      active: row.querySelector('[name="fieldActive"]')?.checked || false,
+      required: row.querySelector('[name="fieldRequired"]')?.checked || false,
+      sortOrder: row.querySelector('[name="fieldSortOrder"]')?.value || (index + 1) * 10,
+      helpText: row.querySelector('[name="fieldHelpText"]')?.value || "",
+      placeholder: row.querySelector('[name="fieldPlaceholder"]')?.value || "",
+      width: row.querySelector('[name="fieldWidth"]')?.value || "normal",
+      height: row.querySelector('[name="fieldHeight"]')?.value || "normal",
+      rows: row.querySelector('[name="fieldRows"]')?.value || "",
+      collapsible: row.querySelector('[name="fieldCollapsible"]')?.checked || false,
+      collapsedByDefault: row.querySelector('[name="fieldCollapsedByDefault"]')?.checked || false
+    }))
+    .filter((field) => String(field.key || field.label).trim());
+
+  return {
+    title: formData.get("title"),
+    description: formData.get("description"),
+    publicVisible: formData.get("publicVisible") === "on",
+    visibleRoles: formData.getAll("visibleRoles"),
+    editableRoles: formData.getAll("editableRoles"),
+    fields
+  };
+}
+
 function readFileAsDataUrl(fileInput) {
   const file = fileInput?.files?.[0];
   if (!file) {
@@ -10760,7 +10808,7 @@ function renderCollectionsAdminPanel() {
           <div class="field span-all">
             <label for="collectionFields">Felder</label>
             <textarea id="collectionFields" name="fieldsText" placeholder="Name|text&#10;Status|select|offen,in arbeit,fertig&#10;Notiz|longtext" required></textarea>
-            <p class="helper-text">Format: Feldname|typ|optionen. Typen: text, longtext, number, date, time, select, multiselect, checkbox, link, file, user.</p>
+            <p class="helper-text">Format: Feldname|typ|optionen. Erweiterte Groessen, Sortierung und Aufklappen stellst du nach dem Anlegen in der Collection ein.</p>
           </div>
           <div class="field checkbox-field">
             <label class="checkbox-row" for="collectionPublic">
@@ -10788,6 +10836,10 @@ function renderCollectionsAdminPanel() {
 }
 
 function renderCollectionEditor(collection, records) {
+  const roles = getRoleDefinitions().filter((role) => role.active);
+  const fields = getSortedNoCodeFields(collection.fields || []);
+  const activeFields = fields.filter((field) => field.active !== false);
+
   return `
     <section class="panel span-12">
       <div class="section-head">
@@ -10799,11 +10851,59 @@ function renderCollectionEditor(collection, records) {
         <button type="button" class="ghost small" data-action="delete-collection" data-collection-id="${escapeHtml(collection.id)}">Collection loeschen</button>
       </div>
 
-      <form class="stack-form" data-form="custom-record-create" data-collection-id="${escapeHtml(collection.id)}">
-        <div class="form-grid">
-          ${(collection.fields || []).map((field) => renderNoCodeFieldInput(field)).join("")}
+      <details class="mystic-expander no-code-field-expander" open>
+        <summary>
+          <span>Felder bearbeiten</span>
+          <span class="pill neutral">${fields.length} Felder</span>
+        </summary>
+        <div class="mystic-expander-body">
+          <form class="stack-form" data-form="collection-update" data-collection-id="${escapeHtml(collection.id)}">
+            <div class="form-grid">
+              <div class="field">
+                <label for="collectionTitle-${escapeHtml(collection.id)}">Name</label>
+                <input id="collectionTitle-${escapeHtml(collection.id)}" name="title" type="text" value="${escapeHtml(collection.title || "")}" required>
+              </div>
+              <div class="field">
+                <label>Schluessel</label>
+                <input type="text" value="${escapeHtml(collection.key || "")}" readonly>
+              </div>
+              <div class="field span-all">
+                <label for="collectionDescription-${escapeHtml(collection.id)}">Beschreibung</label>
+                <input id="collectionDescription-${escapeHtml(collection.id)}" name="description" type="text" value="${escapeHtml(collection.description || "")}">
+              </div>
+              <div class="field checkbox-field">
+                <label class="checkbox-row">
+                  <input name="publicVisible" type="checkbox" ${collection.publicVisible ? "checked" : ""}>
+                  <span>Oeffentlich sichtbar</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="guide-grid">
+              <article class="mini-card">
+                <h3>Sichtbar fuer Rollen</h3>
+                ${roles.map((role) => `<label class="checkbox-row"><input name="visibleRoles" value="${escapeHtml(role.key)}" type="checkbox" ${(collection.visibleRoles || []).includes(role.key) ? "checked" : ""}><span>${escapeHtml(role.label)}</span></label>`).join("")}
+              </article>
+              <article class="mini-card">
+                <h3>Bearbeitbar fuer Rollen</h3>
+                ${roles.map((role) => `<label class="checkbox-row"><input name="editableRoles" value="${escapeHtml(role.key)}" type="checkbox" ${(collection.editableRoles || []).includes(role.key) ? "checked" : ""}><span>${escapeHtml(role.label)}</span></label>`).join("")}
+              </article>
+            </div>
+
+            <div class="stack-list no-code-field-list">
+              ${fields.map((field, index) => renderNoCodeFieldEditorRow(field, index)).join("")}
+            </div>
+
+            <button type="submit">Collection-Felder speichern</button>
+          </form>
         </div>
-        <button type="submit">Datensatz speichern</button>
+      </details>
+
+      <form class="stack-form" data-form="custom-record-create" data-collection-id="${escapeHtml(collection.id)}">
+        <div class="form-grid no-code-record-grid">
+          ${activeFields.length ? activeFields.map((field) => renderNoCodeFieldInput(field)).join("") : renderEmptyState("Keine aktiven Felder", "Aktiviere oben mindestens ein Feld, um neue Datensaetze anzulegen.")}
+        </div>
+        ${activeFields.length ? "<button type=\"submit\">Datensatz speichern</button>" : ""}
       </form>
 
       <div class="stack-list">
@@ -10815,24 +10915,44 @@ function renderCollectionEditor(collection, records) {
 
 function renderNoCodeFieldInput(field) {
   const name = `field:${field.key}`;
+  const fieldClass = getNoCodeFieldClass(field);
+  const placeholder = field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : "";
+  const helper = field.helpText ? `<p class="helper-text">${escapeHtml(field.helpText)}</p>` : "";
+  const body = (() => {
   if (field.type === "longtext") {
-    return `<div class="field span-all"><label>${escapeHtml(field.label)}</label><textarea name="${escapeHtml(name)}" ${field.required ? "required" : ""}></textarea></div>`;
+    return `<textarea name="${escapeHtml(name)}" rows="${escapeHtml(field.rows || 4)}" ${field.required ? "required" : ""}${placeholder}></textarea>${helper}`;
   }
   if (field.type === "checkbox") {
-    return `<div class="field checkbox-field"><label class="checkbox-row"><input name="${escapeHtml(name)}" data-field-key="${escapeHtml(field.key)}" type="checkbox"><span>${escapeHtml(field.label)}</span></label></div>`;
+    return `<label class="checkbox-row"><input name="${escapeHtml(name)}" data-field-key="${escapeHtml(field.key)}" type="checkbox"><span>${escapeHtml(field.label)}</span></label>${helper}`;
   }
   if (field.type === "select") {
-    return `<div class="field"><label>${escapeHtml(field.label)}</label><select name="${escapeHtml(name)}" ${field.required ? "required" : ""}><option value="">Bitte waehlen</option>${(field.options || []).map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("")}</select></div>`;
+    return `<select name="${escapeHtml(name)}" ${field.required ? "required" : ""}><option value="">Bitte waehlen</option>${(field.options || []).map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("")}</select>${helper}`;
   }
   if (field.type === "user") {
-    return `<div class="field"><label>${escapeHtml(field.label)}</label><select name="${escapeHtml(name)}" ${field.required ? "required" : ""}><option value="">Bitte waehlen</option>${(state.data?.users || state.data?.directory || []).map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(getPrimaryDisplayName(user))}</option>`).join("")}</select></div>`;
+    return `<select name="${escapeHtml(name)}" ${field.required ? "required" : ""}><option value="">Bitte waehlen</option>${(state.data?.users || state.data?.directory || []).map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(getPrimaryDisplayName(user))}</option>`).join("")}</select>${helper}`;
   }
   const inputType = field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "time" ? "time" : "text";
-  const helper = field.type === "multiselect" ? '<p class="helper-text">Mehrere Werte mit Komma trennen.</p>' : "";
-  return `<div class="field"><label>${escapeHtml(field.label)}</label><input name="${escapeHtml(name)}" type="${inputType}" ${field.required ? "required" : ""}>${helper}</div>`;
+  const multiHelper = field.type === "multiselect" ? '<p class="helper-text">Mehrere Werte mit Komma trennen.</p>' : "";
+    return `<input name="${escapeHtml(name)}" type="${inputType}" ${field.required ? "required" : ""}${placeholder}>${helper || multiHelper}`;
+  })();
+
+  const content = field.type === "checkbox" ? body : `<label>${escapeHtml(field.label)}</label>${body}`;
+  const fieldMarkup = `<div class="field no-code-field ${fieldClass}">${content}</div>`;
+  if (!field.collapsible) return fieldMarkup;
+
+  return `
+    <details class="mystic-expander no-code-field-wrapper ${fieldClass}" ${field.collapsedByDefault ? "" : "open"}>
+      <summary><span>${escapeHtml(field.label)}</span></summary>
+      <div class="mystic-expander-body">${fieldMarkup}</div>
+    </details>
+  `;
 }
 
 function renderCustomRecordCard(collection, record) {
+  const fields = getSortedNoCodeFields(collection.fields || []);
+  const activeFields = fields.filter((field) => field.active !== false);
+  const inactiveFields = fields.filter((field) => field.active === false && formatNoCodeValue(record.values?.[field.key]) !== "-");
+
   return `
     <article class="mini-card">
       <div class="section-head compact-section-head">
@@ -10843,12 +10963,105 @@ function renderCustomRecordCard(collection, record) {
         <button type="button" class="ghost small" data-action="delete-custom-record" data-record-id="${escapeHtml(record.id)}">Loeschen</button>
       </div>
       <div class="compact-meta-grid">
-        ${(collection.fields || [])
+        ${activeFields
           .map((field) => `<p><strong>${escapeHtml(field.label)}:</strong> ${escapeHtml(formatNoCodeValue(record.values?.[field.key]))}</p>`)
           .join("")}
       </div>
+      ${
+        inactiveFields.length
+          ? `
+            <details class="mystic-expander no-code-archived-values">
+              <summary><span>Deaktivierte Feldwerte</span></summary>
+              <div class="mystic-expander-body compact-meta-grid">
+                ${inactiveFields.map((field) => `<p><strong>${escapeHtml(field.label)}:</strong> ${escapeHtml(formatNoCodeValue(record.values?.[field.key]))}</p>`).join("")}
+              </div>
+            </details>
+          `
+          : ""
+      }
     </article>
   `;
+}
+
+function getSortedNoCodeFields(fields) {
+  return (Array.isArray(fields) ? fields : [])
+    .slice()
+    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || String(left.label || "").localeCompare(String(right.label || ""), "de"));
+}
+
+function getNoCodeFieldClass(field) {
+  return [
+    `no-code-width-${field.width || "normal"}`,
+    `no-code-height-${field.height || "normal"}`
+  ].join(" ");
+}
+
+function renderNoCodeFieldEditorRow(field, index) {
+  const fieldId = `${field.key}-${index}`;
+  return `
+    <article class="mini-card no-code-field-editor ${field.active === false ? "is-inactive" : ""}" data-collection-field-row>
+      <div class="section-head compact-section-head">
+        <div>
+          <p class="eyebrow">${escapeHtml(field.type || "text")} | ${escapeHtml(field.key || "")}</p>
+          <h3>${escapeHtml(field.label || "Feld")}</h3>
+        </div>
+        <span class="pill ${field.active === false ? "rose" : "success"}">${field.active === false ? "Deaktiviert" : "Aktiv"}</span>
+      </div>
+      <input name="fieldKey" type="hidden" value="${escapeHtml(field.key || "")}">
+      <input name="fieldType" type="hidden" value="${escapeHtml(field.type || "text")}">
+      <input name="fieldOptions" type="hidden" value="${escapeHtml((field.options || []).join(","))}">
+      <div class="form-grid">
+        <div class="field">
+          <label for="fieldLabel-${escapeHtml(fieldId)}">Name</label>
+          <input id="fieldLabel-${escapeHtml(fieldId)}" name="fieldLabel" type="text" value="${escapeHtml(field.label || "")}" required>
+        </div>
+        <div class="field">
+          <label for="fieldSort-${escapeHtml(fieldId)}">Sortierung</label>
+          <input id="fieldSort-${escapeHtml(fieldId)}" name="fieldSortOrder" type="number" value="${escapeHtml(field.sortOrder || (index + 1) * 10)}">
+        </div>
+        <div class="field">
+          <label for="fieldWidth-${escapeHtml(fieldId)}">Breite</label>
+          <select id="fieldWidth-${escapeHtml(fieldId)}" name="fieldWidth">
+            ${renderNoCodeOption("small", "Klein", field.width)}
+            ${renderNoCodeOption("normal", "Normal", field.width)}
+            ${renderNoCodeOption("half", "Halb", field.width)}
+            ${renderNoCodeOption("wide", "Breit", field.width)}
+            ${renderNoCodeOption("full", "Ganze Zeile", field.width)}
+          </select>
+        </div>
+        <div class="field">
+          <label for="fieldHeight-${escapeHtml(fieldId)}">Hoehe</label>
+          <select id="fieldHeight-${escapeHtml(fieldId)}" name="fieldHeight">
+            ${renderNoCodeOption("compact", "Kompakt", field.height)}
+            ${renderNoCodeOption("normal", "Normal", field.height)}
+            ${renderNoCodeOption("large", "Gross", field.height)}
+          </select>
+        </div>
+        <div class="field">
+          <label for="fieldRows-${escapeHtml(fieldId)}">Zeilen</label>
+          <input id="fieldRows-${escapeHtml(fieldId)}" name="fieldRows" type="number" min="2" max="16" value="${escapeHtml(field.rows || (field.type === "longtext" ? 4 : 2))}">
+        </div>
+        <div class="field">
+          <label for="fieldPlaceholder-${escapeHtml(fieldId)}">Platzhalter</label>
+          <input id="fieldPlaceholder-${escapeHtml(fieldId)}" name="fieldPlaceholder" type="text" value="${escapeHtml(field.placeholder || "")}">
+        </div>
+        <div class="field span-all">
+          <label for="fieldHelp-${escapeHtml(fieldId)}">Hilfetext</label>
+          <input id="fieldHelp-${escapeHtml(fieldId)}" name="fieldHelpText" type="text" value="${escapeHtml(field.helpText || "")}">
+        </div>
+      </div>
+      <div class="chip-list">
+        <label class="checkbox-row"><input name="fieldActive" type="checkbox" ${field.active === false ? "" : "checked"}><span>Aktiv</span></label>
+        <label class="checkbox-row"><input name="fieldRequired" type="checkbox" ${field.required ? "checked" : ""}><span>Pflichtfeld</span></label>
+        <label class="checkbox-row"><input name="fieldCollapsible" type="checkbox" ${field.collapsible ? "checked" : ""}><span>Aufklappbar</span></label>
+        <label class="checkbox-row"><input name="fieldCollapsedByDefault" type="checkbox" ${field.collapsedByDefault ? "checked" : ""}><span>Standard eingeklappt</span></label>
+      </div>
+    </article>
+  `;
+}
+
+function renderNoCodeOption(value, label, selectedValue) {
+  return `<option value="${escapeHtml(value)}" ${value === selectedValue ? "selected" : ""}>${escapeHtml(label)}</option>`;
 }
 
 function formatNoCodeValue(value) {

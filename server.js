@@ -1112,12 +1112,34 @@ async function handleApi(req, res, url) {
   }
 
   const collectionMatch = url.pathname.match(/^\/api\/admin\/collections\/([^/]+)$/);
+  if (collectionMatch && req.method === "PATCH") {
+    requireNoCodePermission(auth.user, auth.store, "collections_manage");
+    const collectionId = decodeURIComponent(collectionMatch[1]);
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+    nextStore.customCollections = normalizeCustomCollections(nextStore.customCollections);
+    const collection = nextStore.customCollections.find((entry) => entry.id === collectionId);
+
+    if (!collection) {
+      sendJson(res, 404, { error: "Collection nicht gefunden." });
+      return;
+    }
+
+    const updatedCollection = validateCollectionUpdatePayload(body, collection, nextStore);
+    Object.assign(collection, updatedCollection, { updatedAt: new Date().toISOString() });
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "collection-updated" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
   if (collectionMatch && req.method === "DELETE") {
     requireNoCodePermission(auth.user, auth.store, "collections_manage");
     const collectionId = decodeURIComponent(collectionMatch[1]);
     const nextStore = structuredClone(auth.store);
 
-    nextStore.customCollections = normalizeCustomCollections(nextStore.customCollections).filter((entry) => entry.id !== collectionId);
+    const normalizedCollections = normalizeCustomCollections(nextStore.customCollections);
+    nextStore.customCollections = normalizedCollections.filter((entry) => entry.id !== collectionId);
     nextStore.customRecords = normalizeCustomRecords(nextStore.customRecords, nextStore.customCollections, nextStore).filter((entry) => entry.collectionId !== collectionId);
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "collection-deleted" });
@@ -3404,9 +3426,14 @@ function validateSiteContentPayload(body) {
 
 function normalizeCollectionField(entry = {}, index = 0) {
   const allowedTypes = new Set(["text", "longtext", "number", "date", "time", "select", "multiselect", "checkbox", "link", "file", "user"]);
+  const allowedWidths = new Set(["small", "normal", "half", "wide", "full"]);
+  const allowedHeights = new Set(["compact", "normal", "large"]);
   const label = String(entry.label || entry.name || entry.key || `Feld ${index + 1}`).trim().slice(0, 80);
   const key = normalizeNoCodeKey(entry.key, label);
   const type = allowedTypes.has(String(entry.type || "").trim()) ? String(entry.type).trim() : "text";
+  const width = allowedWidths.has(String(entry.width || "").trim()) ? String(entry.width).trim() : "normal";
+  const height = allowedHeights.has(String(entry.height || "").trim()) ? String(entry.height).trim() : "normal";
+  const rows = Math.max(2, Math.min(16, normalizePositiveInteger(entry.rows, type === "longtext" ? 4 : 2)));
   const options = uniqueStrings(Array.isArray(entry.options) ? entry.options : String(entry.options || "").split(","))
     .map((option) => String(option || "").trim().slice(0, 80))
     .filter(Boolean)
@@ -3417,7 +3444,16 @@ function normalizeCollectionField(entry = {}, index = 0) {
     key,
     label,
     type,
+    active: entry.active === undefined ? true : normalizeBooleanInput(entry.active),
     required: normalizeBooleanInput(entry.required),
+    sortOrder: Number.isFinite(Number(entry.sortOrder)) ? Number(entry.sortOrder) : (index + 1) * 10,
+    helpText: String(entry.helpText || entry.helperText || "").trim().slice(0, 300),
+    placeholder: String(entry.placeholder || "").trim().slice(0, 160),
+    width,
+    height,
+    rows,
+    collapsible: normalizeBooleanInput(entry.collapsible),
+    collapsedByDefault: normalizeBooleanInput(entry.collapsedByDefault),
     options
   };
 }
@@ -3432,7 +3468,8 @@ function normalizeCustomCollections(collections) {
       seen.add(key);
       const fields = (Array.isArray(entry?.fields) ? entry.fields : [])
         .map((field, fieldIndex) => normalizeCollectionField(field, fieldIndex))
-        .filter(Boolean);
+        .filter(Boolean)
+        .sort(compareNoCodeFields);
       return {
         id: String(entry?.id || crypto.randomUUID()),
         key,
@@ -3456,8 +3493,12 @@ function parseCollectionFieldsFromText(value) {
     .filter(Boolean)
     .map((line) => {
       const [label, type = "text", options = ""] = line.split("|").map((part) => part.trim());
-      return { label, key: normalizeNoCodeKey(label), type, options: options ? options.split(",") : [] };
+      return { label, key: normalizeNoCodeKey(label), type, options: options ? options.split(",") : [], active: true };
     });
+}
+
+function compareNoCodeFields(left, right) {
+  return Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || String(left.label || "").localeCompare(String(right.label || ""), "de");
 }
 
 function validateCollectionPayload(body, store) {
@@ -3487,9 +3528,49 @@ function validateCollectionPayload(body, store) {
     publicVisible: normalizeBooleanInput(body.publicVisible),
     visibleRoles: uniqueStrings(Array.isArray(body.visibleRoles) ? body.visibleRoles : []).filter((role) => roleKeys.includes(role)),
     editableRoles: uniqueStrings(Array.isArray(body.editableRoles) ? body.editableRoles : []).filter((role) => roleKeys.includes(role)),
-    fields,
+    fields: fields.sort(compareNoCodeFields),
     createdAt: new Date().toISOString(),
     updatedAt: ""
+  };
+}
+
+function validateCollectionUpdatePayload(body, existingCollection, store) {
+  const roleKeys = normalizeRoleDefinitions(store?.roleDefinitions).map((entry) => entry.key);
+  const title = String(body.title || existingCollection.title || "").trim().slice(0, 100);
+  const fields = (Array.isArray(body.fields) ? body.fields : existingCollection.fields || [])
+    .map((entry, index) => normalizeCollectionField(entry, index))
+    .filter(Boolean)
+    .sort(compareNoCodeFields);
+  const seenFieldKeys = new Set();
+
+  if (!title) {
+    const error = new Error("Bitte einen Namen fuer die Collection angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!fields.length) {
+    const error = new Error("Eine Collection braucht mindestens ein Feld.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  for (const field of fields) {
+    if (seenFieldKeys.has(field.key)) {
+      const error = new Error(`Das Feld "${field.label}" nutzt einen doppelten Schluessel.`);
+      error.statusCode = 400;
+      throw error;
+    }
+    seenFieldKeys.add(field.key);
+  }
+
+  return {
+    title,
+    description: String(body.description || "").trim().slice(0, 500),
+    publicVisible: normalizeBooleanInput(body.publicVisible),
+    visibleRoles: uniqueStrings(Array.isArray(body.visibleRoles) ? body.visibleRoles : []).filter((role) => roleKeys.includes(role)),
+    editableRoles: uniqueStrings(Array.isArray(body.editableRoles) ? body.editableRoles : []).filter((role) => roleKeys.includes(role)),
+    fields
   };
 }
 
@@ -3526,6 +3607,7 @@ function validateCustomRecordPayload(body, collection, store, user) {
   const inputValues = body.values && typeof body.values === "object" ? body.values : body;
 
   for (const field of collection.fields || []) {
+    if (field.active === false) continue;
     const value = normalizeFieldValue(inputValues[field.key], field, store);
     if (field.required && (value === "" || (Array.isArray(value) && !value.length))) {
       const error = new Error(`Das Feld "${field.label}" ist erforderlich.`);
