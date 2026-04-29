@@ -4577,7 +4577,11 @@ function applyDiscordRoleSyncToUser(users, target, roleIds) {
 }
 
 function isLiveKitConfigured() {
-  return Boolean(LIVEKIT_ENABLED && LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET);
+  return Boolean(LIVEKIT_ENABLED && LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET && isLiveKitUrlLikelyWebsocket(LIVEKIT_URL));
+}
+
+function isLiveKitUrlLikelyWebsocket(value) {
+  return /^wss?:\/\/[^\s/$.?#].[^\s]*$/i.test(String(value || "").trim());
 }
 
 function normalizeLiveKitRoomId(value) {
@@ -4611,9 +4615,17 @@ function getLiveKitRoomForUser(user, roomId) {
 }
 
 function buildLiveKitVoiceConfig(user) {
+  const hasUrl = Boolean(LIVEKIT_URL);
+  const hasApiKey = Boolean(LIVEKIT_API_KEY);
+  const hasApiSecret = Boolean(LIVEKIT_API_SECRET);
+  const urlLooksValid = isLiveKitUrlLikelyWebsocket(LIVEKIT_URL);
   return {
     enabled: isLiveKitConfigured(),
-    configured: Boolean(LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET),
+    configured: Boolean(hasUrl && hasApiKey && hasApiSecret),
+    hasUrl,
+    hasApiKey,
+    hasApiSecret,
+    urlLooksValid,
     serverUrl: isLiveKitConfigured() ? LIVEKIT_URL : "",
     rooms: getLiveKitRoomsForUser(user).map((room) => ({
       id: room.id,
@@ -5782,8 +5794,15 @@ function serveStatic(res, fileName) {
       ".js": "application/javascript; charset=utf-8",
       ".css": "text/css; charset=utf-8"
     }[path.extname(filePath)] || "application/octet-stream";
+  const ext = path.extname(filePath);
+  const headers = { "Content-Type": contentType };
+  if ([".html", ".js", ".css"].includes(ext)) {
+    headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+    headers.Pragma = "no-cache";
+    headers.Expires = "0";
+  }
 
-  res.writeHead(200, { "Content-Type": contentType });
+  res.writeHead(200, headers);
   fs.createReadStream(filePath).pipe(res);
 }
 

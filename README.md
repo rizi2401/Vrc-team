@@ -137,6 +137,14 @@ Die erste Version ist Audio-only:
 - `Staff Voice` ist fuer Moderator, Moderationsleitung, Planung und Admin.
 - Ohne LiveKit-Variablen bleibt die Voice-Seite sichtbar, zeigt aber eine klare Konfigurationsmeldung.
 
+Wenn Voice nicht sichtbar ist oder nichts passiert:
+
+- Render neu deployen oder den Service neu starten.
+- Browser hart neu laden: `Strg + F5`.
+- Nach dem Login im Browser `/api/livekit/config` aufrufen; dort muessen `enabled`, `configured`, `hasUrl`, `hasApiKey`, `hasApiSecret` und `urlLooksValid` helfen, den Fehler einzugrenzen.
+- Wenn `urlLooksValid=false` ist, steht in Render wahrscheinlich keine `wss://...livekit.cloud` URL, sondern die LiveKit-Dashboard-URL.
+- Wenn beim Beitreten der Client blockiert wird, Browser-Blocker oder Netzwerk pruefen, weil der LiveKit Browser-Client per CDN geladen wird.
+
 ## Fuer echten Online-Betrieb empfohlen
 
 - HTTPS vor dem Server, z. B. per Nginx oder Cloudflare

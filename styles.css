@@ -4797,6 +4797,20 @@ input[type="file"]::-webkit-file-upload-button {
   overflow: hidden;
 }
 
+.voice-shortcut-panel {
+  border-color: rgba(255, 183, 77, 0.24);
+  background:
+    linear-gradient(135deg, rgba(255, 169, 46, 0.12), transparent 38%),
+    linear-gradient(145deg, rgba(8, 35, 65, 0.88), rgba(9, 18, 33, 0.9));
+}
+
+.voice-diagnostic-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 1rem;
+}
+
 .voice-room-grid {
   display: grid;
   gap: 1rem;
