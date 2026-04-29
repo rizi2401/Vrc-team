@@ -41,6 +41,10 @@ const CHAT_TRIM_OPTIONS = [20, 30, 40, 50];
 const SONARA_ART_PATH = "/sonara-crest.png";
 const CREATOR_MIN_FOLLOWERS = 200;
 const API_TIMEOUT_MS = 12000;
+const LIVEKIT_CLIENT_URLS = [
+  "https://cdn.jsdelivr.net/npm/livekit-client@2.18.7/dist/livekit-client.umd.js",
+  "https://unpkg.com/livekit-client@2.18.7/dist/livekit-client.umd.js"
+];
 let portalRefreshTimer = 0;
 let liveKitClientPromise = null;
 const pendingSubmitForms = new WeakSet();
@@ -60,6 +64,8 @@ const state = {
     roomId: "",
     muted: false,
     participants: [],
+    clientStatus: "Noch nicht geladen",
+    clientSource: "",
     error: ""
   },
   ui: {
@@ -560,24 +566,72 @@ function getLiveKitClientNamespace() {
   return window.LivekitClient || window.LiveKitClient || window.livekitClient || null;
 }
 
-async function loadLiveKitClient() {
-  const existing = getLiveKitClientNamespace();
-  if (existing) return existing;
-  if (liveKitClientPromise) return liveKitClientPromise;
-
-  liveKitClientPromise = new Promise((resolve, reject) => {
+function loadLiveKitScript(src) {
+  return new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/livekit-client@2.18.7/dist/livekit-client.umd.js";
+    script.src = src;
     script.async = true;
-    script.onload = () => {
-      const client = getLiveKitClientNamespace();
-      client ? resolve(client) : reject(new Error("LiveKit-Client konnte nicht geladen werden."));
+    script.crossOrigin = "anonymous";
+    script.dataset.sonaraLivekitClient = "1";
+    script.onload = () => resolve(src);
+    script.onerror = () => {
+      script.remove();
+      reject(new Error(`LiveKit-Client konnte nicht von ${src} geladen werden.`));
     };
-    script.onerror = () => reject(new Error("LiveKit-Client konnte nicht geladen werden."));
     document.head.appendChild(script);
   });
+}
+
+async function loadLiveKitClient() {
+  const existing = getLiveKitClientNamespace();
+  if (existing) {
+    state.voice.clientStatus = "Client bereit";
+    return existing;
+  }
+  if (liveKitClientPromise) return liveKitClientPromise;
+
+  liveKitClientPromise = (async () => {
+    let lastError = null;
+    state.voice.clientStatus = "Client wird geladen";
+
+    for (const src of LIVEKIT_CLIENT_URLS) {
+      try {
+        await loadLiveKitScript(src);
+        const client = getLiveKitClientNamespace();
+        if (client) {
+          state.voice.clientStatus = "Client bereit";
+          state.voice.clientSource = src;
+          return client;
+        }
+        lastError = new Error(`LiveKit-Client wurde geladen, aber nicht initialisiert: ${src}`);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    state.voice.clientStatus = "Client blockiert";
+    liveKitClientPromise = null;
+    throw new Error(
+      `${lastError?.message || "LiveKit-Client konnte nicht geladen werden."} Bitte pruefe Browser-Blocker, Firmen-/Mobilnetz oder ob externe CDN-Skripte blockiert werden.`
+    );
+  })();
 
   return liveKitClientPromise;
+}
+
+function describeVoiceError(error) {
+  const message = String(error?.message || error || "").trim();
+  const name = String(error?.name || "").trim();
+  if (name === "NotAllowedError" || /permission|denied|notallowed|microphone|mikro/i.test(message)) {
+    return "Der Browser blockiert dein Mikrofon. Bitte Mikrofon fuer diese Webseite erlauben und danach Voice erneut betreten.";
+  }
+  if (/livekit.*client|cdn|script|geladen/i.test(message)) {
+    return message;
+  }
+  if (/websocket|wss|serverUrl|connect/i.test(message)) {
+    return `${message} Bitte pruefe LIVEKIT_URL in Render. Sie muss mit wss:// anfangen und darf nicht die LiveKit-Dashboard-URL sein.`;
+  }
+  return message || "Voice konnte nicht gestartet werden.";
 }
 
 function collectVoiceParticipants(room) {
@@ -620,13 +674,23 @@ async function joinVoiceRoom(roomId) {
 
   state.voice.loading = true;
   state.voice.error = "";
+  state.voice.clientStatus = state.voice.clientStatus || "Noch nicht geladen";
   render();
 
   try {
+    state.voice.clientStatus = "Token wird angefragt";
+    render();
     const payload = await api("/api/livekit/token", {
       method: "POST",
       body: JSON.stringify({ roomId })
     });
+
+    if (!payload?.serverUrl || !payload?.token) {
+      throw new Error("LiveKit-Tokenantwort ist unvollstaendig. Bitte pruefe die Server-Konfiguration.");
+    }
+
+    state.voice.clientStatus = "Client wird vorbereitet";
+    render();
     const LiveKit = await loadLiveKitClient();
     const room = new LiveKit.Room({
       adaptiveStream: true,
@@ -652,8 +716,12 @@ async function joinVoiceRoom(roomId) {
       render();
     });
 
+    state.voice.clientStatus = "Verbindung wird aufgebaut";
+    render();
     await room.connect(payload.serverUrl, payload.token);
     if (room.localParticipant?.setMicrophoneEnabled) {
+      state.voice.clientStatus = "Mikrofon wird aktiviert";
+      render();
       await room.localParticipant.setMicrophoneEnabled(true);
     }
 
@@ -661,10 +729,13 @@ async function joinVoiceRoom(roomId) {
     state.voice.roomId = roomId;
     state.voice.muted = false;
     state.voice.participants = collectVoiceParticipants(room);
+    state.voice.clientStatus = "Verbunden";
     setFlash("Voice-Raum verbunden.", "success");
   } catch (error) {
-    state.voice.error = error.message;
-    setFlash(error.message, "danger");
+    const voiceError = describeVoiceError(error);
+    state.voice.error = voiceError;
+    state.voice.clientStatus = "Fehler";
+    setFlash(voiceError, "danger");
   } finally {
     state.voice.loading = false;
     render();
@@ -5740,6 +5811,8 @@ async function handleClick(event) {
       await leaveVoiceRoom(false);
       state.voice.config = null;
       state.voice.error = "";
+      state.voice.clientStatus = "Noch nicht geladen";
+      state.voice.clientSource = "";
       state.ui.editingShiftId = "";
       state.ui.activeTab = "";
       await refreshPublicData();
@@ -5758,6 +5831,67 @@ async function handleClick(event) {
       );
       state.ui.editingShiftId = "";
       render();
+      break;
+
+    case "publish-site-content":
+      if (!window.confirm("Den aktuellen Webseiten-Entwurf wirklich veroeffentlichen?")) return;
+      await performAction(
+        () =>
+          api("/api/admin/site-content/publish", {
+            method: "POST",
+            body: "{}"
+          }),
+        "Webseite wurde veroeffentlicht."
+      );
+      break;
+
+    case "reset-site-draft":
+      if (!window.confirm("Entwurf auf den veroeffentlichten Stand zuruecksetzen?")) return;
+      await performAction(
+        () =>
+          api("/api/admin/site-content/reset-draft", {
+            method: "POST",
+            body: "{}"
+          }),
+        "Webseiten-Entwurf wurde zurueckgesetzt.",
+        "warning"
+      );
+      break;
+
+    case "delete-collection":
+      if (!window.confirm("Diese Collection inklusive Datensaetzen wirklich loeschen?")) return;
+      await performAction(
+        () =>
+          api(`/api/admin/collections/${encodeURIComponent(actionElement.dataset.collectionId || "")}`, {
+            method: "DELETE"
+          }),
+        "Collection wurde geloescht.",
+        "warning"
+      );
+      break;
+
+    case "delete-custom-record":
+      if (!window.confirm("Diesen Datensatz wirklich loeschen?")) return;
+      await performAction(
+        () =>
+          api(`/api/admin/records/${encodeURIComponent(actionElement.dataset.recordId || "")}`, {
+            method: "DELETE"
+          }),
+        "Datensatz wurde geloescht.",
+        "warning"
+      );
+      break;
+
+    case "delete-document":
+      if (!window.confirm("Dieses Dokument wirklich loeschen?")) return;
+      await performAction(
+        () =>
+          api(`/api/admin/documents/${encodeURIComponent(actionElement.dataset.documentId || "")}`, {
+            method: "DELETE"
+          }),
+        "Dokument wurde geloescht.",
+        "warning"
+      );
       break;
 
     case "edit-shift":
@@ -7788,11 +7922,12 @@ function formatDuration(milliseconds) {
 
 function buildRoleOptions(selectedRole) {
   const normalizedRole = selectedRole === "viewer" ? "member" : selectedRole;
-  return ["member", "moderator", "moderation_lead", "planner", "admin"]
+  return getRoleDefinitions()
+    .filter((role) => role.active || role.key === normalizedRole)
     .map(
       (role) => `
-        <option value="${role}" ${role === normalizedRole ? "selected" : ""}>
-          ${escapeHtml(ROLE_LABELS[role] || role)}
+        <option value="${escapeHtml(role.key)}" ${role.key === normalizedRole ? "selected" : ""}>
+          ${escapeHtml(role.label || ROLE_LABELS[role.key] || role.key)}
         </option>
       `
     )
@@ -8018,6 +8153,101 @@ async function handleSubmit(event) {
             })
           }),
         "Promo-Video wurde aktualisiert."
+      );
+      break;
+    }
+
+    case "site-content-draft": {
+      const payload = collectSiteContentPayload(form);
+      await performAction(
+        () =>
+          api("/api/admin/site-content/draft", {
+            method: "PUT",
+            body: JSON.stringify(payload)
+          }),
+        "Webseiten-Entwurf wurde gespeichert."
+      );
+      break;
+    }
+
+    case "role-definitions": {
+      const roleDefinitions = collectRoleDefinitionsPayload(form);
+      await performAction(
+        () =>
+          api("/api/admin/role-definitions", {
+            method: "PUT",
+            body: JSON.stringify({ roleDefinitions })
+          }),
+        "Rollen und Rechte wurden gespeichert."
+      );
+      break;
+    }
+
+    case "collection-create": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/admin/collections", {
+            method: "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              key: formData.get("key"),
+              description: formData.get("description"),
+              fieldsText: formData.get("fieldsText"),
+              publicVisible: formData.get("publicVisible") === "on",
+              visibleRoles: formData.getAll("visibleRoles"),
+              editableRoles: formData.getAll("editableRoles")
+            })
+          }),
+        "Collection wurde angelegt."
+      );
+      break;
+    }
+
+    case "custom-record-create": {
+      const collectionId = form.dataset.collectionId;
+      const payload = collectCustomRecordPayload(form);
+      await performAction(
+        () =>
+          api(`/api/admin/collections/${encodeURIComponent(collectionId)}/records`, {
+            method: "POST",
+            body: JSON.stringify({ values: payload })
+          }),
+        "Datensatz wurde gespeichert."
+      );
+      break;
+    }
+
+    case "document-create": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/admin/documents", {
+            method: "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              slug: formData.get("slug"),
+              body: formData.get("body"),
+              published: formData.get("published") === "on",
+              publicVisible: formData.get("publicVisible") === "on",
+              linkedUploadIds: formData.getAll("linkedUploadIds")
+            })
+          }),
+        "Dokument wurde gespeichert."
+      );
+      break;
+    }
+
+    case "upload-create": {
+      const fileInput = form.querySelector('input[name="file"]');
+      const filePayload = await readFileAsDataUrl(fileInput);
+      await performAction(
+        () =>
+          api("/api/admin/uploads", {
+            method: "POST",
+            body: JSON.stringify(filePayload)
+          }),
+        "Datei wurde hochgeladen."
       );
       break;
     }
@@ -9980,11 +10210,12 @@ function getAssignableUsers() {
 
 function buildRoleOptions(selectedRole) {
   const normalizedRole = selectedRole === "viewer" ? "member" : selectedRole;
-  return ["member", "moderator", "moderation_lead", "planner", "admin"]
+  return getRoleDefinitions()
+    .filter((role) => role.active || role.key === normalizedRole)
     .map(
       (role) => `
-        <option value="${role}" ${role === normalizedRole ? "selected" : ""}>
-          ${escapeHtml(ROLE_LABELS[role])}
+        <option value="${escapeHtml(role.key)}" ${role.key === normalizedRole ? "selected" : ""}>
+          ${escapeHtml(role.label || ROLE_LABELS[role.key] || role.key)}
         </option>
       `
     )
@@ -10008,17 +10239,24 @@ function renderPublicPortal() {
   }
 
   const community = getCommunityData();
+  const siteContent = getSiteContentState().published || {};
   const stats = community.stats || {};
   const creators = (community.creators || []).slice(0, 3);
   const vrchatLink = getVrchatLinkFlowMeta();
-  const eyebrow = vrchatLink?.eyebrow || "SONARA Community Portal";
-  const title = vrchatLink?.title || "Community, Team und Creator an einem Ort";
-  const intro = vrchatLink?.intro || "News, Events, Creator-Links und der Mitgliederbereich liegen hier kompakt zusammen.";
+  const eyebrow = vrchatLink?.eyebrow || siteContent.heroKicker || "SONARA Community Portal";
+  const title = vrchatLink?.title || siteContent.heroTitle || "Community, Team und Creator an einem Ort";
+  const intro = vrchatLink?.intro || siteContent.heroSubtitle || "News, Events, Creator-Links und der Mitgliederbereich liegen hier kompakt zusammen.";
   const chips = vrchatLink
     ? [vrchatLink.sourceLabel, `${stats.members || 0} Mitglieder`, "Portal-Link aktiv"]
     : [`${stats.members || 0} Mitglieder`, `${stats.liveCreators || 0} live`, `${(community.events || []).length} Events`];
-  const loginButtonLabel = vrchatLink ? "Anmelden und verbinden" : "Einloggen";
-  const registerButtonLabel = vrchatLink ? "Konto anlegen und verbinden" : "Zugang erstellen";
+  const loginButtonLabel = vrchatLink ? "Anmelden und verbinden" : siteContent.primaryButtonLabel || "Einloggen";
+  const registerButtonLabel = vrchatLink ? "Konto anlegen und verbinden" : siteContent.secondaryButtonLabel || "Zugang erstellen";
+  const siteCards = Array.isArray(siteContent.infoCards) && siteContent.infoCards.length ? siteContent.infoCards : [
+    { title: "News", body: "Aktuelle Hinweise und Event-Infos." },
+    { title: "Community", body: "Regeln, Team, Creator und Kontaktwege." },
+    { title: "Mitgliederbereich", body: "Profil, Forum, Direktnachrichten und Chat." },
+    { title: "Staff", body: "Schichten, Zeiten und interne Abstimmung." }
+  ];
 
   return `
     <div class="app-shell">
@@ -10038,26 +10276,22 @@ function renderPublicPortal() {
           <div class="section-head">
             <div>
               <p class="eyebrow">Portal</p>
-              <h2>Das Wichtigste zuerst</h2>
+              <h2>${escapeHtml(siteContent.communityTitle || "Das Wichtigste zuerst")}</h2>
+              <p class="section-copy">${escapeHtml(siteContent.communityBody || "SONARA verbindet Community, Creator, Events und Team an einem Ort.")}</p>
             </div>
           </div>
           <div class="feature-grid">
-            <article class="feature-card">
-              <h3>News</h3>
-              <p>Aktuelle Hinweise und Event-Infos.</p>
-            </article>
-            <article class="feature-card">
-              <h3>Community</h3>
-              <p>Regeln, Team, Creator und Kontaktwege.</p>
-            </article>
-            <article class="feature-card">
-              <h3>Mitgliederbereich</h3>
-              <p>Profil, Forum, Direktnachrichten und Chat.</p>
-            </article>
-            <article class="feature-card">
-              <h3>Staff</h3>
-              <p>Schichten, Zeiten und interne Abstimmung.</p>
-            </article>
+            ${siteCards
+              .map(
+                (card) => `
+                  <article class="feature-card">
+                    <h3>${escapeHtml(card.title || "SONARA")}</h3>
+                    <p>${escapeHtml(card.body || "")}</p>
+                    ${card.linkUrl ? `<a class="creator-action-link" href="${escapeHtml(card.linkUrl)}">${escapeHtml(card.linkLabel || "Oeffnen")}</a>` : ""}
+                  </article>
+                `
+              )
+              .join("")}
           </div>
 
           ${
@@ -10193,7 +10427,7 @@ function renderDashboard() {
         eyebrow: manager ? "Leitung" : staff ? "Staff Portal" : "Mitgliederbereich",
         title: `Willkommen ${getPrimaryDisplayName(user)}`,
         intro: manager ? "Community, Team und Staff laufen hier zusammen." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
-        chips: [ROLE_LABELS[user.role] || user.role, user.vrchatName || "", user.discordName || ""].filter(Boolean)
+        chips: [getRoleLabel(user.role), user.vrchatName || "", user.discordName || ""].filter(Boolean)
       })}
       <div class="dashboard-shell">
         ${renderFlash()}
@@ -10201,7 +10435,7 @@ function renderDashboard() {
           <div class="toolbar-user">
             ${renderUserAvatar(user, "toolbar-avatar")}
             <div>
-              <p class="eyebrow">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</p>
+              <p class="eyebrow">${escapeHtml(getRoleLabel(user.role))}</p>
               <h2>${escapeHtml(getPrimaryDisplayName(user))}</h2>
             </div>
           </div>
@@ -10219,6 +10453,505 @@ function renderDashboard() {
         </div>
       </div>
     </div>
+  `;
+}
+
+function getRoleDefinitions() {
+  const fallback = Object.entries(ROLE_LABELS).map(([key, label], index) => ({
+    key,
+    label,
+    active: true,
+    system: true,
+    sortOrder: (index + 1) * 10,
+    permissions: []
+  }));
+  return Array.isArray(state.data?.roleDefinitions) && state.data.roleDefinitions.length ? state.data.roleDefinitions : fallback;
+}
+
+function getPermissionCatalog() {
+  return Array.isArray(state.data?.permissionCatalog) ? state.data.permissionCatalog : [];
+}
+
+function getRoleLabel(roleKey) {
+  const role = getRoleDefinitions().find((entry) => entry.key === roleKey);
+  return role?.label || ROLE_LABELS[roleKey] || roleKey || "";
+}
+
+function getSiteContentState() {
+  const content = state.data?.siteContent || state.publicData?.noCode?.siteContent || state.publicData?.siteContent || {};
+  if (content.draft || content.published) return content;
+  return { draft: content, published: content };
+}
+
+function collectSiteContentPayload(form) {
+  const formData = new FormData(form);
+  const infoCards = [1, 2, 3]
+    .map((index) => ({
+      title: formData.get(`cardTitle${index}`),
+      body: formData.get(`cardBody${index}`),
+      linkLabel: formData.get(`cardLinkLabel${index}`),
+      linkUrl: formData.get(`cardLinkUrl${index}`)
+    }))
+    .filter((entry) => String(entry.title || entry.body || "").trim());
+
+  return {
+    heroKicker: formData.get("heroKicker"),
+    heroTitle: formData.get("heroTitle"),
+    heroSubtitle: formData.get("heroSubtitle"),
+    primaryButtonLabel: formData.get("primaryButtonLabel"),
+    primaryButtonUrl: formData.get("primaryButtonUrl"),
+    secondaryButtonLabel: formData.get("secondaryButtonLabel"),
+    secondaryButtonUrl: formData.get("secondaryButtonUrl"),
+    imageUrl: formData.get("imageUrl"),
+    videoUrl: formData.get("videoUrl"),
+    communityTitle: formData.get("communityTitle"),
+    communityBody: formData.get("communityBody"),
+    infoCards
+  };
+}
+
+function collectRoleDefinitionsPayload(form) {
+  return [...form.querySelectorAll("[data-role-row]")]
+    .map((row, index) => {
+      const key = row.querySelector('[name="roleKey"]')?.value || "";
+      const label = row.querySelector('[name="roleLabel"]')?.value || "";
+      const sortOrder = row.querySelector('[name="sortOrder"]')?.value || (index + 1) * 10;
+      const permissions = [...row.querySelectorAll('[name="permission"]:checked')].map((input) => input.value);
+      const active = row.querySelector('[name="active"]')?.checked || key === "admin";
+      const system = row.dataset.system === "true";
+      if (!String(key || label).trim()) return null;
+      return { key, label, sortOrder, active, system, permissions };
+    })
+    .filter(Boolean);
+}
+
+function collectCustomRecordPayload(form) {
+  const formData = new FormData(form);
+  const payload = {};
+  for (const [name, value] of formData.entries()) {
+    if (name.startsWith("field:")) {
+      payload[name.slice("field:".length)] = value;
+    }
+  }
+  for (const checkbox of form.querySelectorAll('input[type="checkbox"][data-field-key]')) {
+    payload[checkbox.dataset.fieldKey] = checkbox.checked;
+  }
+  return payload;
+}
+
+function readFileAsDataUrl(fileInput) {
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    return Promise.reject(new Error("Bitte eine Datei auswaehlen."));
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return Promise.reject(new Error("Die Datei ist groesser als 5 MB."));
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ fileName: file.name, dataUrl: String(reader.result || "") });
+    reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderSiteContentAdminPanel() {
+  const siteContent = getSiteContentState();
+  const draft = siteContent.draft || {};
+  const published = siteContent.published || {};
+  const cards = draft.infoCards || [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Webseite bearbeiten</p>
+          <h2>Startseite als Entwurf pflegen</h2>
+          <p class="section-copy">Hier aenderst du Texte, Buttons, Links, Bilder und Infokarten. Erst "Veroeffentlichen" macht den Entwurf live.</p>
+        </div>
+        <span class="pill ${JSON.stringify(draft) === JSON.stringify(published) ? "success" : "amber"}">${JSON.stringify(draft) === JSON.stringify(published) ? "Live ist aktuell" : "Entwurf offen"}</span>
+      </div>
+
+      <form class="stack-form" data-form="site-content-draft">
+        <div class="form-grid">
+          <div class="field">
+            <label for="cmsHeroKicker">Kleine Zeile</label>
+            <input id="cmsHeroKicker" name="heroKicker" type="text" value="${escapeHtml(draft.heroKicker || "")}">
+          </div>
+          <div class="field">
+            <label for="cmsHeroTitle">Haupttitel</label>
+            <input id="cmsHeroTitle" name="heroTitle" type="text" value="${escapeHtml(draft.heroTitle || "")}" required>
+          </div>
+          <div class="field span-all">
+            <label for="cmsHeroSubtitle">Einleitung</label>
+            <textarea id="cmsHeroSubtitle" name="heroSubtitle">${escapeHtml(draft.heroSubtitle || "")}</textarea>
+          </div>
+          <div class="field">
+            <label for="cmsPrimaryLabel">Button 1 Text</label>
+            <input id="cmsPrimaryLabel" name="primaryButtonLabel" type="text" value="${escapeHtml(draft.primaryButtonLabel || "")}">
+          </div>
+          <div class="field">
+            <label for="cmsPrimaryUrl">Button 1 Link</label>
+            <input id="cmsPrimaryUrl" name="primaryButtonUrl" type="text" value="${escapeHtml(draft.primaryButtonUrl || "")}">
+          </div>
+          <div class="field">
+            <label for="cmsSecondaryLabel">Button 2 Text</label>
+            <input id="cmsSecondaryLabel" name="secondaryButtonLabel" type="text" value="${escapeHtml(draft.secondaryButtonLabel || "")}">
+          </div>
+          <div class="field">
+            <label for="cmsSecondaryUrl">Button 2 Link</label>
+            <input id="cmsSecondaryUrl" name="secondaryButtonUrl" type="text" value="${escapeHtml(draft.secondaryButtonUrl || "")}">
+          </div>
+          <div class="field span-all">
+            <label for="cmsImageUrl">Bild-URL oder Upload-Link</label>
+            <input id="cmsImageUrl" name="imageUrl" type="text" value="${escapeHtml(draft.imageUrl || "")}" placeholder="/uploads/... oder https://...">
+          </div>
+          <div class="field span-all">
+            <label for="cmsVideoUrl">Video-URL</label>
+            <input id="cmsVideoUrl" name="videoUrl" type="text" value="${escapeHtml(draft.videoUrl || "")}">
+          </div>
+          <div class="field">
+            <label for="cmsCommunityTitle">Community-Titel</label>
+            <input id="cmsCommunityTitle" name="communityTitle" type="text" value="${escapeHtml(draft.communityTitle || "")}">
+          </div>
+          <div class="field span-all">
+            <label for="cmsCommunityBody">Community-Text</label>
+            <textarea id="cmsCommunityBody" name="communityBody">${escapeHtml(draft.communityBody || "")}</textarea>
+          </div>
+        </div>
+
+        <div class="guide-grid">
+          ${[0, 1, 2]
+            .map((offset) => {
+              const index = offset + 1;
+              const card = cards[offset] || {};
+              return `
+                <article class="mini-card">
+                  <span class="pill neutral">Infokarte ${index}</span>
+                  <div class="field">
+                    <label for="cmsCardTitle${index}">Titel</label>
+                    <input id="cmsCardTitle${index}" name="cardTitle${index}" type="text" value="${escapeHtml(card.title || "")}">
+                  </div>
+                  <div class="field">
+                    <label for="cmsCardBody${index}">Text</label>
+                    <textarea id="cmsCardBody${index}" name="cardBody${index}">${escapeHtml(card.body || "")}</textarea>
+                  </div>
+                  <div class="field">
+                    <label for="cmsCardLinkLabel${index}">Link-Text</label>
+                    <input id="cmsCardLinkLabel${index}" name="cardLinkLabel${index}" type="text" value="${escapeHtml(card.linkLabel || "")}">
+                  </div>
+                  <div class="field">
+                    <label for="cmsCardLinkUrl${index}">Link</label>
+                    <input id="cmsCardLinkUrl${index}" name="cardLinkUrl${index}" type="text" value="${escapeHtml(card.linkUrl || "")}">
+                  </div>
+                </article>
+              `;
+            })
+            .join("")}
+        </div>
+
+        <div class="card-actions">
+          <button type="submit">Entwurf speichern</button>
+          <button type="button" class="ghost small" data-action="publish-site-content">Veroeffentlichen</button>
+          <button type="button" class="ghost small" data-action="reset-site-draft">Entwurf zuruecksetzen</button>
+        </div>
+      </form>
+    </section>
+  `;
+}
+
+function renderRolePermissionAdminPanel() {
+  const roles = getRoleDefinitions();
+  const permissions = getPermissionCatalog();
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Rollen & Rechte</p>
+          <h2>Haken-Matrix fuer Zugriff</h2>
+          <p class="section-copy">Admin bleibt geschuetzt. Neue Rollen kannst du unten als eigene Zeile anlegen und danach Teammitgliedern zuweisen.</p>
+        </div>
+      </div>
+
+      <form class="stack-form" data-form="role-definitions">
+        <div class="stack-list">
+          ${[...roles, { key: "", label: "", active: true, system: false, sortOrder: (roles.length + 1) * 10, permissions: [] }]
+            .map((role, index) => renderRolePermissionRow(role, permissions, index))
+            .join("")}
+        </div>
+        <button type="submit">Rollen & Rechte speichern</button>
+      </form>
+    </section>
+  `;
+}
+
+function renderRolePermissionRow(role, permissions, index) {
+  const isAdmin = role.key === "admin";
+  return `
+    <article class="mini-card role-permission-row" data-role-row data-system="${role.system ? "true" : "false"}">
+      <div class="form-grid">
+        <div class="field">
+          <label for="roleKey${index}">Schluessel</label>
+          <input id="roleKey${index}" name="roleKey" type="text" value="${escapeHtml(role.key || "")}" ${role.system ? "readonly" : ""} placeholder="z. B. event_host">
+        </div>
+        <div class="field">
+          <label for="roleLabel${index}">Name</label>
+          <input id="roleLabel${index}" name="roleLabel" type="text" value="${escapeHtml(role.label || "")}" placeholder="z. B. Event Host">
+        </div>
+        <div class="field">
+          <label for="roleSort${index}">Sortierung</label>
+          <input id="roleSort${index}" name="sortOrder" type="number" value="${escapeHtml(role.sortOrder || (index + 1) * 10)}">
+        </div>
+        <div class="field checkbox-field">
+          <label class="checkbox-row" for="roleActive${index}">
+            <input id="roleActive${index}" name="active" type="checkbox" ${role.active || !role.key ? "checked" : ""} ${isAdmin ? "disabled" : ""}>
+            <span>Aktiv</span>
+          </label>
+        </div>
+      </div>
+      <div class="permission-grid">
+        ${permissions
+          .map(
+            (permission) => `
+              <label class="checkbox-row permission-cell">
+                <input name="permission" type="checkbox" value="${escapeHtml(permission.key)}" ${(role.permissions || []).includes(permission.key) || isAdmin ? "checked" : ""} ${isAdmin ? "disabled" : ""}>
+                <span>${escapeHtml(permission.label)}</span>
+              </label>
+            `
+          )
+          .join("")}
+      </div>
+      ${isAdmin ? '<p class="helper-text">Admin bleibt immer aktiv und behaelt Vollzugriff.</p>' : ""}
+    </article>
+  `;
+}
+
+function renderCollectionsAdminPanel() {
+  const collections = state.data?.customCollections || [];
+  const records = state.data?.customRecords || [];
+  const roles = getRoleDefinitions().filter((role) => role.active);
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Datenbuilder</p>
+          <h2>Eigene Listen und Tabellen</h2>
+          <p class="section-copy">Keine echten SQL-Tabellen pro Klick, sondern sichere Collections mit flexiblen Feldern.</p>
+        </div>
+      </div>
+
+      <form class="stack-form" data-form="collection-create">
+        <div class="form-grid">
+          <div class="field">
+            <label for="collectionTitle">Name</label>
+            <input id="collectionTitle" name="title" type="text" placeholder="z. B. Bewerbungen" required>
+          </div>
+          <div class="field">
+            <label for="collectionKey">Schluessel</label>
+            <input id="collectionKey" name="key" type="text" placeholder="bewerbungen">
+          </div>
+          <div class="field span-all">
+            <label for="collectionDescription">Beschreibung</label>
+            <input id="collectionDescription" name="description" type="text">
+          </div>
+          <div class="field span-all">
+            <label for="collectionFields">Felder</label>
+            <textarea id="collectionFields" name="fieldsText" placeholder="Name|text&#10;Status|select|offen,in arbeit,fertig&#10;Notiz|longtext" required></textarea>
+            <p class="helper-text">Format: Feldname|typ|optionen. Typen: text, longtext, number, date, time, select, multiselect, checkbox, link, file, user.</p>
+          </div>
+          <div class="field checkbox-field">
+            <label class="checkbox-row" for="collectionPublic">
+              <input id="collectionPublic" name="publicVisible" type="checkbox">
+              <span>Oeffentlich sichtbar</span>
+            </label>
+          </div>
+        </div>
+        <div class="guide-grid">
+          <article class="mini-card">
+            <h3>Sichtbar fuer Rollen</h3>
+            ${roles.map((role) => `<label class="checkbox-row"><input name="visibleRoles" value="${escapeHtml(role.key)}" type="checkbox"><span>${escapeHtml(role.label)}</span></label>`).join("")}
+          </article>
+          <article class="mini-card">
+            <h3>Bearbeitbar fuer Rollen</h3>
+            ${roles.map((role) => `<label class="checkbox-row"><input name="editableRoles" value="${escapeHtml(role.key)}" type="checkbox"><span>${escapeHtml(role.label)}</span></label>`).join("")}
+          </article>
+        </div>
+        <button type="submit">Collection anlegen</button>
+      </form>
+    </section>
+
+    ${collections.length ? collections.map((collection) => renderCollectionEditor(collection, records.filter((record) => record.collectionId === collection.id))).join("") : renderEmptyState("Noch keine Collections", "Lege z. B. Bewerbungen, Inventar, Partner oder Event-Checklisten an.")}
+  `;
+}
+
+function renderCollectionEditor(collection, records) {
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">${escapeHtml(collection.key)}</p>
+          <h2>${escapeHtml(collection.title)}</h2>
+          <p class="section-copy">${escapeHtml(collection.description || "Eigene No-Code Collection")}</p>
+        </div>
+        <button type="button" class="ghost small" data-action="delete-collection" data-collection-id="${escapeHtml(collection.id)}">Collection loeschen</button>
+      </div>
+
+      <form class="stack-form" data-form="custom-record-create" data-collection-id="${escapeHtml(collection.id)}">
+        <div class="form-grid">
+          ${(collection.fields || []).map((field) => renderNoCodeFieldInput(field)).join("")}
+        </div>
+        <button type="submit">Datensatz speichern</button>
+      </form>
+
+      <div class="stack-list">
+        ${records.length ? records.map((record) => renderCustomRecordCard(collection, record)).join("") : renderEmptyState("Noch keine Datensaetze", "Sobald du etwas speicherst, erscheint es hier.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderNoCodeFieldInput(field) {
+  const name = `field:${field.key}`;
+  if (field.type === "longtext") {
+    return `<div class="field span-all"><label>${escapeHtml(field.label)}</label><textarea name="${escapeHtml(name)}" ${field.required ? "required" : ""}></textarea></div>`;
+  }
+  if (field.type === "checkbox") {
+    return `<div class="field checkbox-field"><label class="checkbox-row"><input name="${escapeHtml(name)}" data-field-key="${escapeHtml(field.key)}" type="checkbox"><span>${escapeHtml(field.label)}</span></label></div>`;
+  }
+  if (field.type === "select") {
+    return `<div class="field"><label>${escapeHtml(field.label)}</label><select name="${escapeHtml(name)}" ${field.required ? "required" : ""}><option value="">Bitte waehlen</option>${(field.options || []).map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("")}</select></div>`;
+  }
+  if (field.type === "user") {
+    return `<div class="field"><label>${escapeHtml(field.label)}</label><select name="${escapeHtml(name)}" ${field.required ? "required" : ""}><option value="">Bitte waehlen</option>${(state.data?.users || state.data?.directory || []).map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(getPrimaryDisplayName(user))}</option>`).join("")}</select></div>`;
+  }
+  const inputType = field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "time" ? "time" : "text";
+  const helper = field.type === "multiselect" ? '<p class="helper-text">Mehrere Werte mit Komma trennen.</p>' : "";
+  return `<div class="field"><label>${escapeHtml(field.label)}</label><input name="${escapeHtml(name)}" type="${inputType}" ${field.required ? "required" : ""}>${helper}</div>`;
+}
+
+function renderCustomRecordCard(collection, record) {
+  return `
+    <article class="mini-card">
+      <div class="section-head compact-section-head">
+        <div>
+          <p class="eyebrow">Datensatz</p>
+          <h3>${escapeHtml(formatDateTime(record.createdAt))}</h3>
+        </div>
+        <button type="button" class="ghost small" data-action="delete-custom-record" data-record-id="${escapeHtml(record.id)}">Loeschen</button>
+      </div>
+      <div class="compact-meta-grid">
+        ${(collection.fields || [])
+          .map((field) => `<p><strong>${escapeHtml(field.label)}:</strong> ${escapeHtml(formatNoCodeValue(record.values?.[field.key]))}</p>`)
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function formatNoCodeValue(value) {
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "boolean") return value ? "Ja" : "Nein";
+  return value || "-";
+}
+
+function renderDocumentsAdminPanel() {
+  const documents = state.data?.documents || [];
+  const uploads = state.data?.uploads || [];
+
+  return `
+    <section class="panel span-7">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Dokumente</p>
+          <h2>Regeln, Handbuch, FAQ und Team-Wissen</h2>
+          <p class="section-copy">Textdokumente koennen als Entwurf bleiben oder veroeffentlicht werden.</p>
+        </div>
+      </div>
+      <form class="stack-form" data-form="document-create">
+        <div class="form-grid">
+          <div class="field">
+            <label for="documentTitle">Titel</label>
+            <input id="documentTitle" name="title" type="text" required>
+          </div>
+          <div class="field">
+            <label for="documentSlug">Slash/Schluessel</label>
+            <input id="documentSlug" name="slug" type="text" placeholder="regeln">
+          </div>
+          <div class="field span-all">
+            <label for="documentBody">Inhalt</label>
+            <textarea id="documentBody" name="body" rows="10" required></textarea>
+          </div>
+          <div class="field checkbox-field">
+            <label class="checkbox-row"><input name="published" type="checkbox"><span>Veroeffentlichen</span></label>
+          </div>
+          <div class="field checkbox-field">
+            <label class="checkbox-row"><input name="publicVisible" type="checkbox"><span>Oeffentlich sichtbar</span></label>
+          </div>
+        </div>
+        ${uploads.length ? `<div class="mini-card"><h3>Dateien verlinken</h3>${uploads.map((upload) => `<label class="checkbox-row"><input name="linkedUploadIds" type="checkbox" value="${escapeHtml(upload.id)}"><span>${escapeHtml(upload.originalName)}</span></label>`).join("")}</div>` : ""}
+        <button type="submit">Dokument speichern</button>
+      </form>
+    </section>
+
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Ablage</p>
+          <h2>Dokumentliste</h2>
+        </div>
+      </div>
+      <div class="stack-list">
+        ${documents.length ? documents.map((documentEntry) => renderDocumentCard(documentEntry)).join("") : renderEmptyState("Noch keine Dokumente", "Regeln, Handbuch oder FAQ kannst du links anlegen.")}
+      </div>
+    </section>
+  `;
+}
+
+function renderDocumentCard(documentEntry) {
+  return `
+    <article class="mini-card">
+      <div class="section-head compact-section-head">
+        <div>
+          <p class="eyebrow">${escapeHtml(documentEntry.status === "published" ? "Veroeffentlicht" : "Entwurf")}</p>
+          <h3>${escapeHtml(documentEntry.title)}</h3>
+          <p class="timeline-meta">/${escapeHtml(documentEntry.slug)}</p>
+        </div>
+        <button type="button" class="ghost small" data-action="delete-document" data-document-id="${escapeHtml(documentEntry.id)}">Loeschen</button>
+      </div>
+      <p>${escapeHtml(truncateText(documentEntry.body || "", 180))}</p>
+    </article>
+  `;
+}
+
+function renderUploadsAdminPanel() {
+  const uploads = state.data?.uploads || [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Dateiablage</p>
+          <h2>Bilder, PDFs und Dokumente hochladen</h2>
+          <p class="section-copy">Dateien werden unter Render-Disk/DATA_DIR im Ordner uploads gespeichert und bekommen einen /uploads/... Link.</p>
+        </div>
+      </div>
+      <form class="stack-form" data-form="upload-create">
+        <div class="form-grid">
+          <div class="field span-all">
+            <label for="nocodeUploadFile">Datei</label>
+            <input id="nocodeUploadFile" name="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain,text/markdown">
+            <p class="helper-text">Maximal 5 MB. Erlaubt: Bilder, PDF, TXT, Markdown.</p>
+          </div>
+        </div>
+        <button type="submit">Datei hochladen</button>
+      </form>
+      <div class="guide-grid">
+        ${uploads.length ? uploads.map((upload) => `<article class="mini-card"><span class="pill neutral">${escapeHtml(Math.round((upload.size || 0) / 1024))} KB</span><h3>${escapeHtml(upload.originalName)}</h3><p class="timeline-meta">${escapeHtml(upload.url)}</p><a class="creator-action-link" href="${escapeHtml(upload.url)}" target="_blank" rel="noreferrer">Oeffnen</a></article>`).join("") : renderEmptyState("Noch keine Uploads", "Nach dem Hochladen kannst du den Link in Seiten, Dokumenten oder Collections nutzen.")}
+      </div>
+    </section>
   `;
 }
 
@@ -10288,6 +11021,14 @@ function renderManagerDashboard(activeTab) {
       return renderProfileWorkspace(true);
     case "settings":
       return renderSettingsPanel();
+    case "site-admin":
+      return renderSiteContentAdminPanel();
+    case "roles":
+      return renderRolePermissionAdminPanel();
+    case "collections":
+      return renderCollectionsAdminPanel();
+    case "documents":
+      return [renderDocumentsAdminPanel(), renderUploadsAdminPanel()].join("");
     case "overview":
     default:
       return [renderNotificationsPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
@@ -11438,6 +12179,90 @@ function renderLivePanel() {
   `;
 }
 
+function getBrowserVoiceStatus() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return { label: "Unbekannt", detail: "Browserstatus nicht verfuegbar", tone: "neutral" };
+  }
+  const hasMicApi = Boolean(navigator.mediaDevices?.getUserMedia);
+  const isLocal = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+  const isSecure = Boolean(window.isSecureContext || window.location.protocol === "https:" || isLocal);
+  if (!isSecure) {
+    return { label: "HTTPS fehlt", detail: "Mikrofon braucht HTTPS oder localhost", tone: "rose" };
+  }
+  if (!hasMicApi) {
+    return { label: "Mikro fehlt", detail: "Browser stellt keine Mikrofon-API bereit", tone: "rose" };
+  }
+  return { label: "Bereit", detail: "Browser kann Mikrofonrechte anfragen", tone: "teal" };
+}
+
+function renderVoiceDiagnostics(config) {
+  const browser = getBrowserVoiceStatus();
+  const configLabel = !config
+    ? "Laedt"
+    : config.enabled
+      ? "Aktiv"
+      : config.configured
+        ? "URL pruefen"
+        : "Fehlt";
+  const configDetail = !config
+    ? "Voice-Status wird geladen"
+    : config.enabled
+      ? "Render und LiveKit wirken verbunden"
+      : config.configured
+        ? "LIVEKIT_URL muss mit wss:// anfangen"
+        : "LIVEKIT_URL, API Key oder Secret fehlt";
+  const urlLabel = !config
+    ? "Unbekannt"
+    : config.hasUrl
+      ? config.urlLooksValid
+        ? "wss ok"
+        : "Falsch"
+      : "Fehlt";
+  const urlDetail = !config
+    ? "Noch keine Diagnose"
+    : config.hasUrl
+      ? config.urlLooksValid
+        ? "WebSocket-URL erkannt"
+        : "Keine LiveKit-WebSocket-URL"
+      : "LIVEKIT_URL ist leer";
+
+  return `
+    <div class="voice-diagnostic-grid">
+      ${renderStatCard("LiveKit", configLabel, configDetail, config?.enabled ? "teal" : "amber")}
+      ${renderStatCard("Server URL", urlLabel, urlDetail, config?.urlLooksValid ? "sky" : "rose")}
+      ${renderStatCard("Browser", browser.label, browser.detail, browser.tone)}
+      ${renderStatCard("Client", state.voice.clientStatus || "Noch nicht geladen", state.voice.clientSource ? "Quelle: CDN-Fallback geladen" : "Wird beim Beitreten geladen", state.voice.clientStatus === "Fehler" ? "rose" : "sky")}
+    </div>
+  `;
+}
+
+function renderVoiceShortcutPanel() {
+  const config = state.voice.config;
+  const status = state.voice.room
+    ? "Du bist gerade verbunden."
+    : config?.enabled
+      ? "LiveKit ist bereit. Du kannst Voice direkt oeffnen."
+      : config
+        ? "Voice ist sichtbar, aber die Verbindung braucht noch Konfiguration."
+        : "Voice ist sichtbar. Der Status wird beim Oeffnen geladen.";
+
+  return `
+    <section class="panel span-12 voice-shortcut-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">SONARA Voice</p>
+          <h2>Sprachkanal schnell oeffnen</h2>
+          <p class="section-copy">${escapeHtml(status)}</p>
+        </div>
+        <div class="card-actions">
+          <button type="button" data-action="set-tab" data-tab="voice">Voice oeffnen</button>
+          <button type="button" class="ghost small" data-action="refresh-voice-status" ${state.voice.loading ? "disabled" : ""}>Status pruefen</button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function renderVoicePanel() {
   const config = state.voice.config;
   const rooms = config?.rooms || [
@@ -11475,6 +12300,7 @@ function renderVoicePanel() {
           : ""
       }
       ${state.voice.error ? `<div class="flash flash-danger"><span>${escapeHtml(state.voice.error)}</span></div>` : ""}
+      ${renderVoiceDiagnostics(config)}
 
       <div class="voice-room-grid">
         ${rooms
@@ -12439,7 +13265,17 @@ function getDashboardTabSections() {
           { id: "team", label: "Team" }
         ]
       },
-      { id: "system", title: "System", tabs: [{ id: "settings", label: "Einstellungen" }] }
+      {
+        id: "system",
+        title: "System",
+        tabs: [
+          { id: "settings", label: "Einstellungen" },
+          { id: "site-admin", label: "Webseite" },
+          { id: "roles", label: "Rollen" },
+          { id: "collections", label: "Datenbuilder" },
+          { id: "documents", label: "Dokumente" }
+        ]
+      }
     ];
   }
 
@@ -12499,7 +13335,7 @@ function renderDashboardTabs(activeTab) {
       <div class="dashboard-sidebar-head">
         <p class="eyebrow">Navigation</p>
         <h3>${escapeHtml(getPrimaryDisplayName(state.session || {}))}</h3>
-        <p class="timeline-meta">${escapeHtml(ROLE_LABELS[state.session?.role] || state.session?.role || "")}</p>
+        <p class="timeline-meta">${escapeHtml(getRoleLabel(state.session?.role))}</p>
         <span class="pill ${activityMeta.tone}">${escapeHtml(activityMeta.title)}</span>
         <p class="timeline-meta">Zuletzt online: ${escapeHtml(activityMeta.seenLabel)}</p>
       </div>
@@ -12761,9 +13597,17 @@ function renderManagerDashboard(activeTab) {
       return renderProfileWorkspace(true);
     case "settings":
       return renderSettingsPanel();
+    case "site-admin":
+      return renderSiteContentAdminPanel();
+    case "roles":
+      return renderRolePermissionAdminPanel();
+    case "collections":
+      return renderCollectionsAdminPanel();
+    case "documents":
+      return [renderDocumentsAdminPanel(), renderUploadsAdminPanel()].join("");
     case "overview":
     default:
-      return [renderNotificationsPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderAvailabilityReminderPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
+      return [renderNotificationsPanel(), renderVoiceShortcutPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderAvailabilityReminderPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
   }
 }
 
@@ -12809,7 +13653,7 @@ function renderModeratorDashboard(activeTab) {
       return renderProfileWorkspace(false);
     case "overview":
     default:
-      return [renderNotificationsPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderAvailabilityReminderPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
+      return [renderNotificationsPanel(), renderVoiceShortcutPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderAvailabilityReminderPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
   }
 }
 
@@ -12853,6 +13697,7 @@ function renderMemberDashboard(activeTab) {
       return [
         renderNotificationsPanel(),
         renderMemberActionHubPanel(),
+        renderVoiceShortcutPanel(),
         renderFeedPanel(),
         renderMemberPulsePanel(),
         renderMemberForumSpotlightPanel(),
@@ -12866,7 +13711,7 @@ function renderMemberDashboard(activeTab) {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile", "settings"]
+    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents"]
     : canCoordinateStaff()
       ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile"]
     : canAccessStaffArea()
@@ -13289,14 +14134,14 @@ function renderDashboard() {
         eyebrow: leadership ? "Leitung" : isModerationLead() ? "Moderationsleitung" : staff ? "Staff Portal" : "Mitgliederbereich",
         title: `Willkommen ${getPrimaryDisplayName(user)}`,
         intro: leadership ? "Community, Team und Staff laufen hier zusammen." : isModerationLead() ? "Du hast Planung, Auslastung und Moderationsuebersicht an einem Ort." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
-        chips: [ROLE_LABELS[user.role] || user.role, user.vrchatName || "", user.discordName || ""].filter(Boolean)
+        chips: [getRoleLabel(user.role), user.vrchatName || "", user.discordName || ""].filter(Boolean)
       })}
       <div class="dashboard-shell">
         <section class="panel toolbar">
           <div class="toolbar-user">
             ${renderUserAvatar(user, "toolbar-avatar")}
             <div>
-              <p class="eyebrow">${escapeHtml(ROLE_LABELS[user.role] || user.role)}</p>
+              <p class="eyebrow">${escapeHtml(getRoleLabel(user.role))}</p>
               <h2>${escapeHtml(getPrimaryDisplayName(user))}</h2>
             </div>
           </div>

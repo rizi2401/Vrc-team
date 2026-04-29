@@ -21,6 +21,35 @@
   --app-height: 100vh;
 }
 
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.permission-cell {
+  min-height: 2.4rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(255, 209, 122, 0.16);
+  border-radius: 0.9rem;
+  background: rgba(12, 24, 42, 0.44);
+}
+
+.role-permission-row {
+  border-color: rgba(255, 184, 72, 0.25);
+}
+
+.compact-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.55rem 1rem;
+}
+
+.compact-meta-grid p {
+  margin: 0;
+}
+
 html {
   min-height: 100%;
   -webkit-text-size-adjust: 100%;

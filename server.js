@@ -22,6 +22,9 @@ const STORE_PATH = process.env.STORE_PATH
   ? path.resolve(process.env.STORE_PATH)
   : path.join(CONFIGURED_DATA_DIR, "store.json");
 const DATA_DIR = path.dirname(STORE_PATH);
+const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+const UPLOAD_PUBLIC_PREFIX = "/uploads/";
+const UPLOAD_MAX_BYTES = normalizePositiveInteger(process.env.UPLOAD_MAX_BYTES, 5 * 1024 * 1024);
 const SHOULD_MIGRATE_LEGACY_STORE =
   !process.env.STORE_PATH &&
   String(process.env.DATA_DIR || "").trim().length > 0 &&
@@ -124,6 +127,23 @@ const MESSAGE_COOLDOWN_MS = 5000;
 const CREATOR_MIN_FOLLOWERS = normalizePositiveInteger(process.env.CREATOR_MIN_FOLLOWERS, 200);
 const CHAT_TRIM_COUNTS = new Set([20, 30, 40, 50]);
 const AVAILABILITY_DAY_IDS = ["mo", "di", "mi", "do", "fr", "sa", "so"];
+const DEFAULT_PERMISSION_CATALOG = [
+  { key: "community_view", label: "Community sehen", group: "Community" },
+  { key: "news_manage", label: "News posten", group: "Community" },
+  { key: "creator_review", label: "Creator pruefen", group: "Community" },
+  { key: "voice_staff", label: "Voice Staff", group: "Voice" },
+  { key: "planning_view", label: "Schichten sehen", group: "Moderation" },
+  { key: "planning_manage", label: "Schichten bearbeiten", group: "Moderation" },
+  { key: "availability_view", label: "Verfuegbarkeit sehen", group: "Moderation" },
+  { key: "time_view", label: "Zeiten sehen", group: "Moderation" },
+  { key: "team_manage", label: "Team verwalten", group: "Team" },
+  { key: "cms_edit", label: "CMS Entwurf", group: "Admin" },
+  { key: "cms_publish", label: "CMS veroeffentlichen", group: "Admin" },
+  { key: "roles_manage", label: "Rollen und Rechte", group: "Admin" },
+  { key: "collections_manage", label: "Datenbuilder", group: "Admin" },
+  { key: "documents_manage", label: "Dokumente", group: "Admin" },
+  { key: "uploads_manage", label: "Uploads", group: "Admin" }
+];
 let PortalPoolCtor = null;
 let portalPool = null;
 let portalStoreDbDisabled = false;
@@ -153,6 +173,11 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname.startsWith("/auth/discord/")) {
       await handleDiscordAuth(req, res, url);
+      return;
+    }
+
+    if (url.pathname.startsWith(UPLOAD_PUBLIC_PREFIX)) {
+      serveUpload(res, url.pathname);
       return;
     }
 
@@ -983,6 +1008,218 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/no-code") {
+    requireNoCodePermission(auth.user, auth.store, "cms_edit");
+    sendJson(res, 200, {
+      ok: true,
+      permissionCatalog: DEFAULT_PERMISSION_CATALOG,
+      siteContent: auth.store.siteContent,
+      roleDefinitions: auth.store.roleDefinitions,
+      collections: auth.store.customCollections,
+      records: auth.store.customRecords,
+      documents: auth.store.documents,
+      uploads: auth.store.uploads
+    });
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/admin/site-content/draft") {
+    requireNoCodePermission(auth.user, auth.store, "cms_edit");
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+    const current = normalizeSiteContent(nextStore.siteContent);
+    const draft = validateSiteContentPayload(body.content || body);
+
+    nextStore.siteContent = {
+      ...current,
+      draft,
+      updatedAt: new Date().toISOString(),
+      updatedBy: auth.user.id
+    };
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "site-content-draft-updated" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/site-content/publish") {
+    requireNoCodePermission(auth.user, auth.store, "cms_publish");
+    const nextStore = structuredClone(auth.store);
+    const current = normalizeSiteContent(nextStore.siteContent);
+
+    nextStore.siteContent = {
+      ...current,
+      published: current.draft,
+      publishedAt: new Date().toISOString(),
+      publishedBy: auth.user.id
+    };
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "site-content-published" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/site-content/reset-draft") {
+    requireNoCodePermission(auth.user, auth.store, "cms_edit");
+    const nextStore = structuredClone(auth.store);
+    const current = normalizeSiteContent(nextStore.siteContent);
+
+    nextStore.siteContent = {
+      ...current,
+      draft: current.published,
+      updatedAt: new Date().toISOString(),
+      updatedBy: auth.user.id
+    };
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "site-content-draft-reset" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/admin/role-definitions") {
+    requireNoCodePermission(auth.user, auth.store, "roles_manage");
+    const body = await readJson(req);
+    const roleDefinitions = validateRoleDefinitionsPayload(body.roleDefinitions || body.roles || []);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.roleDefinitions = roleDefinitions;
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "role-definitions-updated" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/collections") {
+    requireNoCodePermission(auth.user, auth.store, "collections_manage");
+    const body = await readJson(req);
+    const collection = validateCollectionPayload(body, auth.store);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.customCollections = normalizeCustomCollections(nextStore.customCollections);
+    if (nextStore.customCollections.some((entry) => entry.key === collection.key)) {
+      sendJson(res, 409, { error: "Eine Collection mit diesem Schluessel existiert bereits." });
+      return;
+    }
+
+    nextStore.customCollections.unshift(collection);
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "collection-created" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  const collectionMatch = url.pathname.match(/^\/api\/admin\/collections\/([^/]+)$/);
+  if (collectionMatch && req.method === "DELETE") {
+    requireNoCodePermission(auth.user, auth.store, "collections_manage");
+    const collectionId = decodeURIComponent(collectionMatch[1]);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.customCollections = normalizeCustomCollections(nextStore.customCollections).filter((entry) => entry.id !== collectionId);
+    nextStore.customRecords = normalizeCustomRecords(nextStore.customRecords, nextStore.customCollections, nextStore).filter((entry) => entry.collectionId !== collectionId);
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "collection-deleted" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  const collectionRecordMatch = url.pathname.match(/^\/api\/admin\/collections\/([^/]+)\/records$/);
+  if (collectionRecordMatch && req.method === "POST") {
+    const collectionId = decodeURIComponent(collectionRecordMatch[1]);
+    const collection = (auth.store.customCollections || []).find((entry) => entry.id === collectionId);
+
+    if (!collection) {
+      sendJson(res, 404, { error: "Collection nicht gefunden." });
+      return;
+    }
+
+    if (!canEditCollection(auth.user, auth.store, collection)) {
+      sendJson(res, 403, { error: "Keine Berechtigung fuer diese Collection." });
+      return;
+    }
+
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+    const nextCollection = nextStore.customCollections.find((entry) => entry.id === collectionId);
+    const record = validateCustomRecordPayload(body, nextCollection, auth.store, auth.user);
+
+    nextStore.customRecords = normalizeCustomRecords(nextStore.customRecords, nextStore.customCollections, nextStore);
+    nextStore.customRecords.unshift(record);
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "custom-record-created" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  const customRecordMatch = url.pathname.match(/^\/api\/admin\/records\/([^/]+)$/);
+  if (customRecordMatch && req.method === "DELETE") {
+    requireNoCodePermission(auth.user, auth.store, "collections_manage");
+    const recordId = decodeURIComponent(customRecordMatch[1]);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.customRecords = normalizeCustomRecords(nextStore.customRecords, nextStore.customCollections, nextStore).filter((entry) => entry.id !== recordId);
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "custom-record-deleted" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/documents") {
+    requireNoCodePermission(auth.user, auth.store, "documents_manage");
+    const body = await readJson(req);
+    const documentEntry = validateDocumentPayload(body, auth.user);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.documents = normalizeDocuments(nextStore.documents);
+    const existingIndex = nextStore.documents.findIndex((entry) => entry.slug === documentEntry.slug);
+    if (existingIndex >= 0) {
+      nextStore.documents[existingIndex] = {
+        ...nextStore.documents[existingIndex],
+        ...documentEntry,
+        id: nextStore.documents[existingIndex].id,
+        createdAt: nextStore.documents[existingIndex].createdAt,
+        updatedAt: new Date().toISOString(),
+        updatedBy: auth.user.id
+      };
+    } else {
+      nextStore.documents.unshift(documentEntry);
+    }
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "document-saved" });
+    sendPortalData(res, existingIndex >= 0 ? 200 : 201, auth.user, savedStore);
+    return;
+  }
+
+  const documentMatch = url.pathname.match(/^\/api\/admin\/documents\/([^/]+)$/);
+  if (documentMatch && req.method === "DELETE") {
+    requireNoCodePermission(auth.user, auth.store, "documents_manage");
+    const documentId = decodeURIComponent(documentMatch[1]);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.documents = normalizeDocuments(nextStore.documents).filter((entry) => entry.id !== documentId);
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "document-deleted" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/uploads") {
+    requireNoCodePermission(auth.user, auth.store, "uploads_manage");
+    const body = await readJson(req);
+    const uploadEntry = saveNoCodeUpload(body, auth.user);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.uploads = normalizeUploads(nextStore.uploads);
+    nextStore.uploads.unshift(uploadEntry);
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "upload-created" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/chat") {
     const body = await readJson(req);
     const normalized = validateChatPayload(body, auth.user, auth.store);
@@ -1530,7 +1767,7 @@ async function handleApi(req, res, url) {
 
     if (req.method === "PATCH") {
       const body = await readJson(req);
-      const nextRole = body.role ? validateRole(body.role) : target.role;
+      const nextRole = body.role ? validateRoleAgainstStore(body.role, auth.store) : target.role;
       const blockedState = normalizeBlockedPayload(body, Boolean(target.isBlocked), target.blockReason || "");
 
       ensureAdminAccessStillExists(nextStore.users, target, nextRole, blockedState.isBlocked, auth.user.id);
@@ -1682,6 +1919,10 @@ async function handleApi(req, res, url) {
 function ensureFileStoreExists() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   }
 
   if (!fs.existsSync(STORE_PATH)) {
@@ -2676,6 +2917,1010 @@ function projectDataForRole(user, store) {
       .slice()
       .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
       .map(sanitizeUser),
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
+function validateRole(role) {
+  return assertNoCodeKey(role, "Rolle");
+}
+
+function validateAdminUserPayload(body, store) {
+  const normalized = validateRegistrationPayload(body, store);
+  normalized.role = validateRoleAgainstStore(body.role, store);
+  return normalized;
+}
+
+function requireRole(user, role) {
+  const order = { member: 1, moderator: 2, moderation_lead: 3, planner: 4, admin: 5 };
+  const userRank = order[user?.role] || 1;
+  const requiredRank = order[role] || 5;
+  if (userRank < requiredRank) {
+    const error = new Error("Keine Berechtigung.");
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+function normalizeStore(store) {
+  const defaults = buildDefaultStore();
+  const slots = normalizeSlots(store?.slots, defaults.slots);
+  const users = normalizeUsers(store?.users || [], slots.map((entry) => entry.name));
+  const settings = normalizeSettings(store?.settings || {}, slots);
+  const rawShifts = Array.isArray(store?.shifts) ? store.shifts : migrateLegacyPlanning(store || defaults, users, settings);
+  const shifts = normalizeShifts(rawShifts, users);
+  const events = normalizeEvents(Array.isArray(store?.events) ? store.events : buildDefaultEvents());
+  const roleDefinitions = normalizeRoleDefinitions(store?.roleDefinitions);
+  const customCollections = normalizeCustomCollections(store?.customCollections);
+
+  return {
+    slots,
+    users,
+    settings,
+    systemNotice: normalizeSystemNotice(store?.systemNotice),
+    promoVideo: normalizePromoVideo(store?.promoVideo),
+    siteContent: normalizeSiteContent(store?.siteContent),
+    roleDefinitions,
+    customCollections,
+    customRecords: normalizeCustomRecords(store?.customRecords, customCollections, { users }),
+    documents: normalizeDocuments(store?.documents),
+    uploads: normalizeUploads(store?.uploads),
+    shifts,
+    events,
+    requests: Array.isArray(store?.requests) ? normalizeRequests(store.requests, users) : [],
+    announcements: Array.isArray(store?.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
+    chatMessages: Array.isArray(store?.chatMessages) ? normalizeChatMessages(store.chatMessages, users, shifts) : [],
+    timeEntries: Array.isArray(store?.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : [],
+    swapRequests: Array.isArray(store?.swapRequests) ? normalizeSwapRequests(store.swapRequests, users, shifts) : [],
+    discordStatus: normalizeDiscordStatus(store?.discordStatus),
+    vrchatAnalytics: normalizeVrchatAnalytics(store?.vrchatAnalytics),
+    directMessages: Array.isArray(store?.directMessages) ? normalizeDirectMessages(store.directMessages, users) : [],
+    discordReminderLog: normalizeDiscordReminderLog(store?.discordReminderLog),
+    forumThreads: Array.isArray(store?.forumThreads) ? normalizeForumThreads(store.forumThreads, users) : [],
+    warnings: Array.isArray(store?.warnings) ? normalizeWarnings(store.warnings, users) : [],
+    feedPosts: normalizeFeedPosts(store?.feedPosts, users)
+  };
+}
+
+function buildPublicPortalData(store) {
+  const visibleCreatorIds = new Set((store.users || []).filter((entry) => hasVisibleCreatorProfile(entry)).map((entry) => entry.id));
+  const publicFeedPosts = (store.feedPosts || [])
+    .map((entry) => decorateFeedPost(entry, store))
+    .filter((entry) => entry.creatorCommunityId || visibleCreatorIds.has(entry.authorId))
+    .slice(0, 60);
+  const publicForumThreads = (store.forumThreads || [])
+    .map((entry) => decorateForumThread(entry, store))
+    .filter((entry) => entry.creatorCommunityId || visibleCreatorIds.has(entry.authorId))
+    .slice(0, 60);
+  const noCode = buildPublicNoCodePayload(store);
+
+  return {
+    community: buildCommunityPayload(store),
+    feedPosts: publicFeedPosts,
+    forumThreads: publicForumThreads,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
+    noCode,
+    siteContent: noCode.siteContent,
+    announcements: store.announcements
+      .slice()
+      .sort((left, right) => {
+        if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+        return new Date(right.createdAt) - new Date(left.createdAt);
+      })
+      .map((entry) => decorateAnnouncement(entry, store))
+      .slice(0, 6)
+  };
+}
+
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .filter((entry) => !entry.isBlocked)
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+  const feedPosts = (store.feedPosts || []).map((entry) => decorateFeedPost(entry, store));
+  const managedUsers = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeManagedUser);
+  const noCode = buildNoCodePayloadForUser(user, store);
+
+  const base = {
+    community,
+    announcements,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
+    siteContent: noCode.siteContent,
+    noCode,
+    permissionCatalog: noCode.permissionCatalog,
+    currentPermissions: noCode.currentPermissions,
+    roleDefinitions: noCode.roleDefinitions,
+    customCollections: noCode.customCollections,
+    customRecords: noCode.customRecords,
+    documents: noCode.documents,
+    uploads: noCode.uploads,
+    directory,
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    managedWarnings: canCoordinateModeration(user) ? getManagedWarnings(store) : [],
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store),
+    feedPosts
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(left.checkInAt) - new Date(right.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: managedUsers,
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
+function getDefaultPermissionKeys() {
+  return DEFAULT_PERMISSION_CATALOG.map((entry) => entry.key);
+}
+
+function buildDefaultRoleDefinitions() {
+  const all = getDefaultPermissionKeys();
+  return [
+    {
+      key: "member",
+      label: "Mitglied",
+      active: true,
+      system: true,
+      sortOrder: 10,
+      permissions: ["community_view"]
+    },
+    {
+      key: "moderator",
+      label: "Moderator",
+      active: true,
+      system: true,
+      sortOrder: 20,
+      permissions: ["community_view", "voice_staff", "planning_view"]
+    },
+    {
+      key: "moderation_lead",
+      label: "Moderationsleitung",
+      active: true,
+      system: true,
+      sortOrder: 30,
+      permissions: ["community_view", "voice_staff", "planning_view", "planning_manage", "availability_view", "time_view"]
+    },
+    {
+      key: "planner",
+      label: "Leitung",
+      active: true,
+      system: true,
+      sortOrder: 40,
+      permissions: all.filter((entry) => entry !== "roles_manage")
+    },
+    {
+      key: "admin",
+      label: "Admin",
+      active: true,
+      system: true,
+      sortOrder: 50,
+      permissions: all
+    }
+  ];
+}
+
+function normalizeNoCodeKey(value, fallback = "") {
+  const source = String(value || fallback || "").trim().toLowerCase();
+  return source
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 50);
+}
+
+function assertNoCodeKey(value, label) {
+  const key = normalizeNoCodeKey(value);
+  if (!key) {
+    const error = new Error(`${label} braucht einen Schluessel.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return key;
+}
+
+function normalizeRoleDefinitions(entries) {
+  const defaults = buildDefaultRoleDefinitions();
+  const defaultMap = new Map(defaults.map((entry) => [entry.key, entry]));
+  const allowedPermissions = new Set(getDefaultPermissionKeys());
+  const source = Array.isArray(entries) && entries.length ? entries : defaults;
+  const byKey = new Map();
+
+  for (const [index, entry] of source.entries()) {
+    const key = normalizeNoCodeKey(entry?.key, entry?.label);
+    if (!key) continue;
+    const fallback = defaultMap.get(key) || {};
+    const permissions = uniqueStrings(Array.isArray(entry?.permissions) ? entry.permissions : fallback.permissions || [])
+      .map((permission) => normalizeNoCodeKey(permission))
+      .filter((permission) => allowedPermissions.has(permission));
+    byKey.set(key, {
+      key,
+      label: String(entry?.label || fallback.label || key).trim().slice(0, 80) || key,
+      active: key === "admin" ? true : normalizeBooleanInput(entry?.active ?? fallback.active ?? true),
+      system: Boolean(fallback.system || entry?.system),
+      sortOrder: Number.isFinite(Number(entry?.sortOrder)) ? Number(entry.sortOrder) : Number(fallback.sortOrder || (index + 1) * 10),
+      permissions
+    });
+  }
+
+  for (const fallback of defaults) {
+    if (!byKey.has(fallback.key)) {
+      byKey.set(fallback.key, { ...fallback, permissions: [...fallback.permissions] });
+    }
+  }
+
+  const admin = byKey.get("admin");
+  admin.active = true;
+  admin.system = true;
+  admin.permissions = getDefaultPermissionKeys();
+
+  return [...byKey.values()].sort((left, right) => left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, "de"));
+}
+
+function validateRoleDefinitionsPayload(entries) {
+  if (!Array.isArray(entries) || !entries.length) {
+    const error = new Error("Bitte mindestens eine Rolle uebergeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalized = normalizeRoleDefinitions(entries);
+  if (!normalized.some((entry) => entry.key === "admin" && entry.active)) {
+    const error = new Error("Mindestens eine Admin-Rolle mit Vollzugriff muss erhalten bleiben.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return normalized;
+}
+
+function validateRoleAgainstStore(role, store) {
+  const key = assertNoCodeKey(role, "Rolle");
+  const roleDefinitions = normalizeRoleDefinitions(store?.roleDefinitions);
+  if (!roleDefinitions.some((entry) => entry.key === key && entry.active)) {
+    const error = new Error("Diese Rolle ist nicht aktiv oder existiert nicht.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return key;
+}
+
+function validateRole(role) {
+  return assertNoCodeKey(role, "Rolle");
+}
+
+function validateAdminUserPayload(body, store) {
+  const normalized = validateRegistrationPayload(body, store);
+  normalized.role = validateRoleAgainstStore(body.role, store);
+  return normalized;
+}
+
+function getRolePermissions(user, store) {
+  if (!user) return [];
+  if (user.role === "admin") return getDefaultPermissionKeys();
+  const role = normalizeRoleDefinitions(store?.roleDefinitions).find((entry) => entry.key === user.role && entry.active);
+  return role ? uniqueStrings(role.permissions || []) : [];
+}
+
+function hasNoCodePermission(user, store, permission) {
+  if (!permission) return false;
+  if (user?.role === "admin") return true;
+  return getRolePermissions(user, store).includes(permission);
+}
+
+function requireNoCodePermission(user, store, permission) {
+  if (hasNoCodePermission(user, store, permission)) return;
+  const error = new Error("Keine Berechtigung.");
+  error.statusCode = 403;
+  throw error;
+}
+
+function requireRole(user, role) {
+  const order = { member: 1, moderator: 2, moderation_lead: 3, planner: 4, admin: 5 };
+  const userRank = order[user?.role] || 1;
+  const requiredRank = order[role] || 5;
+  if (userRank < requiredRank) {
+    const error = new Error("Keine Berechtigung.");
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+function buildDefaultSiteContent() {
+  const published = {
+    heroKicker: "SONARA Community",
+    heroTitle: "Willkommen in SONARA",
+    heroSubtitle: "Ein magischer Treffpunkt fuer Community, Creator, Events und ein Team, das zusammenhaelt.",
+    primaryButtonLabel: "Einloggen",
+    primaryButtonUrl: "/",
+    secondaryButtonLabel: "Registrieren",
+    secondaryButtonUrl: "/",
+    imageUrl: "",
+    videoUrl: "",
+    communityTitle: "Mehr als ein Moderationspanel",
+    communityBody:
+      "SONARA soll ein Zuhause fuer Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt fuer Schritt selbst pflegen.",
+    infoCards: [
+      {
+        title: "Community",
+        body: "Feed, Forum, Events und News halten Mitglieder zusammen.",
+        linkLabel: "Community ansehen",
+        linkUrl: "/"
+      },
+      {
+        title: "Creator",
+        body: "Creator koennen ihre Bereiche aufbauen und ihre Community sichtbarer machen.",
+        linkLabel: "Creator entdecken",
+        linkUrl: "/"
+      },
+      {
+        title: "Team",
+        body: "Schichten, Zeiten und Verfuegbarkeit bleiben fuer die Moderation geordnet.",
+        linkLabel: "Portal oeffnen",
+        linkUrl: "/"
+      }
+    ]
+  };
+
+  return {
+    draft: published,
+    published,
+    updatedAt: "",
+    updatedBy: "",
+    publishedAt: "",
+    publishedBy: ""
+  };
+}
+
+function normalizeManagedLink(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  if (normalized.startsWith(UPLOAD_PUBLIC_PREFIX)) return normalized;
+  if (/^\/(creator|datenschutz|privacy|nutzungsbedingungen|terms)?\/?/i.test(normalized)) return normalized.slice(0, 240);
+  return normalizeExternalLink(normalized);
+}
+
+function normalizeSiteInfoCards(cards) {
+  const source = Array.isArray(cards) ? cards : [];
+  return source
+    .map((entry) => ({
+      title: String(entry?.title || "").trim().slice(0, 100),
+      body: String(entry?.body || "").trim().slice(0, 500),
+      linkLabel: String(entry?.linkLabel || "").trim().slice(0, 80),
+      linkUrl: normalizeManagedLink(entry?.linkUrl)
+    }))
+    .filter((entry) => entry.title || entry.body)
+    .slice(0, 6);
+}
+
+function normalizeSiteContentPayload(input = {}) {
+  const defaults = buildDefaultSiteContent().published;
+  const infoCards = normalizeSiteInfoCards(input.infoCards);
+  return {
+    heroKicker: String(input.heroKicker || defaults.heroKicker).trim().slice(0, 80),
+    heroTitle: String(input.heroTitle || defaults.heroTitle).trim().slice(0, 120),
+    heroSubtitle: String(input.heroSubtitle || defaults.heroSubtitle).trim().slice(0, 500),
+    primaryButtonLabel: String(input.primaryButtonLabel || defaults.primaryButtonLabel).trim().slice(0, 80),
+    primaryButtonUrl: normalizeManagedLink(input.primaryButtonUrl) || defaults.primaryButtonUrl,
+    secondaryButtonLabel: String(input.secondaryButtonLabel || defaults.secondaryButtonLabel).trim().slice(0, 80),
+    secondaryButtonUrl: normalizeManagedLink(input.secondaryButtonUrl) || defaults.secondaryButtonUrl,
+    imageUrl: normalizeManagedLink(input.imageUrl),
+    videoUrl: normalizeManagedLink(input.videoUrl),
+    communityTitle: String(input.communityTitle || defaults.communityTitle).trim().slice(0, 120),
+    communityBody: String(input.communityBody || defaults.communityBody).trim().slice(0, 1600),
+    infoCards: infoCards.length ? infoCards : defaults.infoCards
+  };
+}
+
+function normalizeSiteContent(input) {
+  const defaults = buildDefaultSiteContent();
+  const published = normalizeSiteContentPayload(input?.published || input?.draft || defaults.published);
+  const draft = normalizeSiteContentPayload(input?.draft || published);
+  return {
+    draft,
+    published,
+    updatedAt: isIsoDate(input?.updatedAt) ? input.updatedAt : "",
+    updatedBy: String(input?.updatedBy || "").trim(),
+    publishedAt: isIsoDate(input?.publishedAt) ? input.publishedAt : "",
+    publishedBy: String(input?.publishedBy || "").trim()
+  };
+}
+
+function validateSiteContentPayload(body) {
+  const normalized = normalizeSiteContentPayload(body || {});
+  if (!normalized.heroTitle) {
+    const error = new Error("Die Startseite braucht mindestens einen Titel.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return normalized;
+}
+
+function normalizeCollectionField(entry = {}, index = 0) {
+  const allowedTypes = new Set(["text", "longtext", "number", "date", "time", "select", "multiselect", "checkbox", "link", "file", "user"]);
+  const label = String(entry.label || entry.name || entry.key || `Feld ${index + 1}`).trim().slice(0, 80);
+  const key = normalizeNoCodeKey(entry.key, label);
+  const type = allowedTypes.has(String(entry.type || "").trim()) ? String(entry.type).trim() : "text";
+  const options = uniqueStrings(Array.isArray(entry.options) ? entry.options : String(entry.options || "").split(","))
+    .map((option) => String(option || "").trim().slice(0, 80))
+    .filter(Boolean)
+    .slice(0, 24);
+
+  if (!key || !label) return null;
+  return {
+    key,
+    label,
+    type,
+    required: normalizeBooleanInput(entry.required),
+    options
+  };
+}
+
+function normalizeCustomCollections(collections) {
+  const seen = new Set();
+  return (Array.isArray(collections) ? collections : [])
+    .map((entry, index) => {
+      const title = String(entry?.title || entry?.name || "").trim().slice(0, 100);
+      const key = normalizeNoCodeKey(entry?.key, title);
+      if (!title || !key || seen.has(key)) return null;
+      seen.add(key);
+      const fields = (Array.isArray(entry?.fields) ? entry.fields : [])
+        .map((field, fieldIndex) => normalizeCollectionField(field, fieldIndex))
+        .filter(Boolean);
+      return {
+        id: String(entry?.id || crypto.randomUUID()),
+        key,
+        title,
+        description: String(entry?.description || "").trim().slice(0, 500),
+        publicVisible: normalizeBooleanInput(entry?.publicVisible),
+        visibleRoles: uniqueStrings(Array.isArray(entry?.visibleRoles) ? entry.visibleRoles : []).map((role) => normalizeNoCodeKey(role)).filter(Boolean),
+        editableRoles: uniqueStrings(Array.isArray(entry?.editableRoles) ? entry.editableRoles : []).map((role) => normalizeNoCodeKey(role)).filter(Boolean),
+        fields,
+        createdAt: isIsoDate(entry?.createdAt) ? entry.createdAt : new Date().toISOString(),
+        updatedAt: isIsoDate(entry?.updatedAt) ? entry.updatedAt : ""
+      };
+    })
+    .filter(Boolean);
+}
+
+function parseCollectionFieldsFromText(value) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [label, type = "text", options = ""] = line.split("|").map((part) => part.trim());
+      return { label, key: normalizeNoCodeKey(label), type, options: options ? options.split(",") : [] };
+    });
+}
+
+function validateCollectionPayload(body, store) {
+  const title = String(body.title || "").trim().slice(0, 100);
+  const key = assertNoCodeKey(body.key || title, "Collection");
+  const roleKeys = normalizeRoleDefinitions(store?.roleDefinitions).map((entry) => entry.key);
+  const fields = (Array.isArray(body.fields) ? body.fields : parseCollectionFieldsFromText(body.fieldsText))
+    .map((entry, index) => normalizeCollectionField(entry, index))
+    .filter(Boolean);
+
+  if (!title) {
+    const error = new Error("Bitte einen Namen fuer die Collection angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!fields.length) {
+    const error = new Error("Bitte mindestens ein Feld fuer die Collection anlegen.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    key,
+    title,
+    description: String(body.description || "").trim().slice(0, 500),
+    publicVisible: normalizeBooleanInput(body.publicVisible),
+    visibleRoles: uniqueStrings(Array.isArray(body.visibleRoles) ? body.visibleRoles : []).filter((role) => roleKeys.includes(role)),
+    editableRoles: uniqueStrings(Array.isArray(body.editableRoles) ? body.editableRoles : []).filter((role) => roleKeys.includes(role)),
+    fields,
+    createdAt: new Date().toISOString(),
+    updatedAt: ""
+  };
+}
+
+function normalizeFieldValue(rawValue, field, store) {
+  if (field.type === "checkbox") return normalizeBooleanInput(rawValue);
+  if (rawValue === undefined || rawValue === null || rawValue === "") return "";
+
+  if (field.type === "number") {
+    const numberValue = Number(rawValue);
+    return Number.isFinite(numberValue) ? numberValue : "";
+  }
+  if (field.type === "date") return isDateKey(String(rawValue).trim()) ? String(rawValue).trim() : "";
+  if (field.type === "time") return normalizeTimeValue(rawValue);
+  if (field.type === "link" || field.type === "file") return normalizeManagedLink(rawValue);
+  if (field.type === "user") {
+    const userId = String(rawValue || "").trim();
+    return (store.users || []).some((entry) => entry.id === userId) ? userId : "";
+  }
+  if (field.type === "select") {
+    const value = String(rawValue || "").trim().slice(0, 120);
+    return !field.options.length || field.options.includes(value) ? value : "";
+  }
+  if (field.type === "multiselect") {
+    const values = Array.isArray(rawValue) ? rawValue : String(rawValue || "").split(",");
+    return uniqueStrings(values)
+      .map((entry) => String(entry || "").trim().slice(0, 120))
+      .filter((entry) => entry && (!field.options.length || field.options.includes(entry)));
+  }
+  return String(rawValue || "").trim().slice(0, field.type === "longtext" ? 5000 : 500);
+}
+
+function validateCustomRecordPayload(body, collection, store, user) {
+  const values = {};
+  const inputValues = body.values && typeof body.values === "object" ? body.values : body;
+
+  for (const field of collection.fields || []) {
+    const value = normalizeFieldValue(inputValues[field.key], field, store);
+    if (field.required && (value === "" || (Array.isArray(value) && !value.length))) {
+      const error = new Error(`Das Feld "${field.label}" ist erforderlich.`);
+      error.statusCode = 400;
+      throw error;
+    }
+    values[field.key] = value;
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    collectionId: collection.id,
+    values,
+    createdAt: new Date().toISOString(),
+    createdBy: user.id,
+    updatedAt: "",
+    updatedBy: ""
+  };
+}
+
+function normalizeCustomRecords(records, collections, store = { users: [] }) {
+  const collectionMap = new Map((Array.isArray(collections) ? collections : []).map((entry) => [entry.id, entry]));
+  return (Array.isArray(records) ? records : [])
+    .map((entry) => {
+      const collection = collectionMap.get(String(entry?.collectionId || ""));
+      if (!collection) return null;
+      const values = {};
+      for (const field of collection.fields || []) {
+        values[field.key] = normalizeFieldValue(entry?.values?.[field.key], field, store);
+      }
+      return {
+        id: String(entry?.id || crypto.randomUUID()),
+        collectionId: collection.id,
+        values,
+        createdAt: isIsoDate(entry?.createdAt) ? entry.createdAt : new Date().toISOString(),
+        createdBy: String(entry?.createdBy || "").trim(),
+        updatedAt: isIsoDate(entry?.updatedAt) ? entry.updatedAt : "",
+        updatedBy: String(entry?.updatedBy || "").trim()
+      };
+    })
+    .filter(Boolean);
+}
+
+function canViewCollection(user, store, collection) {
+  if (collection.publicVisible) return true;
+  if (user?.role === "admin") return true;
+  return (collection.visibleRoles || []).includes(user?.role) || canEditCollection(user, store, collection);
+}
+
+function canEditCollection(user, store, collection) {
+  if (hasNoCodePermission(user, store, "collections_manage")) return true;
+  return (collection.editableRoles || []).includes(user?.role);
+}
+
+function normalizeDocuments(documents) {
+  return (Array.isArray(documents) ? documents : [])
+    .map((entry) => {
+      const title = String(entry?.title || "").trim().slice(0, 140);
+      const slug = normalizeNoCodeKey(entry?.slug, title);
+      if (!title || !slug) return null;
+      return {
+        id: String(entry?.id || crypto.randomUUID()),
+        title,
+        slug,
+        body: String(entry?.body || "").trim().slice(0, 20000),
+        status: entry?.status === "published" ? "published" : "draft",
+        publicVisible: normalizeBooleanInput(entry?.publicVisible),
+        linkedUploadIds: uniqueStrings(Array.isArray(entry?.linkedUploadIds) ? entry.linkedUploadIds : []),
+        createdAt: isIsoDate(entry?.createdAt) ? entry.createdAt : new Date().toISOString(),
+        createdBy: String(entry?.createdBy || "").trim(),
+        updatedAt: isIsoDate(entry?.updatedAt) ? entry.updatedAt : "",
+        updatedBy: String(entry?.updatedBy || "").trim(),
+        publishedAt: isIsoDate(entry?.publishedAt) ? entry.publishedAt : "",
+        publishedBy: String(entry?.publishedBy || "").trim()
+      };
+    })
+    .filter(Boolean);
+}
+
+function validateDocumentPayload(body, user) {
+  const title = String(body.title || "").trim().slice(0, 140);
+  const slug = assertNoCodeKey(body.slug || title, "Dokument");
+  const bodyText = String(body.body || "").trim().slice(0, 20000);
+  const published = normalizeBooleanInput(body.published) || body.status === "published";
+
+  if (!title || !bodyText) {
+    const error = new Error("Bitte Titel und Inhalt fuer das Dokument angeben.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    title,
+    slug,
+    body: bodyText,
+    status: published ? "published" : "draft",
+    publicVisible: normalizeBooleanInput(body.publicVisible),
+    linkedUploadIds: uniqueStrings(Array.isArray(body.linkedUploadIds) ? body.linkedUploadIds : []),
+    createdAt: new Date().toISOString(),
+    createdBy: user.id,
+    updatedAt: "",
+    updatedBy: "",
+    publishedAt: published ? new Date().toISOString() : "",
+    publishedBy: published ? user.id : ""
+  };
+}
+
+function normalizeUploads(uploads) {
+  return (Array.isArray(uploads) ? uploads : [])
+    .map((entry) => {
+      const url = String(entry?.url || "").trim();
+      if (!url.startsWith(UPLOAD_PUBLIC_PREFIX)) return null;
+      return {
+        id: String(entry?.id || crypto.randomUUID()),
+        originalName: String(entry?.originalName || entry?.fileName || "upload").trim().slice(0, 160),
+        fileName: path.basename(String(entry?.fileName || url.slice(UPLOAD_PUBLIC_PREFIX.length))),
+        url,
+        mimeType: String(entry?.mimeType || "application/octet-stream").trim().slice(0, 80),
+        size: Math.max(0, Number(entry?.size || 0)),
+        createdAt: isIsoDate(entry?.createdAt) ? entry.createdAt : new Date().toISOString(),
+        createdBy: String(entry?.createdBy || "").trim()
+      };
+    })
+    .filter(Boolean);
+}
+
+function getUploadExtension(mimeType, originalName) {
+  const ext = path.extname(String(originalName || "")).replace(".", "").toLowerCase();
+  const allowedExt = new Set(["png", "jpg", "jpeg", "webp", "gif", "pdf", "txt", "md"]);
+  if (allowedExt.has(ext)) return ext;
+  const byMime = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "application/pdf": "pdf",
+    "text/plain": "txt",
+    "text/markdown": "md"
+  };
+  return byMime[mimeType] || "";
+}
+
+function saveNoCodeUpload(body, user) {
+  const originalName = String(body?.fileName || body?.name || "upload").trim().slice(0, 160);
+  const match = String(body?.dataUrl || "").match(/^data:([^;,]+);base64,(.+)$/);
+  if (!match) {
+    const error = new Error("Upload muss als Data-URL uebergeben werden.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const mimeType = match[1].toLowerCase();
+  const extension = getUploadExtension(mimeType, originalName);
+  if (!extension) {
+    const error = new Error("Dieser Dateityp ist fuer Uploads nicht erlaubt.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const bytes = Buffer.from(match[2], "base64");
+  if (!bytes.length || bytes.length > UPLOAD_MAX_BYTES) {
+    const error = new Error(`Datei ist zu gross. Maximal erlaubt sind ${Math.round(UPLOAD_MAX_BYTES / 1024 / 1024)} MB.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  const fileName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${extension}`;
+  fs.writeFileSync(path.join(UPLOADS_DIR, fileName), bytes);
+
+  return {
+    id: crypto.randomUUID(),
+    originalName,
+    fileName,
+    url: `${UPLOAD_PUBLIC_PREFIX}${fileName}`,
+    mimeType,
+    size: bytes.length,
+    createdAt: new Date().toISOString(),
+    createdBy: user.id
+  };
+}
+
+function contentTypeForUpload(fileName) {
+  const ext = path.extname(fileName).toLowerCase();
+  const types = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".pdf": "application/pdf",
+    ".txt": "text/plain; charset=utf-8",
+    ".md": "text/markdown; charset=utf-8"
+  };
+  return types[ext] || "application/octet-stream";
+}
+
+function serveUpload(res, pathname) {
+  const fileName = path.basename(decodeURIComponent(pathname.slice(UPLOAD_PUBLIC_PREFIX.length)));
+  const filePath = path.resolve(UPLOADS_DIR, fileName);
+  const uploadRoot = path.resolve(UPLOADS_DIR);
+
+  if (!fileName || !filePath.startsWith(uploadRoot) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    sendJson(res, 404, { error: "Upload nicht gefunden." });
+    return;
+  }
+
+  res.writeHead(200, {
+    "Content-Type": contentTypeForUpload(fileName),
+    "Cache-Control": "public, max-age=31536000, immutable"
+  });
+  fs.createReadStream(filePath).pipe(res);
+}
+
+function buildNoCodePayloadForUser(user, store) {
+  const roleDefinitions = normalizeRoleDefinitions(store.roleDefinitions);
+  const collections = normalizeCustomCollections(store.customCollections).filter((entry) => canViewCollection(user, store, entry));
+  const collectionIds = new Set(collections.map((entry) => entry.id));
+  return {
+    permissionCatalog: DEFAULT_PERMISSION_CATALOG,
+    currentPermissions: getRolePermissions(user, store),
+    roleDefinitions,
+    siteContent: normalizeSiteContent(store.siteContent),
+    customCollections: collections,
+    customRecords: normalizeCustomRecords(store.customRecords, collections, store).filter((entry) => collectionIds.has(entry.collectionId)),
+    documents: normalizeDocuments(store.documents).filter((entry) => entry.status === "published" || hasNoCodePermission(user, store, "documents_manage")),
+    uploads: normalizeUploads(store.uploads).filter(() => hasNoCodePermission(user, store, "uploads_manage") || hasNoCodePermission(user, store, "documents_manage"))
+  };
+}
+
+function buildPublicNoCodePayload(store) {
+  const collections = normalizeCustomCollections(store.customCollections).filter((entry) => entry.publicVisible);
+  const collectionIds = new Set(collections.map((entry) => entry.id));
+  return {
+    siteContent: normalizeSiteContent(store.siteContent).published,
+    customCollections: collections,
+    customRecords: normalizeCustomRecords(store.customRecords, collections, store).filter((entry) => collectionIds.has(entry.collectionId)),
+    documents: normalizeDocuments(store.documents).filter((entry) => entry.status === "published" && entry.publicVisible)
+  };
+}
+
+function normalizeStore(store) {
+  const defaults = buildDefaultStore();
+  const slots = normalizeSlots(store?.slots, defaults.slots);
+  const users = normalizeUsers(store?.users || [], slots.map((entry) => entry.name));
+  const settings = normalizeSettings(store?.settings || {}, slots);
+  const rawShifts = Array.isArray(store?.shifts) ? store.shifts : migrateLegacyPlanning(store || defaults, users, settings);
+  const shifts = normalizeShifts(rawShifts, users);
+  const events = normalizeEvents(Array.isArray(store?.events) ? store.events : buildDefaultEvents());
+  const roleDefinitions = normalizeRoleDefinitions(store?.roleDefinitions);
+  const customCollections = normalizeCustomCollections(store?.customCollections);
+
+  return {
+    slots,
+    users,
+    settings,
+    systemNotice: normalizeSystemNotice(store?.systemNotice),
+    promoVideo: normalizePromoVideo(store?.promoVideo),
+    siteContent: normalizeSiteContent(store?.siteContent),
+    roleDefinitions,
+    customCollections,
+    customRecords: normalizeCustomRecords(store?.customRecords, customCollections, { users }),
+    documents: normalizeDocuments(store?.documents),
+    uploads: normalizeUploads(store?.uploads),
+    shifts,
+    events,
+    requests: Array.isArray(store?.requests) ? normalizeRequests(store.requests, users) : [],
+    announcements: Array.isArray(store?.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
+    chatMessages: Array.isArray(store?.chatMessages) ? normalizeChatMessages(store.chatMessages, users, shifts) : [],
+    timeEntries: Array.isArray(store?.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : [],
+    swapRequests: Array.isArray(store?.swapRequests) ? normalizeSwapRequests(store.swapRequests, users, shifts) : [],
+    discordStatus: normalizeDiscordStatus(store?.discordStatus),
+    vrchatAnalytics: normalizeVrchatAnalytics(store?.vrchatAnalytics),
+    directMessages: Array.isArray(store?.directMessages) ? normalizeDirectMessages(store.directMessages, users) : [],
+    discordReminderLog: normalizeDiscordReminderLog(store?.discordReminderLog),
+    forumThreads: Array.isArray(store?.forumThreads) ? normalizeForumThreads(store.forumThreads, users) : [],
+    warnings: Array.isArray(store?.warnings) ? normalizeWarnings(store.warnings, users) : [],
+    feedPosts: normalizeFeedPosts(store?.feedPosts, users)
+  };
+}
+
+function buildPublicPortalData(store) {
+  const visibleCreatorIds = new Set((store.users || []).filter((entry) => hasVisibleCreatorProfile(entry)).map((entry) => entry.id));
+  const publicFeedPosts = (store.feedPosts || [])
+    .map((entry) => decorateFeedPost(entry, store))
+    .filter((entry) => entry.creatorCommunityId || visibleCreatorIds.has(entry.authorId))
+    .slice(0, 60);
+  const publicForumThreads = (store.forumThreads || [])
+    .map((entry) => decorateForumThread(entry, store))
+    .filter((entry) => entry.creatorCommunityId || visibleCreatorIds.has(entry.authorId))
+    .slice(0, 60);
+
+  return {
+    community: buildCommunityPayload(store),
+    feedPosts: publicFeedPosts,
+    forumThreads: publicForumThreads,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
+    noCode: buildPublicNoCodePayload(store),
+    siteContent: buildPublicNoCodePayload(store).siteContent,
+    announcements: store.announcements
+      .slice()
+      .sort((left, right) => {
+        if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+        return new Date(right.createdAt) - new Date(left.createdAt);
+      })
+      .map((entry) => decorateAnnouncement(entry, store))
+      .slice(0, 6)
+  };
+}
+
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .filter((entry) => !entry.isBlocked)
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+  const feedPosts = (store.feedPosts || []).map((entry) => decorateFeedPost(entry, store));
+  const managedUsers = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeManagedUser);
+  const noCode = buildNoCodePayloadForUser(user, store);
+
+  const base = {
+    community,
+    announcements,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
+    siteContent: noCode.siteContent,
+    noCode,
+    permissionCatalog: noCode.permissionCatalog,
+    currentPermissions: noCode.currentPermissions,
+    roleDefinitions: noCode.roleDefinitions,
+    customCollections: noCode.customCollections,
+    customRecords: noCode.customRecords,
+    documents: noCode.documents,
+    uploads: noCode.uploads,
+    directory,
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    managedWarnings: canCoordinateModeration(user) ? getManagedWarnings(store) : [],
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store),
+    feedPosts
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: managedUsers,
     shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
     requests: store.requests
       .slice()
@@ -8127,6 +9372,197 @@ function projectDataForRole(user, store) {
     announcements,
     systemNotice: decorateSystemNotice(store.systemNotice, store),
     promoVideo: decoratePromoVideo(store.promoVideo, store),
+    directory,
+    communityChatMessages,
+    staffChatMessages,
+    chatMessages: user.role === "member" ? communityChatMessages : staffChatMessages,
+    directMessages: getDirectMessagesForUser(user, store),
+    forumThreads: (store.forumThreads || []).map((entry) => decorateForumThread(entry, store)),
+    warnings: getWarningsForUser(user, store),
+    managedWarnings: canCoordinateModeration(user) ? getManagedWarnings(store) : [],
+    notifications,
+    swapRequests: getSwapRequestsForUser(user, store),
+    feedPosts
+  };
+
+  if (user.role === "member") {
+    return {
+      ...base,
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store))
+    };
+  }
+
+  if (user.role === "moderator") {
+    return {
+      ...base,
+      shifts: store.shifts
+        .filter((entry) => entry.memberId === user.id)
+        .sort(compareShifts)
+        .map((entry) => decorateShift(entry, store)),
+      requests: store.requests
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .map((entry) => decorateRequest(entry, store)),
+      timeEntries: store.timeEntries
+        .filter((entry) => entry.userId === user.id)
+        .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+        .map((entry) => decorateTimeEntry(entry, store))
+    };
+  }
+
+  return {
+    ...base,
+    settings: store.settings,
+    users: managedUsers,
+    shifts: store.shifts.slice().sort(compareShifts).map((entry) => decorateShift(entry, store)),
+    requests: store.requests
+      .slice()
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .map((entry) => decorateRequest(entry, store)),
+    timeEntries: store.timeEntries
+      .slice()
+      .sort((left, right) => new Date(right.checkInAt) - new Date(left.checkInAt))
+      .map((entry) => decorateTimeEntry(entry, store))
+  };
+}
+
+function normalizeStoreFinalNoCode(store) {
+  const defaults = buildDefaultStore();
+  const slots = normalizeSlots(store?.slots, defaults.slots);
+  const users = normalizeUsers(store?.users || [], slots.map((entry) => entry.name));
+  const settings = normalizeSettings(store?.settings || {}, slots);
+  const rawShifts = Array.isArray(store?.shifts) ? store.shifts : migrateLegacyPlanning(store || defaults, users, settings);
+  const shifts = normalizeShifts(rawShifts, users);
+  const events = normalizeEvents(Array.isArray(store?.events) ? store.events : buildDefaultEvents());
+  const roleDefinitions = normalizeRoleDefinitions(store?.roleDefinitions);
+  const customCollections = normalizeCustomCollections(store?.customCollections);
+
+  return {
+    slots,
+    users,
+    settings,
+    systemNotice: normalizeSystemNotice(store?.systemNotice),
+    promoVideo: normalizePromoVideo(store?.promoVideo),
+    siteContent: normalizeSiteContent(store?.siteContent),
+    roleDefinitions,
+    customCollections,
+    customRecords: normalizeCustomRecords(store?.customRecords, customCollections, { users }),
+    documents: normalizeDocuments(store?.documents),
+    uploads: normalizeUploads(store?.uploads),
+    shifts,
+    events,
+    requests: Array.isArray(store?.requests) ? normalizeRequests(store.requests, users) : [],
+    announcements: Array.isArray(store?.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
+    chatMessages: Array.isArray(store?.chatMessages) ? normalizeChatMessages(store.chatMessages, users, shifts) : [],
+    timeEntries: Array.isArray(store?.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : [],
+    swapRequests: Array.isArray(store?.swapRequests) ? normalizeSwapRequests(store.swapRequests, users, shifts) : [],
+    discordStatus: normalizeDiscordStatus(store?.discordStatus),
+    vrchatAnalytics: normalizeVrchatAnalytics(store?.vrchatAnalytics),
+    directMessages: Array.isArray(store?.directMessages) ? normalizeDirectMessages(store.directMessages, users) : [],
+    discordReminderLog: normalizeDiscordReminderLog(store?.discordReminderLog),
+    forumThreads: Array.isArray(store?.forumThreads) ? normalizeForumThreads(store.forumThreads, users) : [],
+    warnings: Array.isArray(store?.warnings) ? normalizeWarnings(store.warnings, users) : [],
+    feedPosts: normalizeFeedPosts(store?.feedPosts, users)
+  };
+}
+
+function validateRole(role) {
+  return assertNoCodeKey(role, "Rolle");
+}
+
+function validateAdminUserPayload(body, store) {
+  const normalized = validateRegistrationPayload(body, store);
+  normalized.role = validateRoleAgainstStore(body.role, store);
+  return normalized;
+}
+
+function requireRole(user, role) {
+  const order = { member: 1, moderator: 2, moderation_lead: 3, planner: 4, admin: 5 };
+  const userRank = order[user?.role] || 1;
+  const requiredRank = order[role] || 5;
+  if (userRank < requiredRank) {
+    const error = new Error("Keine Berechtigung.");
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+function normalizeStore(store) {
+  return normalizeStoreFinalNoCode(store);
+}
+
+function buildPublicPortalData(store) {
+  const visibleCreatorIds = new Set((store.users || []).filter((entry) => hasVisibleCreatorProfile(entry)).map((entry) => entry.id));
+  const publicFeedPosts = (store.feedPosts || [])
+    .map((entry) => decorateFeedPost(entry, store))
+    .filter((entry) => entry.creatorCommunityId || visibleCreatorIds.has(entry.authorId))
+    .slice(0, 60);
+  const publicForumThreads = (store.forumThreads || [])
+    .map((entry) => decorateForumThread(entry, store))
+    .filter((entry) => entry.creatorCommunityId || visibleCreatorIds.has(entry.authorId))
+    .slice(0, 60);
+  const noCode = buildPublicNoCodePayload(store);
+
+  return {
+    community: buildCommunityPayload(store),
+    feedPosts: publicFeedPosts,
+    forumThreads: publicForumThreads,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
+    noCode,
+    siteContent: noCode.siteContent,
+    announcements: store.announcements
+      .slice()
+      .sort((left, right) => {
+        if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+        return new Date(right.createdAt) - new Date(left.createdAt);
+      })
+      .map((entry) => decorateAnnouncement(entry, store))
+      .slice(0, 6)
+  };
+}
+
+function projectDataForRole(user, store) {
+  const community = buildCommunityPayload(store);
+  const notifications = buildNotifications(user, store);
+  const announcements = store.announcements
+    .slice()
+    .sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return new Date(right.createdAt) - new Date(left.createdAt);
+    })
+    .map((entry) => decorateAnnouncement(entry, store));
+  const directory = store.users
+    .filter((entry) => !entry.isBlocked)
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeUser);
+  const communityChatMessages = getChatMessagesForUser(user, store, "community");
+  const staffChatMessages = getChatMessagesForUser(user, store, "staff");
+  const feedPosts = (store.feedPosts || []).map((entry) => decorateFeedPost(entry, store));
+  const managedUsers = store.users
+    .slice()
+    .sort((left, right) => findUserName(store.users, left.id).localeCompare(findUserName(store.users, right.id), "de"))
+    .map(sanitizeManagedUser);
+  const noCode = buildNoCodePayloadForUser(user, store);
+
+  const base = {
+    community,
+    announcements,
+    systemNotice: decorateSystemNotice(store.systemNotice, store),
+    promoVideo: decoratePromoVideo(store.promoVideo, store),
+    siteContent: noCode.siteContent,
+    noCode,
+    permissionCatalog: noCode.permissionCatalog,
+    currentPermissions: noCode.currentPermissions,
+    roleDefinitions: noCode.roleDefinitions,
+    customCollections: noCode.customCollections,
+    customRecords: noCode.customRecords,
+    documents: noCode.documents,
+    uploads: noCode.uploads,
     directory,
     communityChatMessages,
     staffChatMessages,
