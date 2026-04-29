@@ -103,8 +103,10 @@ const staticFiles = {
 const sessionStore = new Map();
 const messageCooldownStore = new Map();
 const streamClients = new Set();
+const discordOAuthStates = new Map();
 let discordSendChain = Promise.resolve();
 let discordLastDispatchAt = 0;
+const DISCORD_OAUTH_STATE_TTL_MS = normalizePositiveInteger(process.env.DISCORD_OAUTH_STATE_TTL_MS, 10 * 60 * 1000);
 const DISCORD_MIN_INTERVAL_MS = normalizePositiveInteger(process.env.DISCORD_MIN_INTERVAL_MS, 3000);
 const DISCORD_1015_COOLDOWN_MS = normalizePositiveInteger(process.env.DISCORD_1015_COOLDOWN_MS, 60 * 60 * 1000);
 const DISCORD_AUTO_NOTIFICATIONS_ENABLED = process.env.DISCORD_AUTO_NOTIFICATIONS_ENABLED !== "0";
@@ -112,6 +114,12 @@ const DISCORD_SHIFT_CHANGE_NOTIFICATIONS_ENABLED = process.env.DISCORD_SHIFT_CHA
 const DISCORD_SHIFT_REMINDERS_ENABLED = process.env.DISCORD_SHIFT_REMINDERS_ENABLED !== "0";
 const DISCORD_SHIFT_REMINDER_LOOKAHEAD_MINUTES = normalizePositiveInteger(process.env.DISCORD_SHIFT_REMINDER_LOOKAHEAD_MINUTES, 15);
 const DISCORD_SHIFT_REMINDER_INTERVAL_MS = normalizePositiveInteger(process.env.DISCORD_SHIFT_REMINDER_INTERVAL_MS, 60 * 1000);
+const LIVEKIT_URL = String(process.env.LIVEKIT_URL || "").trim();
+const LIVEKIT_API_KEY = String(process.env.LIVEKIT_API_KEY || "").trim();
+const LIVEKIT_API_SECRET = String(process.env.LIVEKIT_API_SECRET || "").trim();
+const LIVEKIT_ENABLED = process.env.LIVEKIT_ENABLED !== "0";
+const LIVEKIT_COMMUNITY_ROOM = String(process.env.LIVEKIT_COMMUNITY_ROOM || "sonara-community").trim();
+const LIVEKIT_STAFF_ROOM = String(process.env.LIVEKIT_STAFF_ROOM || "sonara-staff").trim();
 const MESSAGE_COOLDOWN_MS = 5000;
 const CREATOR_MIN_FOLLOWERS = normalizePositiveInteger(process.env.CREATOR_MIN_FOLLOWERS, 200);
 const CHAT_TRIM_COUNTS = new Set([20, 30, 40, 50]);
@@ -140,6 +148,11 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname.startsWith("/api/")) {
       await handleApi(req, res, url);
+      return;
+    }
+
+    if (url.pathname.startsWith("/auth/discord/")) {
+      await handleDiscordAuth(req, res, url);
       return;
     }
 
@@ -278,6 +291,11 @@ async function handleApi(req, res, url) {
       creatorAutomationLastAt: "",
       creatorAutomationLastSource: "",
       discordUserId: normalized.discordUserId,
+      discordLinkedAt: normalized.discordUserId ? new Date().toISOString() : "",
+      discordAvatarUrl: "",
+      discordRoleIds: [],
+      discordRoleSyncedAt: "",
+      discordLastSyncError: "",
       weeklyHoursCapacity: normalized.weeklyHoursCapacity,
       weeklyDaysCapacity: normalized.weeklyDaysCapacity,
       overtimeAdjustments: [],
@@ -288,6 +306,7 @@ async function handleApi(req, res, url) {
       lastSeenAt: "",
       vrchatLinkedAt: "",
       vrchatLinkSource: "",
+      needsVrchatName: false,
       passwordHash: normalized.passwordHash
     };
 
@@ -367,6 +386,47 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/livekit/config") {
+    sendJson(res, 200, { ok: true, voice: buildLiveKitVoiceConfig(auth.user) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/livekit/token") {
+    const body = await readJson(req);
+    const roomId = normalizeLiveKitRoomId(body.roomId || body.room);
+    const room = getLiveKitRoomForUser(auth.user, roomId);
+
+    if (!room) {
+      sendJson(res, 404, { error: "Sprachraum nicht gefunden." });
+      return;
+    }
+
+    if (!room.allowed) {
+      sendJson(res, 403, { error: "Du hast keinen Zugriff auf diesen Sprachraum." });
+      return;
+    }
+
+    if (!isLiveKitConfigured()) {
+      sendJson(res, 503, { error: "LiveKit ist noch nicht vollstaendig konfiguriert." });
+      return;
+    }
+
+    try {
+      const token = await createLiveKitAccessToken(auth.user, room);
+      sendJson(res, 200, {
+        ok: true,
+        serverUrl: LIVEKIT_URL,
+        token,
+        roomId: room.id,
+        roomName: room.roomName,
+        displayName: auth.user.displayName || auth.user.vrchatName || auth.user.discordName || "SONARA"
+      });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || "LiveKit-Token konnte nicht erstellt werden." });
+    }
+    return;
+  }
+
   if (req.method === "PATCH" && url.pathname === "/api/profile") {
     const body = await readJson(req);
     const nextStore = structuredClone(auth.store);
@@ -387,6 +447,27 @@ async function handleApi(req, res, url) {
 
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "profile-updated" });
+    sendPortalData(res, 200, target, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/profile/discord/unlink") {
+    const nextStore = structuredClone(auth.store);
+    const target = nextStore.users.find((entry) => entry.id === auth.user.id);
+
+    if (!target) {
+      sendJson(res, 404, { error: "Profil nicht gefunden." });
+      return;
+    }
+
+    target.discordUserId = "";
+    target.discordLinkedAt = "";
+    target.discordAvatarUrl = "";
+    target.discordRoleIds = [];
+    target.discordRoleSyncedAt = "";
+    target.discordLastSyncError = "";
+
+    const savedStore = writeStore(nextStore);
     sendPortalData(res, 200, target, savedStore);
     return;
   }
@@ -511,6 +592,49 @@ async function handleApi(req, res, url) {
     }
 
     sendJson(res, 200, { ok: true, status: getDiscordStatus() });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/discord/sync-roles") {
+    requireRole(auth.user, "planner");
+
+    if (!process.env.DISCORD_GUILD_ID || !process.env.DISCORD_BOT_TOKEN) {
+      sendJson(res, 400, { error: "Fuer den Rollen-Sync fehlen DISCORD_GUILD_ID oder DISCORD_BOT_TOKEN." });
+      return;
+    }
+
+    const nextStore = structuredClone(auth.store);
+    let updated = 0;
+    let failed = 0;
+
+    for (const target of nextStore.users || []) {
+      if (!target.discordUserId || target.isBlocked) continue;
+
+      const memberResult = await fetchDiscordGuildMemberRolesByBot(target.discordUserId);
+      if (!memberResult.ok) {
+        failed += 1;
+        target.discordLastSyncError = memberResult.message || "Discord-Rollen konnten nicht gelesen werden.";
+        continue;
+      }
+
+      const changed = applyDiscordRoleSyncToUser(nextStore.users, target, memberResult.roles || []);
+      target.discordRoleIds = memberResult.roles || [];
+      target.discordRoleSyncedAt = new Date().toISOString();
+      target.discordLastSyncError = "";
+      if (changed) updated += 1;
+    }
+
+    const savedStore = writeStore(nextStore);
+    const responseUser = savedStore.users.find((entry) => entry.id === auth.user.id) || auth.user;
+    broadcastEvent("portal", { type: "discord-role-sync" });
+    sendJson(res, 200, {
+      ok: true,
+      updated,
+      failed,
+      status: getDiscordStatus(),
+      session: sanitizeSessionUser(responseUser),
+      data: projectDataForRole(responseUser, savedStore)
+    });
     return;
   }
 
@@ -1324,6 +1448,11 @@ async function handleApi(req, res, url) {
       creatorPresenceUrl: normalized.creatorPresenceUrl,
       creatorPresenceUpdatedAt: normalized.creatorPresenceUpdatedAt,
       discordUserId: normalized.discordUserId,
+      discordLinkedAt: normalized.discordUserId ? new Date().toISOString() : "",
+      discordAvatarUrl: "",
+      discordRoleIds: [],
+      discordRoleSyncedAt: "",
+      discordLastSyncError: "",
       weeklyHoursCapacity: normalized.weeklyHoursCapacity,
       weeklyDaysCapacity: normalized.weeklyDaysCapacity,
       overtimeAdjustments: [],
@@ -1332,6 +1461,7 @@ async function handleApi(req, res, url) {
       availabilityUpdatedAt: normalized.availabilityUpdatedAt,
       lastLoginAt: "",
       lastSeenAt: "",
+      needsVrchatName: false,
       passwordHash: normalized.passwordHash,
       isBlocked: blockedState.isBlocked,
       blockReason: blockedState.blockReason,
@@ -1922,6 +2052,11 @@ function normalizeUsers(users, legacyModeratorNames) {
     const displayName = vrchatName || fallbackDisplayName;
     const discordName = String(entry.discordName || username).trim();
     const discordUserId = normalizeDiscordUserId(entry.discordUserId);
+    const discordLinkedAt = isIsoDate(entry.discordLinkedAt) ? entry.discordLinkedAt : "";
+    const discordAvatarUrl = normalizeOptionalUrl(entry.discordAvatarUrl);
+    const discordRoleIds = uniqueStrings(Array.isArray(entry.discordRoleIds) ? entry.discordRoleIds : []);
+    const discordRoleSyncedAt = isIsoDate(entry.discordRoleSyncedAt) ? entry.discordRoleSyncedAt : "";
+    const discordLastSyncError = String(entry.discordLastSyncError || "").trim().slice(0, 500);
     const avatarUrl = normalizeOptionalUrl(entry.avatarUrl);
     const bio = String(entry.bio || "").trim();
     const passwordHash = String(entry.passwordHash || "").trim();
@@ -2553,6 +2688,39 @@ function projectDataForRole(user, store) {
   };
 }
 
+function sanitizeUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    role: user.role,
+    vrchatName: user.vrchatName || "",
+    discordName: user.discordName || "",
+    discordUserId: normalizeDiscordUserId(user.discordUserId),
+    discordLinkedAt: isIsoDate(user.discordLinkedAt) ? user.discordLinkedAt : "",
+    discordAvatarUrl: normalizeOptionalUrl(user.discordAvatarUrl),
+    discordRoleSyncedAt: isIsoDate(user.discordRoleSyncedAt) ? user.discordRoleSyncedAt : "",
+    discordLastSyncError: String(user.discordLastSyncError || "").trim(),
+    avatarUrl: user.avatarUrl || "",
+    bio: user.bio || "",
+    contactNote: user.contactNote || "",
+    creatorBlurb: user.creatorBlurb || "",
+    creatorLinks: normalizeCreatorLinks(user.creatorLinks),
+    creatorVisible: Boolean(user.creatorVisible),
+    creatorSlug: normalizeCreatorSlugValue(user.creatorSlug || user.creatorCommunityName || user.displayName),
+    creatorCommunityName: normalizeCreatorCommunityName(user.creatorCommunityName),
+    creatorCommunitySummary: normalizeCreatorCommunitySummary(user.creatorCommunitySummary),
+    creatorCommunityInviteUrl: user.creatorCommunityInviteUrl || "",
+    creatorPresence: normalizeCreatorPresence(user.creatorPresence),
+    creatorPresenceText: normalizeCreatorPresenceText(user.creatorPresenceText),
+    creatorPresenceUrl: user.creatorPresenceUrl || "",
+    creatorPresenceUpdatedAt: isIsoDate(user.creatorPresenceUpdatedAt) ? user.creatorPresenceUpdatedAt : "",
+    vrchatLinkedAt: isIsoDate(user.vrchatLinkedAt) ? user.vrchatLinkedAt : "",
+    vrchatLinkSource: normalizeVrchatLinkSource(user.vrchatLinkSource),
+    needsVrchatName: Boolean(user.needsVrchatName)
+  };
+}
+
 function buildCommunityPayload(store) {
   const activeUsers = (store.users || []).filter((entry) => !entry.isBlocked);
   const team = activeUsers
@@ -2594,6 +2762,11 @@ function normalizeUsers(users, legacyModeratorNames) {
     const displayName = vrchatName || fallbackDisplayName;
     const discordName = String(entry.discordName || username).trim();
     const discordUserId = normalizeDiscordUserId(entry.discordUserId);
+    const discordLinkedAt = isIsoDate(entry.discordLinkedAt) ? entry.discordLinkedAt : "";
+    const discordAvatarUrl = normalizeOptionalUrl(entry.discordAvatarUrl);
+    const discordRoleIds = uniqueStrings(Array.isArray(entry.discordRoleIds) ? entry.discordRoleIds : []);
+    const discordRoleSyncedAt = isIsoDate(entry.discordRoleSyncedAt) ? entry.discordRoleSyncedAt : "";
+    const discordLastSyncError = String(entry.discordLastSyncError || "").trim().slice(0, 500);
     const avatarUrl = normalizeOptionalUrl(entry.avatarUrl);
     const bio = String(entry.bio || "").trim().slice(0, 600);
     const contactNote = String(entry.contactNote || "").trim().slice(0, 600);
@@ -2649,6 +2822,11 @@ function normalizeUsers(users, legacyModeratorNames) {
       vrchatName: name,
       discordName: username,
       discordUserId: "",
+      discordLinkedAt: "",
+      discordAvatarUrl: "",
+      discordRoleIds: [],
+      discordRoleSyncedAt: "",
+      discordLastSyncError: "",
       avatarUrl: "",
       bio: "",
       contactNote: "",
@@ -2675,6 +2853,10 @@ function sanitizeUser(user) {
     vrchatName: user.vrchatName || "",
     discordName: user.discordName || "",
     discordUserId: normalizeDiscordUserId(user.discordUserId),
+    discordLinkedAt: isIsoDate(user.discordLinkedAt) ? user.discordLinkedAt : "",
+    discordAvatarUrl: normalizeOptionalUrl(user.discordAvatarUrl),
+    discordRoleSyncedAt: isIsoDate(user.discordRoleSyncedAt) ? user.discordRoleSyncedAt : "",
+    discordLastSyncError: String(user.discordLastSyncError || "").trim(),
     avatarUrl: user.avatarUrl || "",
     bio: user.bio || "",
     contactNote: user.contactNote || "",
@@ -2710,7 +2892,8 @@ function sanitizeManagedUser(user) {
     creatorReviewedAt: isIsoDate(user.creatorReviewedAt) ? user.creatorReviewedAt : "",
     creatorReviewedBy: user.creatorReviewedBy || "",
     vrchatLinkedAt: isIsoDate(user.vrchatLinkedAt) ? user.vrchatLinkedAt : "",
-    vrchatLinkSource: normalizeVrchatLinkSource(user.vrchatLinkSource)
+    vrchatLinkSource: normalizeVrchatLinkSource(user.vrchatLinkSource),
+    needsVrchatName: Boolean(user.needsVrchatName)
   };
 }
 
@@ -2902,6 +3085,7 @@ function normalizeUsers(users, legacyModeratorNames) {
     const creatorAutomationLastSource = normalizeCreatorAutomationSource(entry.creatorAutomationLastSource);
     const vrchatLinkedAt = isIsoDate(entry.vrchatLinkedAt) ? entry.vrchatLinkedAt : "";
     const vrchatLinkSource = normalizeVrchatLinkSource(entry.vrchatLinkSource);
+    const needsVrchatName = Boolean(entry.needsVrchatName);
     const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(entry.weeklyHoursCapacity);
     const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(entry.weeklyDaysCapacity);
     const overtimeAdjustments = normalizeOvertimeAdjustments(entry.overtimeAdjustments);
@@ -2930,6 +3114,16 @@ function normalizeUsers(users, legacyModeratorNames) {
       vrchatName,
       discordName,
       discordUserId,
+      discordLinkedAt,
+      discordAvatarUrl,
+      discordRoleIds,
+      discordRoleSyncedAt,
+      discordLastSyncError,
+      discordLinkedAt,
+      discordAvatarUrl,
+      discordRoleIds,
+      discordRoleSyncedAt,
+      discordLastSyncError,
       avatarUrl,
       bio,
       contactNote,
@@ -2957,6 +3151,8 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorAutomationLastSource,
       vrchatLinkedAt,
       vrchatLinkSource,
+      needsVrchatName,
+      needsVrchatName,
       weeklyHoursCapacity,
       weeklyDaysCapacity,
       overtimeAdjustments,
@@ -2991,6 +3187,16 @@ function normalizeUsers(users, legacyModeratorNames) {
       vrchatName: name,
       discordName: username,
       discordUserId: "",
+      discordLinkedAt: "",
+      discordAvatarUrl: "",
+      discordRoleIds: [],
+      discordRoleSyncedAt: "",
+      discordLastSyncError: "",
+      discordLinkedAt: "",
+      discordAvatarUrl: "",
+      discordRoleIds: [],
+      discordRoleSyncedAt: "",
+      discordLastSyncError: "",
       avatarUrl: "",
       bio: "",
       contactNote: "",
@@ -3018,6 +3224,8 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorAutomationLastSource: "",
       vrchatLinkedAt: "",
       vrchatLinkSource: "",
+      needsVrchatName: false,
+      needsVrchatName: false,
       weeklyHoursCapacity: 0,
       weeklyDaysCapacity: 0,
       overtimeAdjustments: [],
@@ -3046,6 +3254,10 @@ function sanitizeUser(user) {
     vrchatName: user.vrchatName || "",
     discordName: user.discordName || "",
     discordUserId: normalizeDiscordUserId(user.discordUserId),
+    discordLinkedAt: isIsoDate(user.discordLinkedAt) ? user.discordLinkedAt : "",
+    discordAvatarUrl: normalizeOptionalUrl(user.discordAvatarUrl),
+    discordRoleSyncedAt: isIsoDate(user.discordRoleSyncedAt) ? user.discordRoleSyncedAt : "",
+    discordLastSyncError: String(user.discordLastSyncError || "").trim(),
     avatarUrl: user.avatarUrl || "",
     bio: user.bio || "",
     contactNote: user.contactNote || "",
@@ -3061,7 +3273,8 @@ function sanitizeUser(user) {
     creatorPresenceUrl: user.creatorPresenceUrl || "",
     creatorPresenceUpdatedAt: isIsoDate(user.creatorPresenceUpdatedAt) ? user.creatorPresenceUpdatedAt : "",
     vrchatLinkedAt: isIsoDate(user.vrchatLinkedAt) ? user.vrchatLinkedAt : "",
-    vrchatLinkSource: normalizeVrchatLinkSource(user.vrchatLinkSource)
+    vrchatLinkSource: normalizeVrchatLinkSource(user.vrchatLinkSource),
+    needsVrchatName: Boolean(user.needsVrchatName)
   };
 }
 
@@ -3940,6 +4153,503 @@ function sendPortalData(res, statusCode, user, store, headers = {}) {
     },
     headers
   );
+}
+
+function sendRedirect(res, location, headers = {}) {
+  res.writeHead(302, { Location: location, ...headers });
+  res.end();
+}
+
+function sendHtml(res, statusCode, html, headers = {}) {
+  res.writeHead(statusCode, { "Content-Type": "text/html; charset=utf-8", ...headers });
+  res.end(html);
+}
+
+function sendAuthMessagePage(res, title, body, returnPath = "/") {
+  sendHtml(
+    res,
+    200,
+    `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtmlText(title)}</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#07101f;color:#fff;font-family:system-ui,sans-serif}.card{max-width:560px;padding:28px;border:1px solid rgba(255,200,120,.25);border-radius:20px;background:rgba(11,24,42,.88)}a{color:#ffd18a}</style></head><body><main class="card"><h1>${escapeHtmlText(title)}</h1><p>${escapeHtmlText(body)}</p><p><a href="${escapeHtmlText(returnPath)}">Zurueck zu SONARA</a></p></main></body></html>`
+  );
+}
+
+function escapeHtmlText(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function handleDiscordAuth(req, res, url) {
+  await ensurePortalStoreReady();
+
+  if (req.method === "GET" && url.pathname === "/auth/discord/start") {
+    const config = getDiscordOAuthConfig();
+    if (!config.configured) {
+      sendAuthMessagePage(res, "Discord ist noch nicht bereit", "Bitte DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET und DISCORD_REDIRECT_URI in Render setzen.");
+      return;
+    }
+
+    const requestedMode = normalizeDiscordOAuthMode(url.searchParams.get("mode"));
+    const auth = requireAuth(req);
+    const mode = requestedMode === "link" ? "link" : requestedMode || "login";
+
+    if (mode === "link" && !auth) {
+      sendAuthMessagePage(res, "Bitte erst einloggen", "Melde dich zuerst im Portal an, danach kannst du deinen Discord-Account verknuepfen.");
+      return;
+    }
+
+    const state = createDiscordOAuthState({
+      mode,
+      userId: auth?.user?.id || "",
+      returnTo: sanitizeReturnPath(url.searchParams.get("return") || "/")
+    });
+
+    sendRedirect(res, buildDiscordAuthorizeUrl(state, config));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/auth/discord/callback") {
+    await handleDiscordOAuthCallback(req, res, url);
+    return;
+  }
+
+  sendJson(res, 404, { error: "Discord-Route nicht gefunden." });
+}
+
+function getDiscordOAuthConfig() {
+  const clientId = String(process.env.DISCORD_CLIENT_ID || "").trim();
+  const clientSecret = String(process.env.DISCORD_CLIENT_SECRET || "").trim();
+  const redirectUri = String(process.env.DISCORD_REDIRECT_URI || "").trim();
+  return {
+    clientId,
+    clientSecret,
+    redirectUri,
+    guildId: String(process.env.DISCORD_GUILD_ID || "").trim(),
+    configured: Boolean(clientId && clientSecret && redirectUri)
+  };
+}
+
+function normalizeDiscordOAuthMode(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["login", "register", "link"].includes(normalized) ? normalized : "";
+}
+
+function sanitizeReturnPath(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized || !normalized.startsWith("/") || normalized.startsWith("//")) return "/";
+  if (normalized.startsWith("/auth/discord/")) return "/";
+  return normalized.slice(0, 240);
+}
+
+function pruneDiscordOAuthStates() {
+  const now = Date.now();
+  for (const [key, entry] of discordOAuthStates.entries()) {
+    if (!entry?.expiresAt || entry.expiresAt <= now) discordOAuthStates.delete(key);
+  }
+}
+
+function createDiscordOAuthState(entry) {
+  pruneDiscordOAuthStates();
+  const state = crypto.randomBytes(24).toString("base64url");
+  discordOAuthStates.set(state, {
+    mode: normalizeDiscordOAuthMode(entry.mode) || "login",
+    userId: String(entry.userId || ""),
+    returnTo: sanitizeReturnPath(entry.returnTo || "/"),
+    expiresAt: Date.now() + DISCORD_OAUTH_STATE_TTL_MS
+  });
+  return state;
+}
+
+function consumeDiscordOAuthState(state) {
+  pruneDiscordOAuthStates();
+  const key = String(state || "").trim();
+  const entry = discordOAuthStates.get(key);
+  discordOAuthStates.delete(key);
+  return entry || null;
+}
+
+function buildDiscordAuthorizeUrl(state, config) {
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    response_type: "code",
+    scope: "identify guilds.members.read",
+    state
+  });
+  return `https://discord.com/oauth2/authorize?${params.toString()}`;
+}
+
+async function handleDiscordOAuthCallback(req, res, url) {
+  const error = url.searchParams.get("error");
+  if (error) {
+    sendAuthMessagePage(res, "Discord-Anmeldung abgebrochen", `Discord hat die Anmeldung beendet: ${error}`);
+    return;
+  }
+
+  const state = consumeDiscordOAuthState(url.searchParams.get("state"));
+  if (!state) {
+    sendAuthMessagePage(res, "Discord-Sitzung abgelaufen", "Bitte starte die Discord-Anmeldung im Portal noch einmal.");
+    return;
+  }
+
+  const code = String(url.searchParams.get("code") || "").trim();
+  if (!code) {
+    sendAuthMessagePage(res, "Discord-Code fehlt", "Discord hat keinen Anmeldecode zurueckgegeben.");
+    return;
+  }
+
+  try {
+    const config = getDiscordOAuthConfig();
+    const token = await exchangeDiscordOAuthCode(code, config);
+    const profile = await fetchDiscordProfile(token.access_token);
+    const memberResult = config.guildId ? await fetchDiscordGuildMemberRoles(token.access_token, config.guildId) : { ok: true, roles: [] };
+    const discordInfo = buildDiscordIdentityInfo(profile, memberResult.roles || [], memberResult.ok ? "" : memberResult.message);
+    const store = readStore();
+    const nextStore = structuredClone(store);
+    const existing = findUserByDiscordId(nextStore.users, discordInfo.id);
+    let target = existing;
+
+    if (state.mode === "link") {
+      target = nextStore.users.find((entry) => entry.id === state.userId);
+      if (!target) {
+        sendAuthMessagePage(res, "Portal-Account nicht gefunden", "Bitte melde dich neu an und starte die Verknuepfung erneut.");
+        return;
+      }
+
+      if (existing && existing.id !== target.id) {
+        sendAuthMessagePage(res, "Discord schon verknuepft", "Dieser Discord-Account gehoert bereits zu einem anderen SONARA-Account.");
+        return;
+      }
+    }
+
+    if (!target) {
+      target = createUserFromDiscordIdentity(discordInfo, nextStore);
+      nextStore.users.push(target);
+    }
+
+    if (target.isBlocked) {
+      sendAuthMessagePage(res, "Account gesperrt", buildBlockedLoginMessage(target));
+      return;
+    }
+
+    applyDiscordIdentityToUser(nextStore.users, target, discordInfo);
+    applyUserPresenceHeartbeat(target, { login: true, force: true });
+
+    const savedStore = writeStore(nextStore);
+    const savedUser = savedStore.users.find((entry) => entry.id === target.id) || target;
+    const sessionId = createSession(savedUser.id);
+    sendRedirect(res, sanitizeReturnPath(state.returnTo || "/"), { "Set-Cookie": createSessionCookie(sessionId) });
+  } catch (callbackError) {
+    sendAuthMessagePage(res, "Discord-Anmeldung fehlgeschlagen", callbackError.message || "Die Discord-Anmeldung konnte nicht abgeschlossen werden.");
+  }
+}
+
+async function exchangeDiscordOAuthCode(code, config) {
+  const response = await fetch("https://discord.com/api/v10/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: config.redirectUri
+    })
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.access_token) {
+    throw new Error(payload?.error_description || payload?.error || "Discord-Token konnte nicht geholt werden.");
+  }
+  return payload;
+}
+
+async function fetchDiscordProfile(accessToken) {
+  const response = await fetch("https://discord.com/api/v10/users/@me", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.id) {
+    throw new Error(payload?.message || "Discord-Profil konnte nicht gelesen werden.");
+  }
+  return payload;
+}
+
+async function fetchDiscordGuildMemberRoles(accessToken, guildId) {
+  const response = await fetch(`https://discord.com/api/v10/users/@me/guilds/${encodeURIComponent(guildId)}/member`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    return { ok: false, roles: [], message: payload?.message || "Discord-Serverrollen konnten nicht gelesen werden." };
+  }
+  return { ok: true, roles: Array.isArray(payload?.roles) ? payload.roles.map(String) : [] };
+}
+
+async function fetchDiscordGuildMemberRolesByBot(discordUserId) {
+  const token = String(process.env.DISCORD_BOT_TOKEN || "").trim();
+  const guildId = String(process.env.DISCORD_GUILD_ID || "").trim();
+  if (!token || !guildId || !discordUserId) {
+    return { ok: false, roles: [], message: "Discord Bot Token, Guild-ID oder User-ID fehlt." };
+  }
+
+  const response = await fetch(`https://discord.com/api/v10/guilds/${encodeURIComponent(guildId)}/members/${encodeURIComponent(discordUserId)}`, {
+    headers: { Authorization: `Bot ${token}` }
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    return { ok: false, roles: [], message: payload?.message || `Discord returned ${response.status}` };
+  }
+  return { ok: true, roles: Array.isArray(payload?.roles) ? payload.roles.map(String) : [] };
+}
+
+function buildDiscordIdentityInfo(profile, roles = [], syncError = "") {
+  const username = String(profile.username || "").trim();
+  const globalName = String(profile.global_name || "").trim();
+  const displayName = globalName || username || `Discord ${profile.id}`;
+  const discordName =
+    profile.discriminator && profile.discriminator !== "0" && username ? `${username}#${profile.discriminator}` : username || displayName;
+  const avatarUrl = profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png?size=128` : "";
+
+  return {
+    id: normalizeDiscordUserId(profile.id),
+    displayName,
+    discordName,
+    avatarUrl,
+    roles: Array.isArray(roles) ? roles.map(String) : [],
+    syncError: String(syncError || "").trim()
+  };
+}
+
+function findUserByDiscordId(users, discordUserId) {
+  const normalized = normalizeDiscordUserId(discordUserId);
+  if (!normalized) return null;
+  return (users || []).find((entry) => normalizeDiscordUserId(entry.discordUserId) === normalized) || null;
+}
+
+function makeUniqueUserField(users, currentUserId, field, baseValue, fallbackPrefix) {
+  const base = String(baseValue || fallbackPrefix || "Discord").trim() || "Discord";
+  let candidate = base.slice(0, 80);
+  let index = 2;
+  while (
+    users.some(
+      (entry) => entry.id !== currentUserId && String(entry[field] || "").trim().toLowerCase() === candidate.toLowerCase()
+    )
+  ) {
+    candidate = `${base.slice(0, 68)} ${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function createUserFromDiscordIdentity(discordInfo, store) {
+  const users = store.users || [];
+  const displayName = makeUniqueUserField(users, null, "vrchatName", `Discord ${discordInfo.displayName}`, "Discord Mitglied");
+  const discordName = makeUniqueUserField(users, null, "discordName", discordInfo.discordName, "Discord");
+  const role = resolvePortalRoleFromDiscordRoles(discordInfo.roles) || "member";
+
+  return {
+    id: crypto.randomUUID(),
+    username: createUniqueUsername(displayName, users.map((entry) => entry.username)),
+    displayName,
+    role,
+    vrchatName: displayName,
+    discordName,
+    discordUserId: discordInfo.id,
+    discordLinkedAt: new Date().toISOString(),
+    discordAvatarUrl: discordInfo.avatarUrl,
+    discordRoleIds: discordInfo.roles,
+    discordRoleSyncedAt: new Date().toISOString(),
+    discordLastSyncError: discordInfo.syncError,
+    avatarUrl: discordInfo.avatarUrl,
+    bio: "",
+    contactNote: "Per Discord erstellt. Bitte echten VRChat-Namen im Profil nachtragen.",
+    creatorBlurb: "",
+    creatorLinks: [],
+    creatorVisible: false,
+    creatorSlug: createUniqueCreatorSlug(displayName, users.map((entry) => entry.creatorSlug).filter(Boolean)),
+    creatorApplicationStatus: "none",
+    creatorFollowerCount: 0,
+    creatorPrimaryPlatform: "",
+    creatorProofUrl: "",
+    creatorApplicationNote: "",
+    creatorReviewNote: "",
+    creatorReviewedAt: "",
+    creatorReviewedBy: "",
+    creatorCommunityName: "",
+    creatorCommunitySummary: "",
+    creatorCommunityInviteUrl: "",
+    creatorPresence: "offline",
+    creatorPresenceText: "",
+    creatorPresenceUrl: "",
+    creatorPresenceUpdatedAt: "",
+    creatorWebhookToken: createCreatorWebhookToken(),
+    creatorAutomationLastAt: "",
+    creatorAutomationLastSource: "",
+    vrchatLinkedAt: "",
+    vrchatLinkSource: "",
+    needsVrchatName: true,
+    weeklyHoursCapacity: 0,
+    weeklyDaysCapacity: 0,
+    overtimeAdjustments: [],
+    availabilitySchedule: "",
+    availabilitySlots: buildEmptyAvailabilitySlots(),
+    availabilityUpdatedAt: "",
+    lastLoginAt: "",
+    lastSeenAt: "",
+    isBlocked: false,
+    blockReason: "",
+    blockedAt: "",
+    blockedBy: "",
+    passwordHash: hashPassword(crypto.randomBytes(24).toString("base64url"))
+  };
+}
+
+function applyDiscordIdentityToUser(users, target, discordInfo) {
+  target.discordUserId = discordInfo.id;
+  target.discordName = makeUniqueUserField(users, target.id, "discordName", discordInfo.discordName, "Discord");
+  target.discordLinkedAt = target.discordLinkedAt || new Date().toISOString();
+  target.discordAvatarUrl = discordInfo.avatarUrl;
+  target.discordRoleIds = discordInfo.roles;
+  target.discordRoleSyncedAt = new Date().toISOString();
+  target.discordLastSyncError = discordInfo.syncError;
+  if (!target.avatarUrl && discordInfo.avatarUrl) target.avatarUrl = discordInfo.avatarUrl;
+  return applyDiscordRoleSyncToUser(users, target, discordInfo.roles);
+}
+
+function parseDiscordRoleMap() {
+  const raw = String(process.env.DISCORD_ROLE_MAP_JSON || "").trim();
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    const entries = [];
+    for (const [key, value] of Object.entries(parsed || {})) {
+      if (isPortalRole(key)) {
+        const ids = Array.isArray(value) ? value : [value];
+        ids.map((entry) => String(entry || "").trim()).filter(Boolean).forEach((roleId) => entries.push({ roleId, portalRole: key }));
+      } else if (isPortalRole(value)) {
+        entries.push({ roleId: String(key || "").trim(), portalRole: value });
+      }
+    }
+    return entries.filter((entry) => entry.roleId && isPortalRole(entry.portalRole));
+  } catch {
+    return [];
+  }
+}
+
+function isPortalRole(role) {
+  return ["member", "moderator", "moderation_lead", "planner", "admin"].includes(String(role || ""));
+}
+
+function resolvePortalRoleFromDiscordRoles(roleIds) {
+  const roleMap = parseDiscordRoleMap();
+  if (!roleMap.length) return null;
+
+  const userRoleIds = new Set((roleIds || []).map((entry) => String(entry || "").trim()).filter(Boolean));
+  const allowAdmin = process.env.DISCORD_ROLE_SYNC_ALLOW_ADMIN === "1";
+  const precedence = allowAdmin ? ["admin", "planner", "moderation_lead", "moderator", "member"] : ["planner", "moderation_lead", "moderator", "member"];
+
+  for (const portalRole of precedence) {
+    if (roleMap.some((entry) => entry.portalRole === portalRole && userRoleIds.has(entry.roleId))) {
+      return portalRole;
+    }
+  }
+
+  return "member";
+}
+
+function applyDiscordRoleSyncToUser(users, target, roleIds) {
+  const nextRole = resolvePortalRoleFromDiscordRoles(roleIds);
+  if (!nextRole || nextRole === target.role) return false;
+
+  try {
+    ensureAdminAccessStillExists(users, target, nextRole, Boolean(target.isBlocked), "");
+  } catch (error) {
+    target.discordLastSyncError = error.message;
+    return false;
+  }
+
+  target.role = nextRole;
+  return true;
+}
+
+function isLiveKitConfigured() {
+  return Boolean(LIVEKIT_ENABLED && LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET);
+}
+
+function normalizeLiveKitRoomId(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["community", "staff"].includes(normalized) ? normalized : "";
+}
+
+function getLiveKitRoomsForUser(user) {
+  const staffAllowed = user && user.role !== "member";
+  return [
+    {
+      id: "community",
+      label: "Community Voice",
+      roomName: LIVEKIT_COMMUNITY_ROOM || "sonara-community",
+      description: "Offener SONARA-Sprachraum fuer alle eingeloggten Mitglieder.",
+      allowed: Boolean(user)
+    },
+    {
+      id: "staff",
+      label: "Staff Voice",
+      roomName: LIVEKIT_STAFF_ROOM || "sonara-staff",
+      description: "Interner Sprachraum fuer Moderation, Moderationsleitung, Planung und Admin.",
+      allowed: Boolean(staffAllowed)
+    }
+  ];
+}
+
+function getLiveKitRoomForUser(user, roomId) {
+  const normalizedRoomId = normalizeLiveKitRoomId(roomId);
+  return getLiveKitRoomsForUser(user).find((room) => room.id === normalizedRoomId) || null;
+}
+
+function buildLiveKitVoiceConfig(user) {
+  return {
+    enabled: isLiveKitConfigured(),
+    configured: Boolean(LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET),
+    serverUrl: isLiveKitConfigured() ? LIVEKIT_URL : "",
+    rooms: getLiveKitRoomsForUser(user).map((room) => ({
+      id: room.id,
+      label: room.label,
+      description: room.description,
+      allowed: room.allowed
+    }))
+  };
+}
+
+async function createLiveKitAccessToken(user, room) {
+  let AccessToken;
+  try {
+    ({ AccessToken } = require("livekit-server-sdk"));
+  } catch {
+    throw new Error("livekit-server-sdk ist noch nicht installiert. Bitte npm install ausfuehren.");
+  }
+
+  const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+    identity: user.id,
+    name: user.displayName || user.vrchatName || user.discordName || user.username,
+    metadata: JSON.stringify({
+      role: user.role,
+      displayName: user.displayName || user.vrchatName || user.discordName || user.username
+    })
+  });
+  token.addGrant({
+    room: room.roomName,
+    roomJoin: true,
+    canPublish: true,
+    canSubscribe: true,
+    canPublishData: true
+  });
+
+  const jwt = token.toJwt();
+  return typeof jwt?.then === "function" ? await jwt : jwt;
 }
 
 function buildPublicPortalData(store) {
@@ -5712,8 +6422,11 @@ function normalizePositiveInteger(value, fallback) {
 
 function getDiscordStatus() {
   const cooldownState = getDiscord1015Cooldown();
+  const oauthConfig = getDiscordOAuthConfig();
   return {
     configured: Boolean(String(process.env.DISCORD_BOT_TOKEN || "").trim() && String(process.env.DISCORD_CHANNEL_ID || "").trim()),
+    oauthConfigured: oauthConfig.configured,
+    roleSyncConfigured: Boolean(process.env.DISCORD_GUILD_ID && parseDiscordRoleMap().length),
     autoNotificationsEnabled: DISCORD_AUTO_NOTIFICATIONS_ENABLED,
     shiftChangeNotificationsEnabled: DISCORD_SHIFT_CHANGE_NOTIFICATIONS_ENABLED,
     shiftRemindersEnabled: DISCORD_SHIFT_REMINDERS_ENABLED,
@@ -6333,6 +7046,11 @@ function normalizeUsers(users, legacyModeratorNames) {
     const displayName = vrchatName || fallbackDisplayName;
     const discordName = String(entry.discordName || username).trim();
     const discordUserId = normalizeDiscordUserId(entry.discordUserId);
+    const discordLinkedAt = isIsoDate(entry.discordLinkedAt) ? entry.discordLinkedAt : "";
+    const discordAvatarUrl = normalizeOptionalUrl(entry.discordAvatarUrl);
+    const discordRoleIds = uniqueStrings(Array.isArray(entry.discordRoleIds) ? entry.discordRoleIds : []);
+    const discordRoleSyncedAt = isIsoDate(entry.discordRoleSyncedAt) ? entry.discordRoleSyncedAt : "";
+    const discordLastSyncError = String(entry.discordLastSyncError || "").trim().slice(0, 500);
     const avatarUrl = normalizeOptionalUrl(entry.avatarUrl);
     const bio = String(entry.bio || "").trim().slice(0, 600);
     const contactNote = String(entry.contactNote || "").trim().slice(0, 600);
@@ -6369,6 +7087,7 @@ function normalizeUsers(users, legacyModeratorNames) {
     const creatorAutomationLastSource = normalizeCreatorAutomationSource(entry.creatorAutomationLastSource);
     const vrchatLinkedAt = isIsoDate(entry.vrchatLinkedAt) ? entry.vrchatLinkedAt : "";
     const vrchatLinkSource = normalizeVrchatLinkSource(entry.vrchatLinkSource);
+    const needsVrchatName = Boolean(entry.needsVrchatName);
     const weeklyHoursCapacity = normalizeWeeklyHoursCapacity(entry.weeklyHoursCapacity);
     const weeklyDaysCapacity = normalizeWeeklyDaysCapacity(entry.weeklyDaysCapacity);
     const overtimeAdjustments = normalizeOvertimeAdjustments(entry.overtimeAdjustments);
@@ -6397,6 +7116,11 @@ function normalizeUsers(users, legacyModeratorNames) {
       vrchatName,
       discordName,
       discordUserId,
+      discordLinkedAt,
+      discordAvatarUrl,
+      discordRoleIds,
+      discordRoleSyncedAt,
+      discordLastSyncError,
       avatarUrl,
       bio,
       contactNote,
@@ -6424,6 +7148,7 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorAutomationLastSource,
       vrchatLinkedAt,
       vrchatLinkSource,
+      needsVrchatName,
       weeklyHoursCapacity,
       weeklyDaysCapacity,
       overtimeAdjustments,
@@ -6458,6 +7183,11 @@ function normalizeUsers(users, legacyModeratorNames) {
       vrchatName: name,
       discordName: username,
       discordUserId: "",
+      discordLinkedAt: "",
+      discordAvatarUrl: "",
+      discordRoleIds: [],
+      discordRoleSyncedAt: "",
+      discordLastSyncError: "",
       avatarUrl: "",
       bio: "",
       contactNote: "",
@@ -6485,6 +7215,7 @@ function normalizeUsers(users, legacyModeratorNames) {
       creatorAutomationLastSource: "",
       vrchatLinkedAt: "",
       vrchatLinkSource: "",
+      needsVrchatName: false,
       weeklyHoursCapacity: 0,
       weeklyDaysCapacity: 0,
       overtimeAdjustments: [],

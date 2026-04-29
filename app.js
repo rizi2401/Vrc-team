@@ -42,6 +42,7 @@ const SONARA_ART_PATH = "/sonara-crest.png";
 const CREATOR_MIN_FOLLOWERS = 200;
 const API_TIMEOUT_MS = 12000;
 let portalRefreshTimer = 0;
+let liveKitClientPromise = null;
 const pendingSubmitForms = new WeakSet();
 
 const state = {
@@ -52,6 +53,15 @@ const state = {
   vrchatLoading: false,
   discordStatus: null,
   discordLoading: false,
+  voice: {
+    config: null,
+    loading: false,
+    room: null,
+    roomId: "",
+    muted: false,
+    participants: [],
+    error: ""
+  },
   ui: {
     editingShiftId: "",
     flash: null,
@@ -527,6 +537,172 @@ async function runDiscordTest() {
     setFlash(error.message, "danger");
   } finally {
     state.discordLoading = false;
+    render();
+  }
+}
+
+async function refreshLiveKitConfig(showErrors = false) {
+  try {
+    const payload = await api("/api/livekit/config");
+    state.voice.config = payload?.voice || null;
+    state.voice.error = "";
+    if (showErrors) setFlash("Voice-Status wurde geladen.", "success");
+  } catch (error) {
+    state.voice.config = null;
+    state.voice.error = error.message;
+    if (showErrors) setFlash(error.message, "danger");
+  } finally {
+    render();
+  }
+}
+
+function getLiveKitClientNamespace() {
+  return window.LivekitClient || window.LiveKitClient || window.livekitClient || null;
+}
+
+async function loadLiveKitClient() {
+  const existing = getLiveKitClientNamespace();
+  if (existing) return existing;
+  if (liveKitClientPromise) return liveKitClientPromise;
+
+  liveKitClientPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/livekit-client@2.18.7/dist/livekit-client.umd.js";
+    script.async = true;
+    script.onload = () => {
+      const client = getLiveKitClientNamespace();
+      client ? resolve(client) : reject(new Error("LiveKit-Client konnte nicht geladen werden."));
+    };
+    script.onerror = () => reject(new Error("LiveKit-Client konnte nicht geladen werden."));
+    document.head.appendChild(script);
+  });
+
+  return liveKitClientPromise;
+}
+
+function collectVoiceParticipants(room) {
+  if (!room) return [];
+  const participants = [];
+  const local = room.localParticipant;
+  if (local) {
+    participants.push({
+      id: local.identity || "local",
+      name: local.name || local.identity || "Du",
+      local: true,
+      muted: Boolean(local.isMicrophoneEnabled === false)
+    });
+  }
+
+  const remoteParticipants = room.remoteParticipants;
+  if (remoteParticipants?.forEach) {
+    remoteParticipants.forEach((participant) => {
+      participants.push({
+        id: participant.identity || participant.sid,
+        name: participant.name || participant.identity || "Teilnehmer",
+        local: false,
+        muted: Boolean(participant.isMicrophoneEnabled === false)
+      });
+    });
+  }
+
+  return participants;
+}
+
+function refreshVoiceParticipants() {
+  state.voice.participants = collectVoiceParticipants(state.voice.room);
+  render();
+}
+
+async function joinVoiceRoom(roomId) {
+  if (state.voice.room) {
+    await leaveVoiceRoom(false);
+  }
+
+  state.voice.loading = true;
+  state.voice.error = "";
+  render();
+
+  try {
+    const payload = await api("/api/livekit/token", {
+      method: "POST",
+      body: JSON.stringify({ roomId })
+    });
+    const LiveKit = await loadLiveKitClient();
+    const room = new LiveKit.Room({
+      adaptiveStream: true,
+      dynacast: true
+    });
+    const RoomEvent = LiveKit.RoomEvent || {};
+    const updateEvents = [
+      RoomEvent.ParticipantConnected,
+      RoomEvent.ParticipantDisconnected,
+      RoomEvent.TrackMuted,
+      RoomEvent.TrackUnmuted,
+      RoomEvent.LocalTrackPublished,
+      RoomEvent.LocalTrackUnpublished,
+      RoomEvent.ConnectionStateChanged
+    ].filter(Boolean);
+
+    updateEvents.forEach((eventName) => room.on(eventName, refreshVoiceParticipants));
+    room.on(RoomEvent.Disconnected || "disconnected", () => {
+      state.voice.room = null;
+      state.voice.roomId = "";
+      state.voice.participants = [];
+      state.voice.muted = false;
+      render();
+    });
+
+    await room.connect(payload.serverUrl, payload.token);
+    if (room.localParticipant?.setMicrophoneEnabled) {
+      await room.localParticipant.setMicrophoneEnabled(true);
+    }
+
+    state.voice.room = room;
+    state.voice.roomId = roomId;
+    state.voice.muted = false;
+    state.voice.participants = collectVoiceParticipants(room);
+    setFlash("Voice-Raum verbunden.", "success");
+  } catch (error) {
+    state.voice.error = error.message;
+    setFlash(error.message, "danger");
+  } finally {
+    state.voice.loading = false;
+    render();
+  }
+}
+
+async function leaveVoiceRoom(showFlash = true) {
+  const room = state.voice.room;
+  if (room) {
+    try {
+      room.disconnect();
+    } catch {}
+  }
+
+  state.voice.room = null;
+  state.voice.roomId = "";
+  state.voice.participants = [];
+  state.voice.muted = false;
+  state.voice.loading = false;
+  if (showFlash) setFlash("Voice-Raum verlassen.", "info");
+  render();
+}
+
+async function toggleVoiceMute() {
+  const room = state.voice.room;
+  if (!room?.localParticipant?.setMicrophoneEnabled) return;
+  const nextMuted = !state.voice.muted;
+  state.voice.loading = true;
+  render();
+
+  try {
+    await room.localParticipant.setMicrophoneEnabled(!nextMuted);
+    state.voice.muted = nextMuted;
+    state.voice.participants = collectVoiceParticipants(room);
+  } catch (error) {
+    setFlash(error.message, "danger");
+  } finally {
+    state.voice.loading = false;
     render();
   }
 }
@@ -4743,6 +4919,7 @@ function renderDiscordPanel() {
         <div class="card-actions">
           <button type="button" class="ghost small" data-action="refresh-discord-status" ${state.discordLoading ? "disabled" : ""}>Status neu laden</button>
           <button type="button" class="small" data-action="run-discord-test" ${state.discordLoading ? "disabled" : ""}>${state.discordLoading ? "Pruefe..." : "Testnachricht senden"}</button>
+          <button type="button" class="ghost small" data-action="sync-discord-roles" ${state.discordLoading ? "disabled" : ""}>Rollen synchronisieren</button>
         </div>
       </div>
 
@@ -4752,6 +4929,8 @@ function renderDiscordPanel() {
           : `
             <div class="stats-strip compact-stats">
               ${renderStatCard("Bot", status.configured ? "Bereit" : "Fehlt", status.configured ? "DISCORD_BOT_TOKEN und DISCORD_CHANNEL_ID sind gesetzt" : "Bitte in Render unter Umwelt eintragen", status.configured ? "teal" : "rose")}
+              ${renderStatCard("OAuth Login", status.oauthConfigured ? "Bereit" : "Fehlt", status.oauthConfigured ? "Discord Login und Verknuepfung sind konfiguriert" : "DISCORD_CLIENT_ID, SECRET und REDIRECT_URI setzen", status.oauthConfigured ? "success" : "rose")}
+              ${renderStatCard("Rollen-Sync", status.roleSyncConfigured ? "Bereit" : "Offen", status.roleSyncConfigured ? "DISCORD_ROLE_MAP_JSON und Guild-ID sind gesetzt" : "Mapping in Render eintragen", status.roleSyncConfigured ? "teal" : "amber")}
               ${renderStatCard("Reminder", status.shiftRemindersEnabled ? "Aktiv" : "Aus", status.shiftRemindersEnabled ? `${status.shiftReminderLookaheadMinutes || 15} Minuten vor Schichtstart` : "DISCORD_SHIFT_REMINDERS_ENABLED ist aus", status.shiftRemindersEnabled ? "success" : "neutral")}
               ${renderStatCard("Plan-Aenderungen", status.shiftChangeNotificationsEnabled ? "An" : "Ruhig", status.shiftChangeNotificationsEnabled ? "Schicht-Aenderungen gehen in den Kanal" : "Nur Reminder/Test, keine Plan-Spam-Nachrichten", status.shiftChangeNotificationsEnabled ? "amber" : "sky")}
               ${renderStatCard("Letzter Versuch", status.lastAttemptAt ? formatDateTime(status.lastAttemptAt) : "-", status.lastStatusCode ? `HTTP ${status.lastStatusCode}` : "Noch kein Versand", "amber")}
@@ -5491,6 +5670,50 @@ async function handleClick(event) {
       await runDiscordTest();
       break;
 
+    case "sync-discord-roles":
+      await performAction(
+        () =>
+          api("/api/admin/discord/sync-roles", {
+            method: "POST",
+            body: "{}"
+          }),
+        "Discord-Rollen wurden synchronisiert."
+      );
+      break;
+
+    case "unlink-discord":
+      if (!window.confirm("Discord-Verknuepfung wirklich trennen?")) return;
+      await performAction(
+        () =>
+          api("/api/profile/discord/unlink", {
+            method: "POST",
+            body: "{}"
+          }),
+        "Discord-Verknuepfung wurde getrennt.",
+        "warning"
+      );
+      break;
+
+    case "refresh-voice-status":
+      state.voice.loading = true;
+      render();
+      await refreshLiveKitConfig(true);
+      state.voice.loading = false;
+      render();
+      break;
+
+    case "join-voice-room":
+      await joinVoiceRoom(actionElement.dataset.roomId || "community");
+      break;
+
+    case "leave-voice-room":
+      await leaveVoiceRoom(true);
+      break;
+
+    case "toggle-voice-mute":
+      await toggleVoiceMute();
+      break;
+
     case "run-vrchat-sync":
       setFlash("Die VRChat-Datei-Anbindung wurde entfernt.", "info");
       state.vrchatOverview = null;
@@ -5514,6 +5737,9 @@ async function handleClick(event) {
       state.vrchatLoading = false;
       state.discordStatus = null;
       state.discordLoading = false;
+      await leaveVoiceRoom(false);
+      state.voice.config = null;
+      state.voice.error = "";
       state.ui.editingShiftId = "";
       state.ui.activeTab = "";
       await refreshPublicData();
@@ -9878,6 +10104,7 @@ function renderPublicPortal() {
             <div class="public-auth-cta-actions">
               <a class="creator-action-link" href="#portal-login">${escapeHtml(loginButtonLabel)}</a>
               <a class="creator-action-link" href="#portal-register">${escapeHtml(registerButtonLabel)}</a>
+              <a class="creator-action-link discord-auth-link" href="/auth/discord/start?mode=login">Mit Discord einloggen</a>
             </div>
           </section>
 
@@ -9898,6 +10125,7 @@ function renderPublicPortal() {
             </div>
             ${vrchatLink ? '<p class="login-note">Nach dem Login springst du direkt in dein Portal-Profil.</p>' : ""}
             <button type="submit">${loginButtonLabel}</button>
+            <a class="creator-action-link discord-auth-link" href="/auth/discord/start?mode=login">Stattdessen mit Discord einloggen</a>
           </form>
 
           <form class="panel auth-card" data-form="register" id="portal-register">
@@ -9933,6 +10161,7 @@ function renderPublicPortal() {
             </div>
             ${vrchatLink ? '<p class="login-note">Nach der Registrierung wird dein neues Konto direkt mit diesem VRChat-Link markiert und eingeloggt.</p>' : ""}
             <button type="submit">${registerButtonLabel}</button>
+            <a class="creator-action-link discord-auth-link" href="/auth/discord/start?mode=register">Mit Discord registrieren</a>
           </form>
         </div>
       </div>
@@ -10476,9 +10705,17 @@ function renderProfilePanel(managerView) {
             <div class="creator-presence-inline">
               <span class="pill ${creatorPresence.tone}">${escapeHtml(creatorPresence.title)}</span>
               <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
+              <span class="pill ${user.discordUserId ? "success" : "amber"}">${user.discordUserId ? "Discord verknuepft" : "Discord fehlt"}</span>
               ${creatorPresence.updatedLabel ? `<span class="timeline-meta">${escapeHtml(creatorPresence.updatedLabel)}</span>` : ""}
             </div>
             ${user.creatorSlug ? `<p class="timeline-meta">Slash-Seite: ${escapeHtml(`/creator/${user.creatorSlug}`)}</p>` : ""}
+            <div class="card-actions">
+              ${
+                user.discordUserId
+                  ? '<button type="button" class="ghost small" data-action="unlink-discord">Discord trennen</button>'
+                  : '<a class="creator-action-link discord-auth-link" href="/auth/discord/start?mode=link">Discord verknuepfen</a>'
+              }
+            </div>
           </div>
         </div>
 
@@ -11197,6 +11434,100 @@ function renderLivePanel() {
       <div class="team-grid">
         ${creators.length ? creators.map((entry) => renderCreatorCard(entry)).join("") : renderEmptyState("Noch keine Creator", "Sobald Creator Links oder einen Kurztext im Profil pflegen, erscheinen sie hier.")}
       </div>
+    </section>
+  `;
+}
+
+function renderVoicePanel() {
+  const config = state.voice.config;
+  const rooms = config?.rooms || [
+    { id: "community", label: "Community Voice", description: "Offener Sprachraum fuer alle Mitglieder.", allowed: true },
+    { id: "staff", label: "Staff Voice", description: "Interner Sprachraum fuer das Team.", allowed: canAccessStaffArea() }
+  ];
+  const connectedRoom = rooms.find((room) => room.id === state.voice.roomId);
+
+  if (!config && state.session && !state.voice.loading && !state.voice.error) {
+    state.voice.loading = true;
+    queueMicrotask(async () => {
+      await refreshLiveKitConfig(false);
+      state.voice.loading = false;
+      render();
+    });
+  }
+
+  return `
+    <section class="panel span-12 voice-stage-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">SONARA Voice</p>
+          <h2>Sprachkanaele direkt im Portal</h2>
+          <p class="section-copy">Audio-only fuer Community und Staff. Community ist fuer alle eingeloggten Mitglieder, Staff bleibt fuer Moderation und Leitung.</p>
+        </div>
+        <div class="card-actions">
+          <button type="button" class="ghost small" data-action="refresh-voice-status" ${state.voice.loading ? "disabled" : ""}>Status neu laden</button>
+          ${state.voice.room ? `<button type="button" class="danger small" data-action="leave-voice-room">Voice verlassen</button>` : ""}
+        </div>
+      </div>
+
+      ${
+        config && !config.enabled
+          ? `<div class="flash flash-warning"><span>LiveKit ist noch nicht verbunden. Bitte LIVEKIT_URL, LIVEKIT_API_KEY und LIVEKIT_API_SECRET in Render setzen.</span></div>`
+          : ""
+      }
+      ${state.voice.error ? `<div class="flash flash-danger"><span>${escapeHtml(state.voice.error)}</span></div>` : ""}
+
+      <div class="voice-room-grid">
+        ${rooms
+          .map((room) => {
+            const active = state.voice.roomId === room.id;
+            return `
+              <article class="mini-card voice-room-card ${active ? "voice-room-card-active" : ""}">
+                <div class="status-row">
+                  <span class="pill ${active ? "success" : room.allowed ? "sky" : "neutral"}">${active ? "Verbunden" : room.allowed ? "Bereit" : "Gesperrt"}</span>
+                  <span class="timeline-meta">${escapeHtml(room.id === "staff" ? "Team" : "Community")}</span>
+                </div>
+                <h3>${escapeHtml(room.label)}</h3>
+                <p>${escapeHtml(room.description)}</p>
+                <div class="card-actions">
+                  ${
+                    active
+                      ? `<button type="button" class="ghost small" data-action="toggle-voice-mute" ${state.voice.loading ? "disabled" : ""}>${state.voice.muted ? "Mikro an" : "Mikro stumm"}</button>`
+                      : `<button type="button" class="small" data-action="join-voice-room" data-room-id="${escapeHtml(room.id)}" ${!room.allowed || state.voice.loading ? "disabled" : ""}>Beitreten</button>`
+                  }
+                </div>
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+
+      <section class="mini-card voice-participants-card">
+        <div class="section-head compact-section-head">
+          <div>
+            <p class="eyebrow">Teilnehmer</p>
+            <h3>${escapeHtml(connectedRoom ? connectedRoom.label : "Noch kein Raum verbunden")}</h3>
+          </div>
+          <span class="pill ${state.voice.room ? "success" : "neutral"}">${escapeHtml(String(state.voice.participants.length))} online</span>
+        </div>
+        ${
+          state.voice.participants.length
+            ? `
+              <div class="voice-participant-list">
+                ${state.voice.participants
+                  .map(
+                    (participant) => `
+                      <div class="voice-participant-pill">
+                        <span>${escapeHtml(participant.local ? `${participant.name} (du)` : participant.name)}</span>
+                        <span class="timeline-meta">${participant.muted ? "stumm" : "spricht bereit"}</span>
+                      </div>
+                    `
+                  )
+                  .join("")}
+              </div>
+            `
+            : renderEmptyState("Noch niemand im Voice", "Tritt einem Raum bei, dann erscheinen hier die Teilnehmer.")
+        }
+      </section>
     </section>
   `;
 }
@@ -12075,6 +12406,7 @@ function getDashboardTabSections() {
     { id: "creators", label: "Creator" },
     { id: "live", label: "Sonara Live" },
     { id: "forum", label: "Forum" },
+    { id: "voice", label: "Voice" },
     { id: "chat", label: "Chat" }
   ];
 
@@ -12405,6 +12737,8 @@ function renderManagerDashboard(activeTab) {
       return renderLivePanel();
     case "forum":
       return renderForumPanel(true);
+    case "voice":
+      return renderVoicePanel();
     case "schedule":
       return [renderMySchedulePanel(), renderSwapPanel(false)].join("");
     case "availability":
@@ -12451,6 +12785,8 @@ function renderModeratorDashboard(activeTab) {
       return renderLivePanel();
     case "forum":
       return renderForumPanel(false);
+    case "voice":
+      return renderVoicePanel();
     case "schedule":
       return [renderMySchedulePanel(), renderSwapPanel(false)].join("");
     case "availability":
@@ -12502,6 +12838,8 @@ function renderMemberDashboard(activeTab) {
       return renderLivePanel();
     case "forum":
       return renderForumPanel(false);
+    case "voice":
+      return renderVoicePanel();
     case "feedback":
       return renderFeedbackMemberPanel();
     case "availability":
@@ -12528,12 +12866,12 @@ function renderMemberDashboard(activeTab) {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile", "settings"]
+    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile", "settings"]
     : canCoordinateStaff()
-      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile"]
+      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile"]
     : canAccessStaffArea()
-      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "schedule", "availability", "feedback", "chat", "time", "profile"]
-      : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "availability", "feedback", "chat", "profile"];
+      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile"]
+      : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile"];
 
   return allowed.includes(tab) ? tab : "overview";
 }

@@ -4789,6 +4789,49 @@ input[type="file"]::-webkit-file-upload-button {
   margin-bottom: 0;
 }
 
+.discord-auth-link {
+  text-align: center;
+}
+
+.voice-stage-panel {
+  overflow: hidden;
+}
+
+.voice-room-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.voice-room-card {
+  min-height: 190px;
+}
+
+.voice-room-card-active {
+  border-color: rgba(72, 211, 183, 0.5);
+  box-shadow: 0 0 0 1px rgba(72, 211, 183, 0.18), 0 18px 45px rgba(9, 30, 46, 0.28);
+}
+
+.voice-participants-card {
+  margin-top: 1rem;
+}
+
+.voice-participant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.voice-participant-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(255, 219, 166, 0.16);
+  border-radius: 999px;
+  background: rgba(10, 23, 42, 0.68);
+}
+
 @media (max-width: 980px) {
   .promo-video-layout {
     grid-template-columns: 1fr;

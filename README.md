@@ -87,6 +87,11 @@ DISCORD_SHIFT_CHANGE_NOTIFICATIONS_ENABLED=0
 DISCORD_SHIFT_REMINDERS_ENABLED=1
 DISCORD_SHIFT_REMINDER_LOOKAHEAD_MINUTES=15
 DISCORD_SHIFT_REMINDER_INTERVAL_MS=60000
+DISCORD_CLIENT_ID=...
+DISCORD_CLIENT_SECRET=...
+DISCORD_REDIRECT_URI=https://deine-domain/auth/discord/callback
+DISCORD_GUILD_ID=...
+DISCORD_ROLE_MAP_JSON={"moderator":["123"],"moderation_lead":["456"],"planner":["789"]}
 ```
 
 Bedeutung:
@@ -102,6 +107,27 @@ Hinweise:
 - Wenn ein User `discordUserId` gespeichert hat, versucht die App zuerst eine Direktnachricht.
 - Ohne `discordUserId` faellt die Erinnerung auf den eingestellten Discord-Channel zurueck.
 - Team-Infos koennen weiter automatisch in den Channel gesendet werden.
+- Discord OAuth ermoeglicht Login, Registrierung und Profil-Verknuepfung per Discord.
+- `DISCORD_ROLE_MAP_JSON` synchronisiert Discord-Rollen auf Portal-Rollen. Admin-Sync bleibt aus, ausser `DISCORD_ROLE_SYNC_ALLOW_ADMIN=1` ist gesetzt.
+
+## LiveKit Voice
+
+Fuer Sprachraeume im Portal:
+
+```text
+LIVEKIT_URL=wss://...
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+LIVEKIT_ENABLED=1
+LIVEKIT_COMMUNITY_ROOM=sonara-community
+LIVEKIT_STAFF_ROOM=sonara-staff
+```
+
+Die erste Version ist Audio-only:
+
+- `Community Voice` ist fuer alle eingeloggten Mitglieder.
+- `Staff Voice` ist fuer Moderator, Moderationsleitung, Planung und Admin.
+- Ohne LiveKit-Variablen bleibt die Voice-Seite sichtbar, zeigt aber eine klare Konfigurationsmeldung.
 
 ## Fuer echten Online-Betrieb empfohlen
 
