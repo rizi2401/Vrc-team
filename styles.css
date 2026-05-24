@@ -50,6 +50,82 @@
   margin: 0;
 }
 
+.layout-editor-list,
+.layout-panel-rows {
+  display: grid;
+  gap: 1rem;
+}
+
+.layout-panel-row {
+  min-width: 0;
+}
+
+.layout-panel-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.layout-panel-row-head h3 {
+  margin: 0.35rem 0 0;
+}
+
+.layout-collapse-control {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.85rem;
+}
+
+.layout-is-hidden {
+  display: none !important;
+}
+
+.layout-is-collapsed > :not(.layout-collapse-control):not(.section-head) {
+  display: none !important;
+}
+
+.layout-is-collapsed .section-head {
+  margin-bottom: 0;
+}
+
+.layout-density-compact {
+  padding: clamp(1rem, 1.5vw, 1.35rem);
+}
+
+.layout-density-compact .section-head {
+  margin-bottom: 0.75rem;
+}
+
+.layout-density-large {
+  padding: clamp(1.45rem, 2.5vw, 2.4rem);
+}
+
+.discord-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
+.discord-panel .stat-card {
+  min-width: 0;
+}
+
+.discord-panel .stat-card h3 {
+  font-size: clamp(1.45rem, 3vw, 2.15rem);
+  line-height: 0.95;
+  overflow-wrap: anywhere;
+}
+
+.discord-panel .stat-card p,
+.discord-panel .timeline-meta,
+.discord-panel .pill-note {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .no-code-field-list {
   gap: 0.85rem;
 }
@@ -574,6 +650,10 @@ h3 {
 
 .span-5 {
   grid-column: span 5;
+}
+
+.span-6 {
+  grid-column: span 6;
 }
 
 .span-7 {
@@ -1210,6 +1290,7 @@ code {
 
   .span-4,
   .span-5,
+  .span-6,
   .span-7,
   .span-8 {
     grid-column: span 6;
@@ -1244,6 +1325,7 @@ code {
 
   .span-4,
   .span-5,
+  .span-6,
   .span-7,
   .span-8,
   .span-12 {
@@ -4795,6 +4877,23 @@ input[type="file"]::-webkit-file-upload-button {
 }
 
 .public-auth-cta-actions .creator-action-link {
+  width: 100%;
+}
+
+.discord-primary-actions {
+  align-items: stretch;
+}
+
+.discord-primary-link,
+.discord-register-inline {
+  justify-content: center;
+}
+
+.password-fallback-card {
+  border-style: dashed;
+}
+
+.discord-register-inline {
   width: 100%;
 }
 

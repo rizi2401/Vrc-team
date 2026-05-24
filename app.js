@@ -45,6 +45,71 @@ const LIVEKIT_CLIENT_URLS = [
   "https://cdn.jsdelivr.net/npm/livekit-client@2.18.7/dist/livekit-client.umd.js",
   "https://unpkg.com/livekit-client@2.18.7/dist/livekit-client.umd.js"
 ];
+const PORTAL_LAYOUT_SPAN_OPTIONS = [
+  { value: "span-4", label: "Schmal" },
+  { value: "span-6", label: "Halb" },
+  { value: "span-8", label: "Breit" },
+  { value: "span-12", label: "Ganze Zeile" }
+];
+const PORTAL_LAYOUT_DENSITY_OPTIONS = [
+  { value: "compact", label: "Kompakt" },
+  { value: "normal", label: "Normal" },
+  { value: "large", label: "Gross" }
+];
+const PORTAL_LAYOUT_PANEL_CATALOG = [
+  { id: "overview.notifications", tab: "overview", tabLabel: "Dashboard", label: "Benachrichtigungen", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "overview.voice", tab: "overview", tabLabel: "Dashboard", label: "Voice Schnellzugriff", defaultSpan: "span-12", defaultOrder: 20 },
+  { id: "overview.feed", tab: "overview", tabLabel: "Dashboard", label: "Community Feed", defaultSpan: "span-12", defaultOrder: 30 },
+  { id: "overview.livePreview", tab: "overview", tabLabel: "Dashboard", label: "Sonara Live Vorschau", defaultSpan: "span-12", defaultOrder: 40 },
+  { id: "overview.availabilityReminder", tab: "overview", tabLabel: "Dashboard", label: "Verfuegbarkeit Hinweis", defaultSpan: "span-12", defaultOrder: 50 },
+  { id: "overview.warningAdmin", tab: "overview", tabLabel: "Dashboard", label: "Verwarnungen", defaultSpan: "span-12", defaultOrder: 60 },
+  { id: "overview.newsSpotlight", tab: "overview", tabLabel: "Dashboard", label: "News Spotlight", defaultSpan: "span-12", defaultOrder: 70 },
+  { id: "overview.creators", tab: "overview", tabLabel: "Dashboard", label: "Creator", defaultSpan: "span-12", defaultOrder: 80 },
+  { id: "overview.requests", tab: "overview", tabLabel: "Dashboard", label: "Rueckmeldungen", defaultSpan: "span-4", defaultOrder: 90 },
+  { id: "overview.memberActions", tab: "overview", tabLabel: "Dashboard", label: "Mitglieder Aktionen", defaultSpan: "span-12", defaultOrder: 100 },
+  { id: "overview.memberPulse", tab: "overview", tabLabel: "Dashboard", label: "Community Puls", defaultSpan: "span-5", defaultOrder: 110 },
+  { id: "overview.memberForum", tab: "overview", tabLabel: "Dashboard", label: "Forum Spotlight", defaultSpan: "span-7", defaultOrder: 120 },
+  { id: "overview.communityOverview", tab: "overview", tabLabel: "Dashboard", label: "Community Uebersicht", defaultSpan: "span-12", defaultOrder: 130 },
+  { id: "overview.mySchedule", tab: "overview", tabLabel: "Dashboard", label: "Meine Schichten", defaultSpan: "span-12", defaultOrder: 140 },
+  { id: "feed.main", tab: "feed", tabLabel: "Feed", label: "Feed", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "community.memberActions", tab: "community", tabLabel: "Community", label: "Mitmachen", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "community.memberPulse", tab: "community", tabLabel: "Community", label: "Community Puls", defaultSpan: "span-5", defaultOrder: 20 },
+  { id: "community.overview", tab: "community", tabLabel: "Community", label: "Community Uebersicht", defaultSpan: "span-12", defaultOrder: 30 },
+  { id: "community.memberForum", tab: "community", tabLabel: "Community", label: "Forum Spotlight", defaultSpan: "span-7", defaultOrder: 40 },
+  { id: "community.rules", tab: "community", tabLabel: "Community", label: "Regeln", defaultSpan: "span-12", defaultOrder: 50 },
+  { id: "community.team", tab: "community", tabLabel: "Community", label: "Team", defaultSpan: "span-12", defaultOrder: 60 },
+  { id: "calendar.main", tab: "calendar", tabLabel: "Kalender", label: "Kalender", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "events.main", tab: "events", tabLabel: "Events", label: "Events", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "news.main", tab: "news", tabLabel: "News", label: "News", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "creators.main", tab: "creators", tabLabel: "Creator", label: "Creator", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "live.main", tab: "live", tabLabel: "Sonara Live", label: "Live", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "forum.main", tab: "forum", tabLabel: "Forum", label: "Forum", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "voice.main", tab: "voice", tabLabel: "Voice", label: "Voice", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "schedule.myShifts", tab: "schedule", tabLabel: "Meine Schichten", label: "Meine Schichten", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "schedule.swap", tab: "schedule", tabLabel: "Meine Schichten", label: "Tauschwunsch", defaultSpan: "span-12", defaultOrder: 20 },
+  { id: "availability.workspace", tab: "availability", tabLabel: "Verfuegbarkeit", label: "Verfuegbarkeit", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "feedback.admin", tab: "feedback", tabLabel: "Feedback", label: "Feedback Admin", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "feedback.member", tab: "feedback", tabLabel: "Feedback", label: "Feedback", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "planning.planner", tab: "planning", tabLabel: "Planung", label: "Schichtplanung", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "planning.swap", tab: "planning", tabLabel: "Planung", label: "Tauschwuensche", defaultSpan: "span-4", defaultOrder: 20 },
+  { id: "planning.requests", tab: "planning", tabLabel: "Planung", label: "Rueckmeldungen", defaultSpan: "span-4", defaultOrder: 30 },
+  { id: "capacity.main", tab: "capacity", tabLabel: "Auslastung", label: "Auslastung", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "activity.main", tab: "activity", tabLabel: "Portal-Aktivitaet", label: "Portal-Aktivitaet", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "team.warnings", tab: "team", tabLabel: "Team", label: "Verwarnungen", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "team.members", tab: "team", tabLabel: "Team", label: "Team Accounts", defaultSpan: "span-12", defaultOrder: 20 },
+  { id: "chat.workspace", tab: "chat", tabLabel: "Chat", label: "Chat", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "time.attendance", tab: "time", tabLabel: "Zeiten", label: "Zeiten", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "profile.workspace", tab: "profile", tabLabel: "Profil", label: "Profil", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "settings.catalogs", tab: "settings", tabLabel: "Einstellungen", label: "Planungslisten", defaultSpan: "span-4", defaultOrder: 10 },
+  { id: "settings.notice", tab: "settings", tabLabel: "Einstellungen", label: "Systemhinweis", defaultSpan: "span-8", defaultOrder: 20 },
+  { id: "settings.promo", tab: "settings", tabLabel: "Einstellungen", label: "Landing Video", defaultSpan: "span-12", defaultOrder: 30 },
+  { id: "settings.discord", tab: "settings", tabLabel: "Einstellungen", label: "Discord Status", defaultSpan: "span-12", defaultOrder: 40 },
+  { id: "site.content", tab: "site-admin", tabLabel: "Webseite", label: "Webseite bearbeiten", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "roles.permissions", tab: "roles", tabLabel: "Rollen", label: "Rollen und Rechte", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "collections.builder", tab: "collections", tabLabel: "Datenbuilder", label: "Datenbuilder", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "documents.documents", tab: "documents", tabLabel: "Dokumente", label: "Dokumente", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "documents.uploads", tab: "documents", tabLabel: "Dokumente", label: "Uploads", defaultSpan: "span-12", defaultOrder: 20 }
+];
 let portalRefreshTimer = 0;
 let liveKitClientPromise = null;
 const pendingSubmitForms = new WeakSet();
@@ -82,7 +147,8 @@ const state = {
     pendingRender: false,
     formEditingUntil: 0,
     lastActionSucceeded: false,
-    selectedCreatorId: ""
+    selectedCreatorId: "",
+    collapsedPanels: {}
   }
 };
 
@@ -3607,9 +3673,9 @@ function renderFeedbackAdminPanel() {
     <section class="panel span-5">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Feedback und Wuensche</p>
+          <p class="eyebrow">Tickets und Wuensche</p>
           <h2>Rueckmeldungen aus dem Team</h2>
-          <p class="section-copy">Hier landen Stimmungsbilder, Hinweise, Schichtwuensche und echtes Portal-Feedback.</p>
+          <p class="section-copy">Hier landen Stimmungsbilder, Hinweise, Schichtwuensche und echte Ticket-Eintraege.</p>
         </div>
       </div>
 
@@ -4023,7 +4089,7 @@ async function handleSubmit(event) {
       }
 
       const shiftId = state.ui.editingShiftId;
-      await performAction(
+      const succeeded = await performAction(
         () =>
           api(shiftId ? `/api/shifts/${encodeURIComponent(shiftId)}` : "/api/shifts", {
             method: shiftId ? "PATCH" : "POST",
@@ -4038,7 +4104,7 @@ async function handleSubmit(event) {
 
     case "request": {
       const formData = new FormData(form);
-      await performAction(
+      const succeeded = await performAction(
         () =>
           api("/api/requests", {
             method: "POST",
@@ -4840,7 +4906,7 @@ function renderSettingsPanel() {
     updatedByName: ""
   };
 
-  return `
+  return applyPortalPanelLayoutSequence(`
     <section class="panel span-4">
       <div class="section-head">
         <div>
@@ -4973,14 +5039,14 @@ function renderSettingsPanel() {
     </section>
 
     ${renderDiscordPanel()}
-  `;
+  `, ["settings.catalogs", "settings.notice", "settings.promo", "settings.discord"]);
 }
 
 function renderDiscordPanel() {
   const status = state.discordStatus;
 
   return `
-    <section class="panel span-4">
+    <section class="panel span-12 discord-panel">
       <div class="section-head">
         <div>
           <p class="eyebrow">Discord</p>
@@ -4998,7 +5064,7 @@ function renderDiscordPanel() {
         !status
           ? renderEmptyState("Noch kein Discord-Status", "Sobald du den Status laedst, erscheint hier die aktuelle Bot-Pruefung.")
           : `
-            <div class="stats-strip compact-stats">
+            <div class="discord-status-grid">
               ${renderStatCard("Bot", status.configured ? "Bereit" : "Fehlt", status.configured ? "DISCORD_BOT_TOKEN und DISCORD_CHANNEL_ID sind gesetzt" : "Bitte in Render unter Umwelt eintragen", status.configured ? "teal" : "rose")}
               ${renderStatCard("OAuth Login", status.oauthConfigured ? "Bereit" : "Fehlt", status.oauthConfigured ? "Discord Login und Verknuepfung sind konfiguriert" : "DISCORD_CLIENT_ID, SECRET und REDIRECT_URI setzen", status.oauthConfigured ? "success" : "rose")}
               ${renderStatCard("Rollen-Sync", status.roleSyncConfigured ? "Bereit" : "Offen", status.roleSyncConfigured ? "DISCORD_ROLE_MAP_JSON und Guild-ID sind gesetzt" : "Mapping in Render eintragen", status.roleSyncConfigured ? "teal" : "amber")}
@@ -5041,7 +5107,7 @@ function renderVrchatAnalyticsPanel() {
         !overview
           ? renderEmptyState("Noch keine VRChat-Daten", "Sobald du den Sync startest oder den Status laedst, erscheinen die Daten hier.")
           : `
-            <div class="stats-strip compact-stats">
+            <div class="discord-status-grid">
               ${renderStatCard("DB", overview.databaseConnected ? "Verbunden" : "Fehlt", overview.databaseConnected ? "Postgres ist erreichbar" : "DATABASE_URL fehlt", overview.databaseConnected ? "teal" : "rose")}
               ${renderStatCard("Gruppe", overview.group?.name || "-", overview.group ? `Lookup: ${overview.groupLookup || "-"}` : "Noch nicht aufgeloest", overview.group ? "sky" : "amber")}
               ${renderStatCard("Mitglieder", overview.group?.memberCount ?? "-", overview.group ? "Aus dem letzten Sync" : "Noch keine Daten", "amber")}
@@ -5262,9 +5328,9 @@ function renderRequestMemberPanel() {
     <section class="panel span-5">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Feedback an die Leitung</p>
+          <p class="eyebrow">Tickets an die Leitung</p>
           <h2>Wuensche, Hinweise und Stimmungsbild</h2>
-          <p class="section-copy">Hier meldest du Verfuegbarkeit, gibst Feedback zum Teamalltag oder schickst eine kurze Notiz an die Leitung.</p>
+          <p class="section-copy">Hier meldest du Verfuegbarkeit, gibst Tickets zum Teamalltag oder schickst eine kurze Notiz an die Leitung.</p>
         </div>
       </div>
 
@@ -5362,22 +5428,29 @@ async function handleSubmit(event) {
   switch (formName) {
     case "login": {
       const formData = new FormData(form);
+      const vrchatLink = getVrchatLinkFlowMeta();
       await performAction(
         () =>
           api("/api/login", {
             method: "POST",
             body: JSON.stringify({
               identifier: formData.get("identifier"),
-              password: formData.get("password")
+              password: formData.get("password"),
+              linkSource: vrchatLink?.source || ""
             })
           }),
-        "Willkommen im Portal."
+        vrchatLink ? "VRChat-Verknuepfung abgeschlossen. Du bist jetzt im Portal." : "Willkommen im Portal."
       );
+      if (succeeded && vrchatLink) {
+        completeVrchatLinkFlow();
+        render();
+      }
       break;
     }
 
     case "register": {
       const formData = new FormData(form);
+      const vrchatLink = getVrchatLinkFlowMeta();
       const password = String(formData.get("password") || "");
       const confirmPassword = String(formData.get("confirmPassword") || "");
       if (password !== confirmPassword) {
@@ -5386,7 +5459,7 @@ async function handleSubmit(event) {
         return;
       }
 
-      await performAction(
+      const succeeded = await performAction(
         () =>
           api("/api/register", {
             method: "POST",
@@ -5395,11 +5468,16 @@ async function handleSubmit(event) {
               discordName: formData.get("discordName"),
               avatarUrl: formData.get("avatarUrl"),
               bio: formData.get("bio"),
-              password
+              password,
+              linkSource: vrchatLink?.source || ""
             })
           }),
-        "Zugang wurde erstellt."
+        vrchatLink ? "Konto wurde erstellt und direkt mit deinem VRChat-Link verbunden." : "Zugang wurde erstellt."
       );
+      if (succeeded && vrchatLink) {
+        completeVrchatLinkFlow();
+        render();
+      }
       break;
     }
 
@@ -5710,6 +5788,18 @@ async function handleClick(event) {
       state.ui.activeTab = normalizeActiveTab(actionElement.dataset.tab || "");
       render();
       break;
+
+    case "toggle-panel-collapse": {
+      const panelId = actionElement.dataset.panelId || "";
+      if (!panelId) return;
+      const layout = getPanelLayout(panelId);
+      state.ui.collapsedPanels = {
+        ...(state.ui.collapsedPanels || {}),
+        [panelId]: !isPanelCollapsed(panelId, layout)
+      };
+      render();
+      break;
+    }
 
     case "set-creator-focus":
       state.ui.selectedCreatorId = actionElement.dataset.creatorId || "";
@@ -7944,22 +8034,29 @@ async function handleSubmit(event) {
   switch (formName) {
     case "login": {
       const formData = new FormData(form);
+      const vrchatLink = getVrchatLinkFlowMeta();
       await performAction(
         () =>
           api("/api/login", {
             method: "POST",
             body: JSON.stringify({
               identifier: formData.get("identifier"),
-              password: formData.get("password")
+              password: formData.get("password"),
+              linkSource: vrchatLink?.source || ""
             })
           }),
-        "Willkommen im Portal."
+        vrchatLink ? "VRChat-Verknuepfung abgeschlossen. Du bist jetzt im Portal." : "Willkommen im Portal."
       );
+      if (succeeded && vrchatLink) {
+        completeVrchatLinkFlow();
+        render();
+      }
       break;
     }
 
     case "register": {
       const formData = new FormData(form);
+      const vrchatLink = getVrchatLinkFlowMeta();
       const password = String(formData.get("password") || "");
       const confirmPassword = String(formData.get("confirmPassword") || "");
       if (password !== confirmPassword) {
@@ -7969,7 +8066,7 @@ async function handleSubmit(event) {
       }
 
       const avatarUrl = await readImageFileInput(form.querySelector('input[name="avatarFile"]'));
-      await performAction(
+      const succeeded = await performAction(
         () =>
           api("/api/register", {
             method: "POST",
@@ -7978,11 +8075,16 @@ async function handleSubmit(event) {
               discordName: formData.get("discordName"),
               bio: formData.get("bio"),
               avatarUrl: avatarUrl || "",
-              password
+              password,
+              linkSource: vrchatLink?.source || ""
             })
           }),
-        "Zugang wurde erstellt."
+        vrchatLink ? "Konto wurde erstellt und direkt mit deinem VRChat-Link verbunden." : "Zugang wurde erstellt."
       );
+      if (succeeded && vrchatLink) {
+        completeVrchatLinkFlow();
+        render();
+      }
       break;
     }
 
@@ -8179,6 +8281,19 @@ async function handleSubmit(event) {
             body: JSON.stringify({ roleDefinitions })
           }),
         "Rollen und Rechte wurden gespeichert."
+      );
+      break;
+    }
+
+    case "layout-settings": {
+      const layoutSettings = collectLayoutSettingsPayload(form);
+      await performAction(
+        () =>
+          api("/api/admin/layout-settings", {
+            method: "PUT",
+            body: JSON.stringify(layoutSettings)
+          }),
+        "Portal-Layout wurde gespeichert."
       );
       break;
     }
@@ -10265,6 +10380,9 @@ function renderPublicPortal() {
     : [`${stats.members || 0} Mitglieder`, `${stats.liveCreators || 0} live`, `${(community.events || []).length} Events`];
   const loginButtonLabel = vrchatLink ? "Anmelden und verbinden" : siteContent.primaryButtonLabel || "Einloggen";
   const registerButtonLabel = vrchatLink ? "Konto anlegen und verbinden" : siteContent.secondaryButtonLabel || "Zugang erstellen";
+  const discordLinkParams = vrchatLink ? `&linkSource=${encodeURIComponent(vrchatLink.source)}&return=${encodeURIComponent("/")}` : "";
+  const discordLoginHref = `/auth/discord/start?mode=login${discordLinkParams}`;
+  const discordRegisterHref = `/auth/discord/start?mode=register${discordLinkParams}`;
   const siteCards = Array.isArray(siteContent.infoCards) && siteContent.infoCards.length ? siteContent.infoCards : [
     { title: "News", body: "Aktuelle Hinweise und Event-Infos." },
     { title: "Community", body: "Regeln, Team, Creator und Kontaktwege." },
@@ -10345,21 +10463,21 @@ function renderPublicPortal() {
         <div class="auth-stack public-auth-stack">
           <section class="panel auth-card public-auth-cta">
             <div>
-              <p class="eyebrow">Schnellzugang</p>
-              <h3>Hier geht es rein</h3>
-              <p class="helper-text">Wenn du schon ein Konto hast, geh direkt auf <strong>Einloggen</strong>. Wenn du neu bist, geh auf <strong>Registrierung</strong>.</p>
+              <p class="eyebrow">Discord zuerst</p>
+              <h3>Mit Discord starten</h3>
+              <p class="helper-text">Logge dich direkt mit Discord ein oder erstelle dein Konto darueber. Passwort bleibt als Fallback fuer bestehende Accounts verfuegbar.</p>
             </div>
-            <div class="public-auth-cta-actions">
-              <a class="creator-action-link" href="#portal-login">${escapeHtml(loginButtonLabel)}</a>
-              <a class="creator-action-link" href="#portal-register">${escapeHtml(registerButtonLabel)}</a>
-              <a class="creator-action-link discord-auth-link" href="/auth/discord/start?mode=login">Mit Discord einloggen</a>
+            <div class="public-auth-cta-actions discord-primary-actions">
+              <a class="creator-action-link discord-auth-link discord-primary-link" href="${escapeHtml(discordLoginHref)}">Mit Discord einloggen</a>
+              <a class="creator-action-link discord-auth-link discord-primary-link" href="${escapeHtml(discordRegisterHref)}">Mit Discord registrieren</a>
             </div>
           </section>
 
-          <form class="panel auth-card" data-form="login" id="portal-login">
+          <form class="panel auth-card password-fallback-card" data-form="login" id="portal-login">
             <div>
-              <p class="eyebrow">${vrchatLink ? "VRChat Login" : "Login"}</p>
-              <h3>${vrchatLink ? "Mit deinem SONARA-Konto verbinden" : "Einloggen"}</h3>
+              <p class="eyebrow">${vrchatLink ? "VRChat Fallback" : "Passwort-Fallback"}</p>
+              <h3>${vrchatLink ? "Mit Passwort verbinden" : "Mit Passwort einloggen"}</h3>
+              <p class="helper-text">Fuer bestehende Konten, falls Discord gerade nicht passt.</p>
             </div>
             <div class="auth-fieldset">
               <div class="field">
@@ -10373,14 +10491,16 @@ function renderPublicPortal() {
             </div>
             ${vrchatLink ? '<p class="login-note">Nach dem Login springst du direkt in dein Portal-Profil.</p>' : ""}
             <button type="submit">${loginButtonLabel}</button>
-            <a class="creator-action-link discord-auth-link" href="/auth/discord/start?mode=login">Stattdessen mit Discord einloggen</a>
+            <a class="creator-action-link discord-auth-link" href="${escapeHtml(discordLoginHref)}">Stattdessen mit Discord einloggen</a>
           </form>
 
           <form class="panel auth-card" data-form="register" id="portal-register">
             <div>
               <p class="eyebrow">${vrchatLink ? "Neu verbinden" : "Registrierung"}</p>
               <h3>${vrchatLink ? "Noch kein Konto? Direkt hier anlegen" : "Konto anlegen"}</h3>
+              <p class="helper-text">Discord ist der bevorzugte Weg. Manuell geht weiter mit VRChat-Name, Discord-Name und Passwort.</p>
             </div>
+            <a class="creator-action-link discord-auth-link discord-register-inline" href="${escapeHtml(discordRegisterHref)}">Mit Discord registrieren</a>
             <div class="auth-fieldset">
               <div class="field">
                 <label for="registerVrchatName">VRChat-Name</label>
@@ -10409,7 +10529,6 @@ function renderPublicPortal() {
             </div>
             ${vrchatLink ? '<p class="login-note">Nach der Registrierung wird dein neues Konto direkt mit diesem VRChat-Link markiert und eingeloggt.</p>' : ""}
             <button type="submit">${registerButtonLabel}</button>
-            <a class="creator-action-link discord-auth-link" href="/auth/discord/start?mode=register">Mit Discord registrieren</a>
           </form>
         </div>
       </div>
@@ -10486,6 +10605,16 @@ function getPermissionCatalog() {
   return Array.isArray(state.data?.permissionCatalog) ? state.data.permissionCatalog : [];
 }
 
+function hasCurrentPermission(permission) {
+  if (!permission) return false;
+  if (state.session?.role === "admin") return true;
+  return Array.isArray(state.data?.currentPermissions) && state.data.currentPermissions.includes(permission);
+}
+
+function canManageLayout() {
+  return hasCurrentPermission("layout_manage");
+}
+
 function getRoleLabel(roleKey) {
   const role = getRoleDefinitions().find((entry) => entry.key === roleKey);
   return role?.label || ROLE_LABELS[roleKey] || roleKey || "";
@@ -10537,6 +10666,142 @@ function collectRoleDefinitionsPayload(form) {
       return { key, label, sortOrder, active, system, permissions };
     })
     .filter(Boolean);
+}
+
+function getPortalLayoutSettings() {
+  return state.data?.layoutSettings || state.data?.noCode?.layoutSettings || { panels: {} };
+}
+
+function getLayoutPanelCatalogEntry(panelId) {
+  return PORTAL_LAYOUT_PANEL_CATALOG.find((entry) => entry.id === panelId) || null;
+}
+
+function normalizePortalLayoutSpan(value, fallback = "span-12") {
+  return ["span-4", "span-5", "span-6", "span-7", "span-8", "span-12"].includes(value) ? value : fallback;
+}
+
+function normalizePortalLayoutDensity(value, fallback = "normal") {
+  return PORTAL_LAYOUT_DENSITY_OPTIONS.some((entry) => entry.value === value) ? value : fallback;
+}
+
+function getPanelLayout(panelId, defaults = {}) {
+  const catalogEntry = getLayoutPanelCatalogEntry(panelId) || {};
+  const stored = getPortalLayoutSettings().panels?.[panelId] || {};
+  const defaultSpan = defaults.span || catalogEntry.defaultSpan || "span-12";
+  const defaultOrder = Number.isFinite(Number(defaults.order ?? catalogEntry.defaultOrder)) ? Number(defaults.order ?? catalogEntry.defaultOrder) : 0;
+
+  return {
+    span: normalizePortalLayoutSpan(stored.span, defaultSpan),
+    order: Number.isFinite(Number(stored.order)) ? Number(stored.order) : defaultOrder,
+    density: normalizePortalLayoutDensity(stored.density, defaults.density || "normal"),
+    collapsible: Boolean(stored.collapsible ?? defaults.collapsible ?? false),
+    collapsedByDefault: Boolean(stored.collapsedByDefault ?? defaults.collapsedByDefault ?? false),
+    hidden: Boolean(stored.hidden ?? false),
+    label: catalogEntry.label || panelId
+  };
+}
+
+function isPanelCollapsed(panelId, layout) {
+  const current = state.ui.collapsedPanels?.[panelId];
+  if (typeof current === "boolean") return current;
+  return Boolean(layout.collapsible && layout.collapsedByDefault);
+}
+
+function stripHtml(value) {
+  const helper = document.createElement("div");
+  helper.innerHTML = String(value || "");
+  return helper.textContent || helper.innerText || "";
+}
+
+function extractPanelTitle(html, fallback) {
+  const match = String(html || "").match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
+  return match ? stripHtml(match[1]).trim() || fallback : fallback;
+}
+
+function applyPortalPanelLayout(panelId, html, layout) {
+  const source = String(html || "").trim();
+  if (!source || layout.hidden) return "";
+  const collapsed = isPanelCollapsed(panelId, layout);
+  const title = extractPanelTitle(source, layout.label);
+
+  return source.replace(/<section class="([^"]*\bpanel\b[^"]*)"([^>]*)>/i, (match, className, rest) => {
+    const classes = String(className || "")
+      .split(/\s+/)
+      .filter((entry) => entry && !/^span-\d+$/.test(entry) && !entry.startsWith("layout-density-") && !entry.startsWith("layout-is-"))
+      .concat([layout.span, `layout-density-${layout.density}`, layout.collapsible ? "layout-is-collapsible" : "", collapsed ? "layout-is-collapsed" : ""])
+      .filter(Boolean)
+      .join(" ");
+    const safeOrder = Math.max(0, Math.min(9990, Math.round(Number(layout.order) || 0)));
+    const collapseControl = layout.collapsible
+      ? `<div class="layout-collapse-control"><button type="button" class="ghost small" data-action="toggle-panel-collapse" data-panel-id="${escapeHtml(panelId)}">${collapsed ? "Aufklappen" : "Einklappen"}: ${escapeHtml(title)}</button></div>`
+      : "";
+
+    return `<section class="${classes}" data-panel-id="${escapeHtml(panelId)}" style="order:${safeOrder};"${rest}>${collapseControl}`;
+  });
+}
+
+function renderPortalPanel(panelId, html, defaults = {}) {
+  const layout = getPanelLayout(panelId, defaults);
+  return applyPortalPanelLayout(panelId, html, layout);
+}
+
+function applyPortalPanelLayoutSequence(html, panelIds) {
+  let index = 0;
+  return String(html || "").replace(/<section class="([^"]*\bpanel\b[^"]*)"([^>]*)>/gi, (match, className, rest) => {
+    const panelId = panelIds[index++];
+    if (!panelId) return match;
+    const layout = getPanelLayout(panelId);
+    const collapsed = isPanelCollapsed(panelId, layout);
+    const title = getLayoutPanelCatalogEntry(panelId)?.label || panelId;
+    const classes = String(className || "")
+      .split(/\s+/)
+      .filter((entry) => entry && !/^span-\d+$/.test(entry) && !entry.startsWith("layout-density-") && !entry.startsWith("layout-is-"))
+      .concat([layout.span, `layout-density-${layout.density}`, layout.hidden ? "layout-is-hidden" : "", layout.collapsible ? "layout-is-collapsible" : "", collapsed ? "layout-is-collapsed" : ""])
+      .filter(Boolean)
+      .join(" ");
+    const safeOrder = Math.max(0, Math.min(9990, Math.round(Number(layout.order) || 0)));
+    const collapseControl = layout.collapsible
+      ? `<div class="layout-collapse-control"><button type="button" class="ghost small" data-action="toggle-panel-collapse" data-panel-id="${escapeHtml(panelId)}">${collapsed ? "Aufklappen" : "Einklappen"}: ${escapeHtml(title)}</button></div>`
+      : "";
+    return `<section class="${classes}" data-panel-id="${escapeHtml(panelId)}" style="order:${safeOrder};"${rest}>${collapseControl}`;
+  });
+}
+
+function renderPortalPanelList(tabId, panels) {
+  return panels
+    .map((panel, index) => {
+      const catalogEntry = getLayoutPanelCatalogEntry(panel.id) || {};
+      const defaultSpan = panel.defaultSpan || catalogEntry.defaultSpan || "span-12";
+      const defaultOrder = panel.defaultOrder ?? catalogEntry.defaultOrder ?? (index + 1) * 10;
+      const layout = getPanelLayout(panel.id, { span: defaultSpan, order: defaultOrder, density: panel.density || "normal" });
+      return {
+        ...panel,
+        layout,
+        html: typeof panel.render === "function" ? panel.render() : panel.html || "",
+        index
+      };
+    })
+    .filter((panel) => !panel.layout.hidden)
+    .sort((left, right) => left.layout.order - right.layout.order || left.index - right.index)
+    .map((panel) => applyPortalPanelLayout(panel.id, panel.html, panel.layout))
+    .join("");
+}
+
+function collectLayoutSettingsPayload(form) {
+  const panels = {};
+  [...form.querySelectorAll("[data-layout-row]")].forEach((row) => {
+    const panelId = row.dataset.panelId || "";
+    if (!panelId) return;
+    panels[panelId] = {
+      span: row.querySelector('[name="span"]')?.value || "span-12",
+      order: Number(row.querySelector('[name="order"]')?.value || 0),
+      density: row.querySelector('[name="density"]')?.value || "normal",
+      collapsible: Boolean(row.querySelector('[name="collapsible"]')?.checked),
+      collapsedByDefault: Boolean(row.querySelector('[name="collapsedByDefault"]')?.checked),
+      hidden: Boolean(row.querySelector('[name="hidden"]')?.checked)
+    };
+  });
+  return { panels };
 }
 
 function collectCustomRecordPayload(form) {
@@ -10772,6 +11037,105 @@ function renderRolePermissionRow(role, permissions, index) {
           .join("")}
       </div>
       ${isAdmin ? '<p class="helper-text">Admin bleibt immer aktiv und behaelt Vollzugriff.</p>' : ""}
+    </article>
+  `;
+}
+
+function renderLayoutSettingsAdminPanel() {
+  const groupedTabs = PORTAL_LAYOUT_PANEL_CATALOG.reduce((groups, panel) => {
+    if (!groups.some((entry) => entry.tab === panel.tab)) {
+      groups.push({ tab: panel.tab, label: panel.tabLabel, panels: [] });
+    }
+    groups.find((entry) => entry.tab === panel.tab).panels.push(panel);
+    return groups;
+  }, []);
+
+  return `
+    <section class="panel span-12 layout-admin-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Layout bearbeiten</p>
+          <h2>Panels ohne Code ordnen</h2>
+          <p class="section-copy">Hier stellst du Breite, Reihenfolge, Dichte und Einklappen sicher per Preset ein. Freies CSS gibt es bewusst nicht, damit nichts kaputtgeklickt wird.</p>
+        </div>
+        <span class="pill amber">${PORTAL_LAYOUT_PANEL_CATALOG.length} Panels</span>
+      </div>
+
+      <form class="stack-form" data-form="layout-settings">
+        <div class="layout-editor-list">
+          ${groupedTabs
+            .map(
+              (group, groupIndex) => `
+                <details class="mystic-expander layout-tab-editor" ${groupIndex < 4 ? "open" : ""}>
+                  <summary>
+                    <span>${escapeHtml(group.label)}</span>
+                    <span class="pill neutral">${group.panels.length} Panels</span>
+                  </summary>
+                  <div class="mystic-expander-body layout-panel-rows">
+                    ${group.panels.map((panel, index) => renderLayoutPanelEditorRow(panel, `${group.tab}-${index}`)).join("")}
+                  </div>
+                </details>
+              `
+            )
+            .join("")}
+        </div>
+
+        <div class="card-actions">
+          <button type="submit">Layout speichern</button>
+        </div>
+      </form>
+    </section>
+  `;
+}
+
+function renderLayoutPanelEditorRow(panel, idSuffix) {
+  const layout = getPanelLayout(panel.id, { span: panel.defaultSpan, order: panel.defaultOrder });
+  const inputId = String(idSuffix || panel.id).replace(/[^a-z0-9_-]+/gi, "-");
+
+  return `
+    <article class="mini-card layout-panel-row" data-layout-row data-panel-id="${escapeHtml(panel.id)}">
+      <div class="layout-panel-row-head">
+        <div>
+          <span class="pill sky">${escapeHtml(panel.tabLabel)}</span>
+          <h3>${escapeHtml(panel.label)}</h3>
+          <p class="timeline-meta">${escapeHtml(panel.id)}</p>
+        </div>
+        <label class="checkbox-row">
+          <input name="hidden" type="checkbox" ${layout.hidden ? "checked" : ""}>
+          <span>Ausblenden</span>
+        </label>
+      </div>
+
+      <div class="form-grid compact-meta-grid">
+        <div class="field">
+          <label for="layoutSpan${inputId}">Breite</label>
+          <select id="layoutSpan${inputId}" name="span">
+            ${PORTAL_LAYOUT_SPAN_OPTIONS.map((option) => `<option value="${escapeHtml(option.value)}" ${layout.span === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label for="layoutOrder${inputId}">Reihenfolge</label>
+          <input id="layoutOrder${inputId}" name="order" type="number" min="0" max="9990" step="10" value="${escapeHtml(layout.order)}">
+        </div>
+        <div class="field">
+          <label for="layoutDensity${inputId}">Dichte</label>
+          <select id="layoutDensity${inputId}" name="density">
+            ${PORTAL_LAYOUT_DENSITY_OPTIONS.map((option) => `<option value="${escapeHtml(option.value)}" ${layout.density === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field checkbox-field">
+          <label class="checkbox-row">
+            <input name="collapsible" type="checkbox" ${layout.collapsible ? "checked" : ""}>
+            <span>Aufklappbar</span>
+          </label>
+        </div>
+        <div class="field checkbox-field">
+          <label class="checkbox-row">
+            <input name="collapsedByDefault" type="checkbox" ${layout.collapsedByDefault ? "checked" : ""}>
+            <span>Standard eingeklappt</span>
+          </label>
+        </div>
+      </div>
     </article>
   `;
 }
@@ -13451,7 +13815,7 @@ function getDashboardTabSections() {
 
   const memberSections = [
     { id: "community", title: "Community", tabs: communityTabs },
-    { id: "account", title: "Mein Bereich", tabs: [{ id: "availability", label: "Verfuegbarkeit" }, { id: "feedback", label: "Feedback" }, { id: "profile", label: "Profil" }] }
+    { id: "account", title: "Mein Bereich", tabs: [{ id: "availability", label: "Verfuegbarkeit" }, { id: "feedback", label: "Tickets" }, { id: "profile", label: "Profil" }] }
   ];
 
   if (canManagePortal()) {
@@ -13464,7 +13828,7 @@ function getDashboardTabSections() {
           { id: "schedule", label: "Meine Schichten" },
           { id: "availability", label: "Verfuegbarkeit" },
           { id: "time", label: "Zeiten" },
-          { id: "feedback", label: "Feedback" },
+          { id: "feedback", label: "Tickets" },
           { id: "profile", label: "Profil" }
         ]
       },
@@ -13473,6 +13837,7 @@ function getDashboardTabSections() {
         title: "Koordination",
         tabs: [
           { id: "planning", label: "Planung" },
+          { id: "applications", label: "Bewerbungen" },
           { id: "capacity", label: "Auslastung" },
           { id: "activity", label: "Portal-Aktivitaet" },
           { id: "team", label: "Team" }
@@ -13486,7 +13851,8 @@ function getDashboardTabSections() {
           { id: "site-admin", label: "Webseite" },
           { id: "roles", label: "Rollen" },
           { id: "collections", label: "Datenbuilder" },
-          { id: "documents", label: "Dokumente" }
+          { id: "documents", label: "Dokumente" },
+          ...(canManageLayout() ? [{ id: "layout", label: "Layout" }] : [])
         ]
       }
     ];
@@ -13502,7 +13868,7 @@ function getDashboardTabSections() {
           { id: "schedule", label: "Meine Schichten" },
           { id: "availability", label: "Verfuegbarkeit" },
           { id: "time", label: "Zeiten" },
-          { id: "feedback", label: "Feedback" },
+          { id: "feedback", label: "Tickets" },
           { id: "profile", label: "Profil" }
         ]
       },
@@ -13529,7 +13895,7 @@ function getDashboardTabSections() {
           { id: "schedule", label: "Meine Schichten" },
           { id: "availability", label: "Verfuegbarkeit" },
           { id: "time", label: "Zeiten" },
-          { id: "feedback", label: "Feedback" },
+          { id: "feedback", label: "Tickets" },
           { id: "profile", label: "Profil" }
         ]
       }
@@ -13537,6 +13903,50 @@ function getDashboardTabSections() {
   }
 
   return memberSections;
+}
+
+function renderCreatorApplicationsPanel() {
+  const pendingApplications = canManagePortal() ? getCreatorReviewEntries(["pending"]) : [];
+  const recentReviews = canManagePortal() ? getCreatorReviewEntries(["approved", "rejected"]) : [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Bewerbungen</p>
+          <h2>Creator-Anfragen und Bewerbungsstatus</h2>
+          <p class="section-copy">Hier bearbeitet die Leitung eingegangene Creator-Bewerbungen und schreibt direkt eine Review-Notiz dazu.</p>
+        </div>
+      </div>
+
+      ${pendingApplications.length
+        ? `
+            <div class="creator-review-grid">
+              ${pendingApplications.map((entry) => renderCreatorReviewCard(entry, "creator-tab")).join("")}
+            </div>
+          `
+        : renderEmptyState(
+            "Keine offenen Bewerbungen",
+            "Zurzeit liegen keine neuen Creator-Bewerbungen bei der Leitung vor."
+          )}
+
+      ${recentReviews.length
+        ? `
+            <section class="panel span-12">
+              <div class="section-head compact-section-head">
+                <div>
+                  <p class="eyebrow">Bereits bearbeitet</p>
+                  <h3>Freigegebene und abgelehnte Bewerbungen</h3>
+                </div>
+              </div>
+              <div class="creator-review-grid">
+                ${recentReviews.map((entry) => renderCreatorReviewCard(entry, "creator-tab")).join("")}
+              </div>
+            </section>
+          `
+        : ""}
+    </section>
+  `;
 }
 
 function renderDashboardTabs(activeTab) {
@@ -13771,167 +14181,220 @@ function renderMemberForumSpotlightPanel() {
 function renderManagerDashboard(activeTab) {
   switch (activeTab) {
     case "feed":
-      return renderFeedPanel();
+      return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
-      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+      return renderPortalPanelList("community", [
+        { id: "community.overview", render: renderCommunityOverviewPanel },
+        { id: "community.rules", render: renderCommunityRulesPanel },
+        { id: "community.team", render: renderCommunityTeamPanel }
+      ]);
     case "calendar":
-      return renderShiftCalendarPanel();
+      return renderPortalPanel("calendar.main", renderShiftCalendarPanel());
     case "events":
-      return renderEventsPanel();
+      return renderPortalPanel("events.main", renderEventsPanel());
     case "news":
-      return renderNewsPanel(true);
+      return renderPortalPanel("news.main", renderNewsPanel(true));
     case "creators":
-      return renderCreatorsPanel(true);
+      return renderPortalPanel("creators.main", renderCreatorsPanel(true));
     case "live":
-      return renderLivePanel();
+      return renderPortalPanel("live.main", renderLivePanel());
     case "forum":
-      return renderForumPanel(true);
+      return renderPortalPanel("forum.main", renderForumPanel(true));
     case "voice":
-      return renderVoicePanel();
+      return renderPortalPanel("voice.main", renderVoicePanel());
     case "schedule":
-      return [renderMySchedulePanel(), renderSwapPanel(false)].join("");
+      return renderPortalPanelList("schedule", [
+        { id: "schedule.myShifts", render: renderMySchedulePanel },
+        { id: "schedule.swap", render: () => renderSwapPanel(false) }
+      ]);
     case "availability":
-      return renderAvailabilityWorkspace();
+      return renderPortalPanel("availability.workspace", renderAvailabilityWorkspace());
     case "feedback":
-      return renderFeedbackAdminPanel();
+      return renderPortalPanel("feedback.admin", renderFeedbackAdminPanel());
     case "planning":
-      return [renderPlannerPanel(), renderSwapPanel(true), renderRequestAdminPanel()].join("");
+      return renderPortalPanelList("planning", [
+        { id: "planning.planner", render: renderPlannerPanel },
+        { id: "planning.swap", render: () => renderSwapPanel(true) },
+        { id: "planning.requests", render: renderRequestAdminPanel }
+      ]);
     case "capacity":
-      return renderCapacityPanel();
+      return renderPortalPanel("capacity.main", renderCapacityPanel());
     case "activity":
-      return renderPortalActivityPanel();
+      return renderPortalPanel("activity.main", renderPortalActivityPanel());
     case "team":
-      return [renderWarningAdminPanel(), renderTeamPanelV2()].join("");
+      return renderPortalPanelList("team", [
+        { id: "team.warnings", render: renderWarningAdminPanel },
+        { id: "team.members", render: renderTeamPanelV2 }
+      ]);
     case "chat":
-      return renderChatWorkspace("manager");
+      return renderPortalPanel("chat.workspace", renderChatWorkspace("manager"));
     case "time":
-      return renderAttendancePanel(true);
+      return renderPortalPanel("time.attendance", renderAttendancePanel(true));
     case "profile":
-      return renderProfileWorkspace(true);
+      return renderPortalPanel("profile.workspace", renderProfileWorkspace(true));
     case "settings":
       return renderSettingsPanel();
     case "site-admin":
-      return renderSiteContentAdminPanel();
+      return renderPortalPanel("site.content", renderSiteContentAdminPanel());
     case "roles":
-      return renderRolePermissionAdminPanel();
+      return renderPortalPanel("roles.permissions", renderRolePermissionAdminPanel());
     case "collections":
-      return renderCollectionsAdminPanel();
+      return renderPortalPanel("collections.builder", renderCollectionsAdminPanel());
     case "documents":
-      return [renderDocumentsAdminPanel(), renderUploadsAdminPanel()].join("");
+      return renderPortalPanelList("documents", [
+        { id: "documents.documents", render: renderDocumentsAdminPanel },
+        { id: "documents.uploads", render: renderUploadsAdminPanel }
+      ]);
+    case "layout":
+      return renderPortalPanel("layout.editor", renderLayoutSettingsAdminPanel(), { span: "span-12", order: 10 });
     case "overview":
     default:
-      return [renderNotificationsPanel(), renderVoiceShortcutPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderAvailabilityReminderPanel(), renderWarningAdminPanel(), renderNewsSpotlightPanel(), renderCreatorsPanel(false), renderRequestAdminPanel()].join("");
+      return renderPortalPanelList("overview", [
+        { id: "overview.notifications", render: renderNotificationsPanel },
+        { id: "overview.voice", render: renderVoiceShortcutPanel },
+        { id: "overview.feed", render: renderFeedPanel },
+        { id: "overview.livePreview", render: () => renderLivePreviewPanel(3) },
+        { id: "overview.availabilityReminder", render: renderAvailabilityReminderPanel },
+        { id: "overview.warningAdmin", render: renderWarningAdminPanel },
+        { id: "overview.newsSpotlight", render: renderNewsSpotlightPanel },
+        { id: "overview.creators", render: () => renderCreatorsPanel(false) },
+        { id: "overview.requests", render: renderRequestAdminPanel }
+      ]);
   }
 }
 
 function renderModeratorDashboard(activeTab) {
   switch (activeTab) {
     case "feed":
-      return renderFeedPanel();
+      return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
-      return [renderCommunityOverviewPanel(), renderCommunityRulesPanel(), renderCommunityTeamPanel()].join("");
+      return renderPortalPanelList("community", [
+        { id: "community.overview", render: renderCommunityOverviewPanel },
+        { id: "community.rules", render: renderCommunityRulesPanel },
+        { id: "community.team", render: renderCommunityTeamPanel }
+      ]);
     case "calendar":
-      return renderShiftCalendarPanel();
+      return renderPortalPanel("calendar.main", renderShiftCalendarPanel());
     case "events":
-      return renderEventsPanel();
+      return renderPortalPanel("events.main", renderEventsPanel());
     case "news":
-      return renderNewsPanel(false);
+      return renderPortalPanel("news.main", renderNewsPanel(false));
     case "creators":
-      return renderCreatorsPanel(false);
+      return renderPortalPanel("creators.main", renderCreatorsPanel(false));
     case "live":
-      return renderLivePanel();
+      return renderPortalPanel("live.main", renderLivePanel());
     case "forum":
-      return renderForumPanel(false);
+      return renderPortalPanel("forum.main", renderForumPanel(false));
     case "voice":
-      return renderVoicePanel();
+      return renderPortalPanel("voice.main", renderVoicePanel());
     case "schedule":
-      return [renderMySchedulePanel(), renderSwapPanel(false)].join("");
+      return renderPortalPanelList("schedule", [
+        { id: "schedule.myShifts", render: renderMySchedulePanel },
+        { id: "schedule.swap", render: () => renderSwapPanel(false) }
+      ]);
     case "availability":
-      return renderAvailabilityWorkspace();
+      return renderPortalPanel("availability.workspace", renderAvailabilityWorkspace());
     case "feedback":
-      return renderFeedbackMemberPanel();
+      return renderPortalPanel("feedback.member", renderFeedbackMemberPanel());
     case "planning":
-      return [renderPlannerPanel(), renderSwapPanel(true), renderRequestAdminPanel()].join("");
+      return renderPortalPanelList("planning", [
+        { id: "planning.planner", render: renderPlannerPanel },
+        { id: "planning.swap", render: () => renderSwapPanel(true) },
+        { id: "planning.requests", render: renderRequestAdminPanel }
+      ]);
     case "capacity":
-      return renderCapacityPanel();
+      return renderPortalPanel("capacity.main", renderCapacityPanel());
     case "activity":
-      return renderPortalActivityPanel();
+      return renderPortalPanel("activity.main", renderPortalActivityPanel());
     case "team":
-      return [renderWarningAdminPanel(), renderTeamPanelV2()].join("");
+      return renderPortalPanelList("team", [
+        { id: "team.warnings", render: renderWarningAdminPanel },
+        { id: "team.members", render: renderTeamPanelV2 }
+      ]);
     case "chat":
-      return renderChatWorkspace("staff");
+      return renderPortalPanel("chat.workspace", renderChatWorkspace("staff"));
     case "time":
-      return renderAttendancePanel(false);
+      return renderPortalPanel("time.attendance", renderAttendancePanel(false));
     case "profile":
-      return renderProfileWorkspace(false);
+      return renderPortalPanel("profile.workspace", renderProfileWorkspace(false));
     case "overview":
     default:
-      return [renderNotificationsPanel(), renderVoiceShortcutPanel(), renderFeedPanel(), renderLivePreviewPanel(3), renderAvailabilityReminderPanel(), renderNewsSpotlightPanel(), renderMySchedulePanel(), renderCreatorsPanel(false)].join("");
+      return renderPortalPanelList("overview", [
+        { id: "overview.notifications", render: renderNotificationsPanel },
+        { id: "overview.voice", render: renderVoiceShortcutPanel },
+        { id: "overview.feed", render: renderFeedPanel },
+        { id: "overview.livePreview", render: () => renderLivePreviewPanel(3) },
+        { id: "overview.availabilityReminder", render: renderAvailabilityReminderPanel },
+        { id: "overview.newsSpotlight", render: renderNewsSpotlightPanel },
+        { id: "overview.mySchedule", render: renderMySchedulePanel },
+        { id: "overview.creators", render: () => renderCreatorsPanel(false) }
+      ]);
   }
 }
 
 function renderMemberDashboard(activeTab) {
   switch (activeTab) {
     case "feed":
-      return renderFeedPanel();
+      return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
-      return [
-        renderMemberActionHubPanel(),
-        renderMemberPulsePanel(),
-        renderCommunityOverviewPanel(),
-        renderMemberForumSpotlightPanel(),
-        renderCommunityRulesPanel(),
-        renderCommunityTeamPanel()
-      ].join("");
+      return renderPortalPanelList("community", [
+        { id: "community.memberActions", render: renderMemberActionHubPanel },
+        { id: "community.memberPulse", render: renderMemberPulsePanel },
+        { id: "community.overview", render: renderCommunityOverviewPanel },
+        { id: "community.memberForum", render: renderMemberForumSpotlightPanel },
+        { id: "community.rules", render: renderCommunityRulesPanel },
+        { id: "community.team", render: renderCommunityTeamPanel }
+      ]);
     case "calendar":
-      return renderShiftCalendarPanel();
+      return renderPortalPanel("calendar.main", renderShiftCalendarPanel());
     case "events":
-      return renderEventsPanel();
+      return renderPortalPanel("events.main", renderEventsPanel());
     case "news":
-      return renderNewsPanel(false);
+      return renderPortalPanel("news.main", renderNewsPanel(false));
     case "creators":
-      return renderCreatorsPanel(false);
+      return renderPortalPanel("creators.main", renderCreatorsPanel(false));
     case "live":
-      return renderLivePanel();
+      return renderPortalPanel("live.main", renderLivePanel());
     case "forum":
-      return renderForumPanel(false);
+      return renderPortalPanel("forum.main", renderForumPanel(false));
     case "voice":
-      return renderVoicePanel();
+      return renderPortalPanel("voice.main", renderVoicePanel());
     case "feedback":
-      return renderFeedbackMemberPanel();
+      return renderPortalPanel("feedback.member", renderFeedbackMemberPanel());
     case "availability":
-      return renderAvailabilityWorkspace();
+      return renderPortalPanel("availability.workspace", renderAvailabilityWorkspace());
     case "chat":
-      return renderChatWorkspace("member");
+      return renderPortalPanel("chat.workspace", renderChatWorkspace("member"));
     case "profile":
-      return renderProfileWorkspace(false);
+      return renderPortalPanel("profile.workspace", renderProfileWorkspace(false));
     case "overview":
     default:
-      return [
-        renderNotificationsPanel(),
-        renderMemberActionHubPanel(),
-        renderVoiceShortcutPanel(),
-        renderFeedPanel(),
-        renderMemberPulsePanel(),
-        renderMemberForumSpotlightPanel(),
-        renderLivePreviewPanel(3),
-        renderNewsSpotlightPanel(),
-        renderCreatorsPanel(false),
-        renderCommunityOverviewPanel()
-      ].join("");
+      return renderPortalPanelList("overview", [
+        { id: "overview.notifications", render: renderNotificationsPanel },
+        { id: "overview.memberActions", render: renderMemberActionHubPanel },
+        { id: "overview.voice", render: renderVoiceShortcutPanel },
+        { id: "overview.feed", render: renderFeedPanel },
+        { id: "overview.memberPulse", render: renderMemberPulsePanel },
+        { id: "overview.memberForum", render: renderMemberForumSpotlightPanel },
+        { id: "overview.livePreview", render: () => renderLivePreviewPanel(3) },
+        { id: "overview.newsSpotlight", render: renderNewsSpotlightPanel },
+        { id: "overview.creators", render: () => renderCreatorsPanel(false) },
+        { id: "overview.communityOverview", render: renderCommunityOverviewPanel }
+      ]);
   }
 }
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents"]
+    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "applications", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents"]
     : canCoordinateStaff()
       ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile"]
-    : canAccessStaffArea()
-      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile"]
-      : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile"];
+      : canAccessStaffArea()
+        ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile"]
+        : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile"];
 
-  return allowed.includes(tab) ? tab : "overview";
+  const allowedTabs = canManageLayout() ? [...allowed, "layout"] : allowed;
+  return allowedTabs.includes(tab) ? tab : "overview";
 }
 
 function renderEventsPanel() {

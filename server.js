@@ -142,7 +142,8 @@ const DEFAULT_PERMISSION_CATALOG = [
   { key: "roles_manage", label: "Rollen und Rechte", group: "Admin" },
   { key: "collections_manage", label: "Datenbuilder", group: "Admin" },
   { key: "documents_manage", label: "Dokumente", group: "Admin" },
-  { key: "uploads_manage", label: "Uploads", group: "Admin" }
+  { key: "uploads_manage", label: "Uploads", group: "Admin" },
+  { key: "layout_manage", label: "Portal-Layout bearbeiten", group: "Admin" }
 ];
 let PortalPoolCtor = null;
 let portalPool = null;
@@ -1018,7 +1019,8 @@ async function handleApi(req, res, url) {
       collections: auth.store.customCollections,
       records: auth.store.customRecords,
       documents: auth.store.documents,
-      uploads: auth.store.uploads
+      uploads: auth.store.uploads,
+      layoutSettings: auth.store.layoutSettings
     });
     return;
   }
@@ -1088,6 +1090,22 @@ async function handleApi(req, res, url) {
     nextStore.roleDefinitions = roleDefinitions;
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "role-definitions-updated" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "PUT" && url.pathname === "/api/admin/layout-settings") {
+    requireNoCodePermission(auth.user, auth.store, "layout_manage");
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+
+    nextStore.layoutSettings = {
+      ...validateLayoutSettingsPayload(body.layoutSettings || body),
+      updatedAt: new Date().toISOString(),
+      updatedBy: auth.user.id
+    };
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "layout-settings-updated" });
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -2990,6 +3008,7 @@ function normalizeStore(store) {
     systemNotice: normalizeSystemNotice(store?.systemNotice),
     promoVideo: normalizePromoVideo(store?.promoVideo),
     siteContent: normalizeSiteContent(store?.siteContent),
+    layoutSettings: normalizeLayoutSettings(store?.layoutSettings),
     roleDefinitions,
     customCollections,
     customRecords: normalizeCustomRecords(store?.customRecords, customCollections, { users }),
@@ -3073,6 +3092,7 @@ function projectDataForRole(user, store) {
     systemNotice: decorateSystemNotice(store.systemNotice, store),
     promoVideo: decoratePromoVideo(store.promoVideo, store),
     siteContent: noCode.siteContent,
+    layoutSettings: noCode.layoutSettings,
     noCode,
     permissionCatalog: noCode.permissionCatalog,
     currentPermissions: noCode.currentPermissions,
@@ -3175,7 +3195,7 @@ function buildDefaultRoleDefinitions() {
       active: true,
       system: true,
       sortOrder: 40,
-      permissions: all.filter((entry) => entry !== "roles_manage")
+      permissions: all.filter((entry) => !["roles_manage", "layout_manage"].includes(entry))
     },
     {
       key: "admin",
@@ -3260,6 +3280,65 @@ function validateRoleDefinitionsPayload(entries) {
     throw error;
   }
   return normalized;
+}
+
+const LAYOUT_SPAN_VALUES = new Set(["span-4", "span-5", "span-6", "span-7", "span-8", "span-12"]);
+const LAYOUT_DENSITY_VALUES = new Set(["compact", "normal", "large"]);
+
+function normalizeLayoutPanelId(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]+/g, "_")
+    .replace(/^[_.-]+|[_.-]+$/g, "")
+    .slice(0, 90);
+}
+
+function normalizeLayoutPanelConfig(entry = {}) {
+  const span = LAYOUT_SPAN_VALUES.has(String(entry?.span || "")) ? String(entry.span) : "span-12";
+  const density = LAYOUT_DENSITY_VALUES.has(String(entry?.density || "")) ? String(entry.density) : "normal";
+  const rawOrder = Number(entry?.order);
+  const order = Number.isFinite(rawOrder) ? Math.max(0, Math.min(9990, Math.round(rawOrder))) : 0;
+
+  return {
+    span,
+    order,
+    density,
+    collapsible: normalizeBooleanInput(entry?.collapsible),
+    collapsedByDefault: normalizeBooleanInput(entry?.collapsedByDefault),
+    hidden: normalizeBooleanInput(entry?.hidden)
+  };
+}
+
+function normalizeLayoutSettings(input = {}) {
+  const panels = {};
+  const source = input && typeof input === "object" && input.panels && typeof input.panels === "object" ? input.panels : {};
+
+  for (const [rawId, rawConfig] of Object.entries(source)) {
+    const panelId = normalizeLayoutPanelId(rawId);
+    if (!panelId || panelId.length < 3) continue;
+    panels[panelId] = normalizeLayoutPanelConfig(rawConfig);
+  }
+
+  return {
+    panels,
+    updatedAt: String(input?.updatedAt || ""),
+    updatedBy: String(input?.updatedBy || "")
+  };
+}
+
+function validateLayoutSettingsPayload(body = {}) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    const error = new Error("Layout-Einstellungen muessen als Objekt uebergeben werden.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (body.panels && (typeof body.panels !== "object" || Array.isArray(body.panels))) {
+    const error = new Error("Layout-Panels muessen als Objekt uebergeben werden.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return normalizeLayoutSettings(body);
 }
 
 function validateRoleAgainstStore(role, store) {
@@ -3832,6 +3911,7 @@ function buildNoCodePayloadForUser(user, store) {
     currentPermissions: getRolePermissions(user, store),
     roleDefinitions,
     siteContent: normalizeSiteContent(store.siteContent),
+    layoutSettings: normalizeLayoutSettings(store.layoutSettings),
     customCollections: collections,
     customRecords: normalizeCustomRecords(store.customRecords, collections, store).filter((entry) => collectionIds.has(entry.collectionId)),
     documents: normalizeDocuments(store.documents).filter((entry) => entry.status === "published" || hasNoCodePermission(user, store, "documents_manage")),
@@ -3868,6 +3948,7 @@ function normalizeStore(store) {
     systemNotice: normalizeSystemNotice(store?.systemNotice),
     promoVideo: normalizePromoVideo(store?.promoVideo),
     siteContent: normalizeSiteContent(store?.siteContent),
+    layoutSettings: normalizeLayoutSettings(store?.layoutSettings),
     roleDefinitions,
     customCollections,
     customRecords: normalizeCustomRecords(store?.customRecords, customCollections, { users }),
@@ -3950,6 +4031,7 @@ function projectDataForRole(user, store) {
     systemNotice: decorateSystemNotice(store.systemNotice, store),
     promoVideo: decoratePromoVideo(store.promoVideo, store),
     siteContent: noCode.siteContent,
+    layoutSettings: noCode.layoutSettings,
     noCode,
     permissionCatalog: noCode.permissionCatalog,
     currentPermissions: noCode.currentPermissions,
@@ -5530,7 +5612,8 @@ async function handleDiscordAuth(req, res, url) {
     const state = createDiscordOAuthState({
       mode,
       userId: auth?.user?.id || "",
-      returnTo: sanitizeReturnPath(url.searchParams.get("return") || "/")
+      returnTo: sanitizeReturnPath(url.searchParams.get("return") || "/"),
+      linkSource: normalizeVrchatLinkSource(url.searchParams.get("linkSource"))
     });
 
     sendRedirect(res, buildDiscordAuthorizeUrl(state, config));
@@ -5584,6 +5667,7 @@ function createDiscordOAuthState(entry) {
     mode: normalizeDiscordOAuthMode(entry.mode) || "login",
     userId: String(entry.userId || ""),
     returnTo: sanitizeReturnPath(entry.returnTo || "/"),
+    linkSource: normalizeVrchatLinkSource(entry.linkSource),
     expiresAt: Date.now() + DISCORD_OAUTH_STATE_TTL_MS
   });
   return state;
@@ -5661,6 +5745,9 @@ async function handleDiscordOAuthCallback(req, res, url) {
       return;
     }
 
+    if (normalizeVrchatLinkSource(state.linkSource)) {
+      applyVrchatLinkState(target, state.linkSource);
+    }
     applyDiscordIdentityToUser(nextStore.users, target, discordInfo);
     applyUserPresenceHeartbeat(target, { login: true, force: true });
 
@@ -6941,6 +7028,9 @@ function normalizeOptionalUrl(value) {
   const normalized = String(value || "").trim();
   if (!normalized) return "";
   if (/^https?:\/\//i.test(normalized)) return normalized;
+  if (/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(normalized) && normalized.length <= 2_500_000) {
+    return normalized;
+  }
   return "";
 }
 
@@ -9529,6 +9619,7 @@ function normalizeStoreFinalNoCode(store) {
     systemNotice: normalizeSystemNotice(store?.systemNotice),
     promoVideo: normalizePromoVideo(store?.promoVideo),
     siteContent: normalizeSiteContent(store?.siteContent),
+    layoutSettings: normalizeLayoutSettings(store?.layoutSettings),
     roleDefinitions,
     customCollections,
     customRecords: normalizeCustomRecords(store?.customRecords, customCollections, { users }),
