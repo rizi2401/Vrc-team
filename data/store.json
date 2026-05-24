@@ -8,6 +8,12 @@
       "role": "admin",
       "vrchatName": "System Admin",
       "discordName": "admin",
+      "discordUserId": "",
+      "discordLinkedAt": "",
+      "discordAvatarUrl": "",
+      "discordRoleIds": [],
+      "discordRoleSyncedAt": "",
+      "discordLastSyncError": "",
       "avatarUrl": "",
       "bio": "",
       "contactNote": "",
@@ -35,6 +41,7 @@
       "creatorAutomationLastSource": "",
       "vrchatLinkedAt": "",
       "vrchatLinkSource": "",
+      "needsVrchatName": false,
       "weeklyHoursCapacity": 0,
       "weeklyDaysCapacity": 0,
       "overtimeAdjustments": [],
@@ -106,6 +113,12 @@
       "role": "member",
       "vrchatName": "Kian",
       "discordName": "kian",
+      "discordUserId": "",
+      "discordLinkedAt": "",
+      "discordAvatarUrl": "",
+      "discordRoleIds": [],
+      "discordRoleSyncedAt": "",
+      "discordLastSyncError": "",
       "avatarUrl": "",
       "bio": "",
       "contactNote": "",
@@ -133,6 +146,7 @@
       "creatorAutomationLastSource": "",
       "vrchatLinkedAt": "",
       "vrchatLinkSource": "",
+      "needsVrchatName": false,
       "weeklyHoursCapacity": 0,
       "weeklyDaysCapacity": 0,
       "overtimeAdjustments": [],
@@ -236,6 +250,174 @@
     "updatedAt": "",
     "updatedBy": ""
   },
+  "siteContent": {
+    "draft": {
+      "heroKicker": "SONARA Community",
+      "heroTitle": "Willkommen in SONARA",
+      "heroSubtitle": "Ein magischer Treffpunkt fuer Community, Creator, Events und ein Team, das zusammenhaelt.",
+      "primaryButtonLabel": "Einloggen",
+      "primaryButtonUrl": "/",
+      "secondaryButtonLabel": "Registrieren",
+      "secondaryButtonUrl": "/",
+      "imageUrl": "",
+      "videoUrl": "",
+      "communityTitle": "Mehr als ein Moderationspanel",
+      "communityBody": "SONARA soll ein Zuhause fuer Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt fuer Schritt selbst pflegen.",
+      "infoCards": [
+        {
+          "title": "Community",
+          "body": "Feed, Forum, Events und News halten Mitglieder zusammen.",
+          "linkLabel": "Community ansehen",
+          "linkUrl": "/"
+        },
+        {
+          "title": "Creator",
+          "body": "Creator koennen ihre Bereiche aufbauen und ihre Community sichtbarer machen.",
+          "linkLabel": "Creator entdecken",
+          "linkUrl": "/"
+        },
+        {
+          "title": "Team",
+          "body": "Schichten, Zeiten und Verfuegbarkeit bleiben fuer die Moderation geordnet.",
+          "linkLabel": "Portal oeffnen",
+          "linkUrl": "/"
+        }
+      ]
+    },
+    "published": {
+      "heroKicker": "SONARA Community",
+      "heroTitle": "Willkommen in SONARA",
+      "heroSubtitle": "Ein magischer Treffpunkt fuer Community, Creator, Events und ein Team, das zusammenhaelt.",
+      "primaryButtonLabel": "Einloggen",
+      "primaryButtonUrl": "/",
+      "secondaryButtonLabel": "Registrieren",
+      "secondaryButtonUrl": "/",
+      "imageUrl": "",
+      "videoUrl": "",
+      "communityTitle": "Mehr als ein Moderationspanel",
+      "communityBody": "SONARA soll ein Zuhause fuer Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt fuer Schritt selbst pflegen.",
+      "infoCards": [
+        {
+          "title": "Community",
+          "body": "Feed, Forum, Events und News halten Mitglieder zusammen.",
+          "linkLabel": "Community ansehen",
+          "linkUrl": "/"
+        },
+        {
+          "title": "Creator",
+          "body": "Creator koennen ihre Bereiche aufbauen und ihre Community sichtbarer machen.",
+          "linkLabel": "Creator entdecken",
+          "linkUrl": "/"
+        },
+        {
+          "title": "Team",
+          "body": "Schichten, Zeiten und Verfuegbarkeit bleiben fuer die Moderation geordnet.",
+          "linkLabel": "Portal oeffnen",
+          "linkUrl": "/"
+        }
+      ]
+    },
+    "updatedAt": "",
+    "updatedBy": "",
+    "publishedAt": "",
+    "publishedBy": ""
+  },
+  "layoutSettings": {
+    "panels": {},
+    "updatedAt": "",
+    "updatedBy": ""
+  },
+  "roleDefinitions": [
+    {
+      "key": "member",
+      "label": "Mitglied",
+      "active": true,
+      "system": true,
+      "sortOrder": 10,
+      "permissions": [
+        "community_view"
+      ]
+    },
+    {
+      "key": "moderator",
+      "label": "Moderator",
+      "active": true,
+      "system": true,
+      "sortOrder": 20,
+      "permissions": [
+        "community_view",
+        "voice_staff",
+        "planning_view"
+      ]
+    },
+    {
+      "key": "moderation_lead",
+      "label": "Moderationsleitung",
+      "active": true,
+      "system": true,
+      "sortOrder": 30,
+      "permissions": [
+        "community_view",
+        "voice_staff",
+        "planning_view",
+        "planning_manage",
+        "availability_view",
+        "time_view"
+      ]
+    },
+    {
+      "key": "planner",
+      "label": "Leitung",
+      "active": true,
+      "system": true,
+      "sortOrder": 40,
+      "permissions": [
+        "community_view",
+        "news_manage",
+        "creator_review",
+        "voice_staff",
+        "planning_view",
+        "planning_manage",
+        "availability_view",
+        "time_view",
+        "team_manage",
+        "cms_edit",
+        "cms_publish",
+        "collections_manage",
+        "documents_manage",
+        "uploads_manage"
+      ]
+    },
+    {
+      "key": "admin",
+      "label": "Admin",
+      "active": true,
+      "system": true,
+      "sortOrder": 50,
+      "permissions": [
+        "community_view",
+        "news_manage",
+        "creator_review",
+        "voice_staff",
+        "planning_view",
+        "planning_manage",
+        "availability_view",
+        "time_view",
+        "team_manage",
+        "cms_edit",
+        "cms_publish",
+        "roles_manage",
+        "collections_manage",
+        "documents_manage",
+        "uploads_manage",
+        "layout_manage"
+      ]
+    }
+  ],
+  "customCollections": [],
+  "customRecords": [],
+  "documents": [],
+  "uploads": [],
   "shifts": [],
   "events": [
     {
@@ -300,6 +482,7 @@
   },
   "vrchatAnalytics": {},
   "directMessages": [],
+  "discordReminderLog": [],
   "forumThreads": [],
   "warnings": [],
   "feedPosts": []
