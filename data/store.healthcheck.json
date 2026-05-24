@@ -1,0 +1,972 @@
+{
+  "slots": [],
+  "users": [
+    {
+      "id": "37326093-d2db-4e1d-acd8-f7a54be35990",
+      "username": "admin",
+      "displayName": "System Admin",
+      "role": "admin",
+      "vrchatName": "System Admin",
+      "discordName": "system-admin",
+      "avatarUrl": "",
+      "bio": "Leitet das SONARA Portal und prueft neue Team-Updates.",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
+      "creatorSlug": "system-admin",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
+      "vrchatLinkedAt": "",
+      "vrchatLinkSource": "",
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
+      "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
+      "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
+      "passwordHash": "a1b29a33bc21025fe5143980c993267b:df7b6f68350bded1f4a07e1fab588f2c4c56cf5503ab3a43e529bbff103e673d8aa58f8fb98593a60af17997eeb94a2292cefc38ae4b0348cc48d5a2eb91dfc2"
+    },
+    {
+      "id": "0db0c0b7-aa61-4dce-97b8-17671af964c6",
+      "username": "lyra",
+      "displayName": "Lyra",
+      "role": "planner",
+      "vrchatName": "Lyra",
+      "discordName": "lyra_plan",
+      "avatarUrl": "",
+      "bio": "Koordiniert den Staff-Bereich und Events.",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
+      "creatorSlug": "lyra",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
+      "vrchatLinkedAt": "",
+      "vrchatLinkSource": "",
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
+      "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
+      "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
+      "passwordHash": "19535e59d46b4ff4896fe33015a54dd8:5294cbf904c0db03fc7d19766e1a2b831ecf2350d96d40584fc0d4dc855df32c7dae43661eb4897d0611b626e05ed2825df0ac5deaad523a15c62c4cec4c3fa7"
+    },
+    {
+      "id": "c870a301-6c51-4131-b394-80499f1c96c2",
+      "username": "black",
+      "displayName": "Black",
+      "role": "moderation_lead",
+      "vrchatName": "Black",
+      "discordName": "black_vrc",
+      "avatarUrl": "",
+      "bio": "Behaelt Moderation, Auslastung und Schichtverteilung im Blick.",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
+      "creatorSlug": "black",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
+      "vrchatLinkedAt": "",
+      "vrchatLinkSource": "",
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
+      "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
+      "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
+      "passwordHash": "f58de11a9718a50f6722cb98914b00c4:d7235d52aef5021d044dabc374a452b0ef93b63348b3aea959de7b254a24da463fc56f69384c53a99a7f3846e1533843888c9ed18efc66784d8eedf33ca95ca8"
+    },
+    {
+      "id": "4d6b95d8-deba-4e42-a23c-5448c15cfed5",
+      "username": "aiko",
+      "displayName": "Aiko",
+      "role": "moderator",
+      "vrchatName": "Aiko",
+      "discordName": "aiko_vrc",
+      "avatarUrl": "",
+      "bio": "Fokus auf Begruessung und Community-Einstieg.",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
+      "creatorSlug": "aiko",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
+      "vrchatLinkedAt": "",
+      "vrchatLinkSource": "",
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
+      "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
+      "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
+      "passwordHash": "cb49f91158a97ce60ac861c0bd4cf983:28e5ca501615f008c65051d1f963ea622dac93055dd45b5acddf9783a42da8ae45d07e9f916732f0e81bd34211ebfbf40e5df8fc0df8718873a076ac37e16a48"
+    },
+    {
+      "id": "f5a2c166-4e5d-4952-ba02-4a678a97b612",
+      "username": "mika",
+      "displayName": "Mika",
+      "role": "moderator",
+      "vrchatName": "Mika",
+      "discordName": "mika_vrc",
+      "avatarUrl": "",
+      "bio": "Hat die Public-Bereiche und Zwischenschichten im Blick.",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
+      "creatorSlug": "mika",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
+      "vrchatLinkedAt": "",
+      "vrchatLinkSource": "",
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
+      "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
+      "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
+      "passwordHash": "700a1fe11448137b72f41451214e634f:59293a65464a8399bea7aad9040e88df7398526aaf4a0ecdbc72f69a9bcfc225369b2c2125c37b33075fc81c6a0c584b13fbddc1707c45072c00ef12c9962eac"
+    },
+    {
+      "id": "926ee956-1285-456d-ae4d-a0b7fb8e7de4",
+      "username": "ren",
+      "displayName": "Ren",
+      "role": "moderator",
+      "vrchatName": "Ren",
+      "discordName": "ren_vrc",
+      "avatarUrl": "",
+      "bio": "Betreut gern Events und Briefings.",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
+      "creatorSlug": "ren",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
+      "vrchatLinkedAt": "",
+      "vrchatLinkSource": "",
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
+      "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
+      "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
+      "passwordHash": "952a3747ecb8656d9bd08d081f4178fa:3ca2dbb25b097606bb31aafd6f5aaa05705256266f2f5277b322d44c9e928f5a3d4cf268270ed27142634c4702623d87e5c3c1ce9ba8742c98bd72a5288feee3"
+    },
+    {
+      "id": "ba7f76dd-ca87-4d16-bdc4-ca0ea9a60b92",
+      "username": "sora",
+      "displayName": "Sora",
+      "role": "moderator",
+      "vrchatName": "Sora",
+      "discordName": "sora_vrc",
+      "avatarUrl": "",
+      "bio": "Support und Koordination fuer spaete Stunden.",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
+      "creatorSlug": "sora",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
+      "vrchatLinkedAt": "",
+      "vrchatLinkSource": "",
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
+      "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
+      "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
+      "passwordHash": "649c575d83f4ad5300857cb6a2a3b5c8:761873a97875bc8aa62af446b31cddc0eff7f96f5e93d7d154b241ec23a7199ce648f4a7c4effe149bd1f527ddd7f326f77851a5c8bb5c12eb5083260fdb85d8"
+    },
+    {
+      "id": "ed74e8fd-393a-4380-bb6e-431b19e6aa69",
+      "username": "nuri",
+      "displayName": "Nuri",
+      "role": "member",
+      "vrchatName": "Nuri",
+      "discordName": "nuri_vrc",
+      "avatarUrl": "",
+      "bio": "Aktives Community-Mitglied mit Fokus auf Events.",
+      "contactNote": "",
+      "creatorBlurb": "",
+      "creatorLinks": [],
+      "creatorVisible": false,
+      "creatorSlug": "nuri",
+      "creatorApplicationStatus": "none",
+      "creatorFollowerCount": 0,
+      "creatorPrimaryPlatform": "",
+      "creatorProofUrl": "",
+      "creatorApplicationNote": "",
+      "creatorReviewNote": "",
+      "creatorReviewedAt": "",
+      "creatorReviewedBy": "",
+      "creatorCommunityName": "",
+      "creatorCommunitySummary": "",
+      "creatorCommunityInviteUrl": "",
+      "creatorPresence": "offline",
+      "creatorPresenceText": "",
+      "creatorPresenceUrl": "",
+      "creatorPresenceUpdatedAt": "",
+      "vrchatLinkedAt": "",
+      "vrchatLinkSource": "",
+      "weeklyHoursCapacity": 0,
+      "weeklyDaysCapacity": 0,
+      "overtimeAdjustments": [],
+      "availabilitySchedule": "",
+      "availabilitySlots": [
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
+      ],
+      "availabilityUpdatedAt": "",
+      "lastLoginAt": "",
+      "lastSeenAt": "",
+      "isBlocked": false,
+      "blockReason": "",
+      "blockedAt": "",
+      "blockedBy": "",
+      "passwordHash": "77612bfb0328cf13167f0a8ae131a160:e51f1471c61644a0f89cc505ab47e6788cf0a84ce271ce43cc92bc440ee961e0f10817ac3f8ed0ec211a70911d585531f259ca47cebbec1cd1c7605c7cb52cb4"
+    }
+  ],
+  "settings": {
+    "shiftTypes": [
+      "Kernschicht",
+      "Zwischenschicht",
+      "Abloese",
+      "Uebergang",
+      "Event"
+    ],
+    "worlds": [
+      "Community Hub",
+      "Sunset Lounge",
+      "Event Arena",
+      "Support Room"
+    ],
+    "tasks": [
+      "Begruessung",
+      "Patrouille",
+      "Support",
+      "Event-Leitung",
+      "Koordination"
+    ]
+  },
+  "systemNotice": {
+    "enabled": false,
+    "tone": "warning",
+    "title": "",
+    "body": "",
+    "contactHint": "",
+    "updatedAt": "",
+    "updatedBy": ""
+  },
+  "shifts": [
+    {
+      "id": "2ea05a31-3e00-4fd2-8c7c-990c134895b2",
+      "date": "2026-04-05",
+      "startTime": "12:00",
+      "endTime": "16:00",
+      "shiftType": "Kernschicht",
+      "world": "Community Hub",
+      "task": "Begruessung",
+      "memberId": "4d6b95d8-deba-4e42-a23c-5448c15cfed5",
+      "notes": "Neue User zuerst einsammeln.",
+      "isLead": true
+    },
+    {
+      "id": "fc0064ce-bbff-4947-8f41-a23450c5d59c",
+      "date": "2026-04-05",
+      "startTime": "14:00",
+      "endTime": "18:00",
+      "shiftType": "Zwischenschicht",
+      "world": "Sunset Lounge",
+      "task": "Patrouille",
+      "memberId": "f5a2c166-4e5d-4952-ba02-4a678a97b612",
+      "notes": "Fokus auf Stoerungen in Public Bereichen.",
+      "isLead": false
+    },
+    {
+      "id": "a365e3fa-057f-4341-b4d6-2f797157bd21",
+      "date": "2026-04-06",
+      "startTime": "20:00",
+      "endTime": "00:00",
+      "shiftType": "Event",
+      "world": "Event Arena",
+      "task": "Event-Leitung",
+      "memberId": "926ee956-1285-456d-ae4d-a0b7fb8e7de4",
+      "notes": "Team 15 Minuten frueher briefen.",
+      "isLead": true
+    },
+    {
+      "id": "0d568362-97a5-4b7a-8cce-a1d7b35feff7",
+      "date": "2026-04-07",
+      "startTime": "16:00",
+      "endTime": "20:00",
+      "shiftType": "Kernschicht",
+      "world": "Support Room",
+      "task": "Support",
+      "memberId": "ba7f76dd-ca87-4d16-bdc4-ca0ea9a60b92",
+      "notes": "Meldungen sammeln und weiterreichen.",
+      "isLead": false
+    },
+    {
+      "id": "fa870da5-50a0-4065-8059-42b56ddf4bdf",
+      "date": "2026-04-08",
+      "startTime": "18:00",
+      "endTime": "22:00",
+      "shiftType": "Uebergang",
+      "world": "Community Hub",
+      "task": "Koordination",
+      "memberId": "4d6b95d8-deba-4e42-a23c-5448c15cfed5",
+      "notes": "Kurzes Debriefing im Anschluss.",
+      "isLead": true
+    }
+  ],
+  "events": [
+    {
+      "id": "welcome-night",
+      "title": "Welcome Night",
+      "world": "Community Hub",
+      "host": "SONARA Team",
+      "summary": "Neue Mitglieder kennenlernen, Gruppeninfos teilen und entspannt in den Abend starten.",
+      "scheduleType": "weekly",
+      "eventDate": "",
+      "eventTime": "20:00",
+      "weekday": 5,
+      "reminderEnabled": true,
+      "reminderLeadMinutes": 120,
+      "dateLabel": "Freitag · 20:00 Uhr",
+      "createdAt": "2026-04-05T10:41:54.809Z",
+      "createdBy": ""
+    },
+    {
+      "id": "world-tour",
+      "title": "World Tour",
+      "world": "Event Arena",
+      "host": "Event Team",
+      "summary": "Gemeinsame Weltreise mit Stopps fuer Screenshots, Spiele und kleine Community-Momente.",
+      "scheduleType": "weekly",
+      "eventDate": "",
+      "eventTime": "21:00",
+      "weekday": 6,
+      "reminderEnabled": true,
+      "reminderLeadMinutes": 120,
+      "dateLabel": "Samstag · 21:00 Uhr",
+      "createdAt": "2026-04-05T10:41:54.809Z",
+      "createdBy": ""
+    },
+    {
+      "id": "late-lounge",
+      "title": "Late Lounge",
+      "world": "Sunset Lounge",
+      "host": "Night Crew",
+      "summary": "Ruhiger Community-Abend mit Musik, offenen Gespraechen und lockerer Moderationspraesenz.",
+      "scheduleType": "weekly",
+      "eventDate": "",
+      "eventTime": "22:00",
+      "weekday": 0,
+      "reminderEnabled": true,
+      "reminderLeadMinutes": 120,
+      "dateLabel": "Sonntag · 22:00 Uhr",
+      "createdAt": "2026-04-05T10:41:54.809Z",
+      "createdBy": ""
+    }
+  ],
+  "requests": [
+    {
+      "id": "5b42d2ed-c049-49de-ad99-bda091efde8b",
+      "userId": "4d6b95d8-deba-4e42-a23c-5448c15cfed5",
+      "type": "Wunsch",
+      "date": "2026-04-08",
+      "content": "Wenn moeglich keine Spaetschicht am Wochenende, ich bin nur bis 22 Uhr sicher online.",
+      "status": "in_planung",
+      "adminNote": "Beim naechsten Update beruecksichtigen.",
+      "rating": 4,
+      "createdAt": "2026-04-05T10:41:54.321Z",
+      "adminRespondedAt": "",
+      "memberDecision": "",
+      "memberDecisionAt": ""
+    },
+    {
+      "id": "36f59c86-8e3b-48d0-b02c-6213493e5b06",
+      "userId": "926ee956-1285-456d-ae4d-a0b7fb8e7de4",
+      "type": "Notiz",
+      "date": "2026-04-06",
+      "content": "Ich uebernehme Events gerne, brauche aber vorher die Sprecherliste.",
+      "status": "offen",
+      "adminNote": "",
+      "rating": 5,
+      "createdAt": "2026-04-05T10:41:54.321Z",
+      "adminRespondedAt": "",
+      "memberDecision": "",
+      "memberDecisionAt": ""
+    }
+  ],
+  "announcements": [
+    {
+      "id": "722e4156-88da-4fd1-8f69-2cbb788e0c4a",
+      "title": "Aenderungen direkt im Hub",
+      "body": "Bitte alle Schichtupdates, Weltwechsel und Event-Infos nur noch hier posten, damit das ganze Team denselben Stand sieht.",
+      "pinned": true,
+      "authorId": "37326093-d2db-4e1d-acd8-f7a54be35990",
+      "imageUrl": "",
+      "createdAt": "2026-04-05T10:41:54.321Z"
+    },
+    {
+      "id": "26d615fb-9765-48ba-a0a4-3718f8b80150",
+      "title": "Event-Woche",
+      "body": "Fuer Events bitte 10 Minuten vor Schichtbeginn online sein. Ein- und Ausstempeln ist ab sofort Pflicht fuer alle Moderatoren.",
+      "pinned": false,
+      "authorId": "37326093-d2db-4e1d-acd8-f7a54be35990",
+      "imageUrl": "",
+      "createdAt": "2026-04-05T10:41:54.321Z"
+    }
+  ],
+  "chatMessages": [],
+  "timeEntries": [],
+  "swapRequests": [],
+  "discordStatus": {
+    "lastAttemptAt": "",
+    "lastSuccessAt": "",
+    "lastError": "",
+    "lastStatusCode": 0
+  },
+  "vrchatAnalytics": {},
+  "directMessages": [],
+  "forumThreads": [],
+  "warnings": [],
+  "feedPosts": []
+}

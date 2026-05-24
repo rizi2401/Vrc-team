@@ -1,0 +1,21 @@
+{
+  "name": "vrchat-mod-team-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Online-Portal fuer VRChat Moderations-Team Planung",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "node --check server.js && node --check app.js && node --check scheduling_storage.js && node --check scripts/backfill-postgres-scheduling.js",
+    "db:scheduling:backfill": "node scripts/backfill-postgres-scheduling.js",
+    "db:scheduling:backfill:file": "node scripts/backfill-postgres-scheduling.js --source=file",
+    "db:scheduling:backfill:portal": "node scripts/backfill-postgres-scheduling.js --source=portal"
+  },
+  "dependencies": {
+    "livekit-server-sdk": "^2.15.2",
+    "pg": "^8.12.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
