@@ -1137,13 +1137,69 @@ code {
   font-family: "IBM Plex Sans", monospace;
 }
 
+.public-page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.page-nav-button {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  padding: 0.85rem 1.1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.page-nav-button.active,
+.page-nav-button:hover {
+  background: rgba(255, 184, 75, 0.15);
+  border-color: rgba(255, 184, 75, 0.65);
+  color: #ffb84b;
+}
+
 .public-grid {
+  display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
   align-items: start;
+  gap: 1.25rem;
 }
 
 .public-auth-stack {
+  display: grid;
+  gap: 1rem;
   align-content: start;
+}
+
+.auth-layout.public-grid {
+  margin-top: 1rem;
+}
+
+.auth-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.auth-footer-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.auth-footer-row button,
+.auth-footer-row .creator-action-link {
+  min-width: 140px;
+}
+
+@media (max-width: 1000px) {
+  .public-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .community-overview-grid {

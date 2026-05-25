@@ -148,6 +148,8 @@ const state = {
     formEditingUntil: 0,
     lastActionSucceeded: false,
     selectedCreatorId: "",
+    mobileMenuOpen: false,
+    publicPage: "",
     collapsedPanels: {}
   }
 };
@@ -163,6 +165,10 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", updateViewportMetrics, { passive: true });
   window.visualViewport.addEventListener("scroll", updateViewportMetrics, { passive: true });
 }
+// Client-side routing: update view on back/forward navigation
+window.addEventListener("popstate", () => {
+  render();
+});
 
 updateViewportMetrics();
 boot();
@@ -978,6 +984,12 @@ function renderBootShell(title, intro) {
 function render() {
   try {
     const route = getPublicRouteState();
+    // If the route points to a public section, reflect it in UI state so renderPublicPortal
+    // can use `state.ui.publicPage` as the active page.
+    if (route && route.kind === "home") {
+      state.ui.publicPage = route.page || state.ui.publicPage || "landing";
+    }
+
     root.innerHTML = state.session && route.kind !== "creator" ? renderDashboard() : renderPublicPortal();
   } catch (error) {
     console.error("Renderfehler im Portal:", error);
@@ -1227,6 +1239,7 @@ function renderPublicPortal() {
       <div class="dashboard-grid">
         ${renderPublicCommunityOverview()}
         ${renderPublicEventsPanel()}
+        ${renderPublicSupportApplicationsPanel()}
         ${renderPublicRulesPanel()}
         ${renderPublicTeamPanel()}
       </div>
@@ -1317,7 +1330,7 @@ function renderDashboardTabs(activeTab) {
 
   if (canManagePortal()) {
     tabs = [
-      { id: "overview", label: "Dashboard" },
+      { id: "overview", label: "Home" },
       { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
@@ -1331,7 +1344,7 @@ function renderDashboardTabs(activeTab) {
     ];
   } else if (canAccessStaffArea()) {
     tabs = [
-      { id: "overview", label: "Dashboard" },
+      { id: "overview", label: "Home" },
       { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
@@ -1343,7 +1356,7 @@ function renderDashboardTabs(activeTab) {
     ];
   } else {
     tabs = [
-      { id: "overview", label: "Dashboard" },
+      { id: "overview", label: "Home" },
       { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
@@ -5786,6 +5799,40 @@ async function handleClick(event) {
     case "set-tab":
       rememberTabBarState(actionElement);
       state.ui.activeTab = normalizeActiveTab(actionElement.dataset.tab || "");
+      state.ui.mobileMenuOpen = false;
+      render();
+      break;
+
+    case "set-public-page":
+      state.ui.publicPage = actionElement.dataset.page || "landing";
+      state.ui.mobileMenuOpen = false;
+      // Update the browser URL to match the selected public page
+      try {
+        const page = state.ui.publicPage || "landing";
+        const pagePathMap = {
+          "landing": "/",
+          "news": "/news",
+          "events": "/events",
+          "community": "/community",
+          "rules": "/rules",
+          "team": "/team",
+          "support": "/support",
+          "support-applications": "/support/applications",
+          "login": "/login",
+          "register": "/register"
+        };
+        const targetPath = pagePathMap[page] || `/${String(page).replace(/[^a-z0-9\-]/gi, "-").toLowerCase()}`;
+        if (window.history && window.history.pushState) {
+          window.history.pushState({}, "", targetPath);
+        }
+      } catch (e) {
+        // ignore URL update failures
+      }
+      render();
+      break;
+
+    case "toggle-mobile-menu":
+      state.ui.mobileMenuOpen = !state.ui.mobileMenuOpen;
       render();
       break;
 
@@ -9111,6 +9158,30 @@ function getPublicRouteState() {
     };
   }
 
+  // Map common public section paths to a `page` identifier used by renderPublicPortal
+  const sectionRoutes = {
+    "/": "landing",
+    "": "landing",
+    "/landing": "landing",
+    "/news": "news",
+    "/events": "events",
+    "/community": "community",
+    "/rules": "rules",
+    "/team": "team",
+    "/support": "support",
+    "/support/applications": "support-applications",
+    "/bewerbungen": "support-applications"
+  };
+
+  if (sectionRoutes[normalizedPath.toLowerCase()]) {
+    return {
+      kind: "home",
+      page: sectionRoutes[normalizedPath.toLowerCase()] || "landing",
+      slug: "",
+      vrchatSource: ""
+    };
+  }
+
   return {
     kind: "home",
     slug: "",
@@ -10075,6 +10146,35 @@ function renderCommunityParticipationPanel() {
   `;
 }
 
+function renderPublicSupportApplicationsPanel() {
+  return `
+    <section class="panel span-8 support-applications-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Support & Bewerbungen</p>
+          <h2>Tickets, Creator-Anfragen und Leitungskontakt</h2>
+          <p class="section-copy">Hier siehst du, wie du als Mitglied Fragen, Feedback, Bewerbungen oder Support-Anfragen direkt an das SONARA-Team richtest.</p>
+        </div>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature-card">
+          <h3>Ticket an die Leitung</h3>
+          <p>Schreibe kurze Anfragen, meldest Probleme oder gibst Rückmeldung, damit das Team direkt weiß, wo es unterstützen soll.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Creator-Bewerbung</h3>
+          <p>Creator können ihre Idee vorstellen und erhalten eine klare Rückmeldung von Leitung oder Admin.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Transparente Prüfung</h3>
+          <p>Die Bearbeitung läuft über Leitung und Moderation. Status und Entscheidung bleiben nachvollziehbar.</p>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 function renderRuleCard(entry) {
   return `
     <article class="mini-card community-rule-card">
@@ -10372,44 +10472,58 @@ function renderPublicPortal() {
   const stats = community.stats || {};
   const creators = (community.creators || []).slice(0, 3);
   const vrchatLink = getVrchatLinkFlowMeta();
+  const page = state.ui.publicPage || "landing";
+  const heroIntro =
+    page === "login"
+      ? "Logge dich sicher ein und greife auf deinen Mitgliederbereich zu."
+      : page === "register"
+      ? "Erstelle dir einen SONARA-Account für Community, Creator und Team."
+      : siteContent.heroSubtitle || "News, Events, Creator-Links und der Mitgliederbereich liegen hier kompakt zusammen.";
   const eyebrow = vrchatLink?.eyebrow || siteContent.heroKicker || "SONARA Community Portal";
-  const title = vrchatLink?.title || siteContent.heroTitle || "Community, Team und Creator an einem Ort";
-  const intro = vrchatLink?.intro || siteContent.heroSubtitle || "News, Events, Creator-Links und der Mitgliederbereich liegen hier kompakt zusammen.";
+  const title =
+    vrchatLink?.title ||
+    (page === "login"
+      ? "Login zum SONARA Portal"
+      : page === "register"
+      ? "Registrieren für SONARA"
+      : siteContent.heroTitle || "Community, Team und Creator an einem Ort");
+  const intro = vrchatLink?.intro || heroIntro;
   const chips = vrchatLink
     ? [vrchatLink.sourceLabel, `${stats.members || 0} Mitglieder`, "Portal-Link aktiv"]
     : [`${stats.members || 0} Mitglieder`, `${stats.liveCreators || 0} live`, `${(community.events || []).length} Events`];
-  const loginButtonLabel = vrchatLink ? "Anmelden und verbinden" : siteContent.primaryButtonLabel || "Einloggen";
-  const registerButtonLabel = vrchatLink ? "Konto anlegen und verbinden" : siteContent.secondaryButtonLabel || "Zugang erstellen";
-  const discordLinkParams = vrchatLink ? `&linkSource=${encodeURIComponent(vrchatLink.source)}&return=${encodeURIComponent("/")}` : "";
-  const discordLoginHref = `/auth/discord/start?mode=login${discordLinkParams}`;
-  const discordRegisterHref = `/auth/discord/start?mode=register${discordLinkParams}`;
-  const siteCards = Array.isArray(siteContent.infoCards) && siteContent.infoCards.length ? siteContent.infoCards : [
-    { title: "News", body: "Aktuelle Hinweise und Event-Infos." },
-    { title: "Community", body: "Regeln, Team, Creator und Kontaktwege." },
-    { title: "Mitgliederbereich", body: "Profil, Forum, Direktnachrichten und Chat." },
-    { title: "Staff", body: "Schichten, Zeiten und interne Abstimmung." }
+  const loginButtonLabel = siteContent.primaryButtonLabel || "Login";
+  const registerButtonLabel = siteContent.secondaryButtonLabel || "Registrieren";
+  const showLogin = page === "landing" || page === "login";
+  const showRegister = page === "landing" || page === "register";
+  const pageButtons = [
+    { id: "landing", label: "Start" },
+    { id: "login", label: "Login" },
+    { id: "register", label: "Registrieren" }
   ];
-
-  return `
-    <div class="app-shell">
-      ${renderSonaraHero({
-        eyebrow,
-        title,
-        intro,
-        chips
-      })}
-
-      ${renderFlash()}
-      ${renderSystemNoticeBanner()}
-      ${renderPromoVideoPanel()}
-
-      <div class="auth-layout public-grid">
+  const pageNav = pageButtons
+    .map(
+      (entry) => `
+        <button type="button" class="page-nav-button ${entry.id === page ? "active" : ""}" data-action="set-public-page" data-page="${entry.id}">
+          ${escapeHtml(entry.label)}
+        </button>
+      `
+    )
+    .join("");
+  const siteCards = Array.isArray(siteContent.infoCards) && siteContent.infoCards.length ? siteContent.infoCards : [
+    { title: "Community", body: "Chat, Regeln, Team und Support an einem Ort" },
+    { title: "News & Events", body: "Aktuelle Termine, Ankuendigungen und Creator-Updates" },
+    { title: "Bewerbungen", body: "Creator- und Team-Anfragen werden hier sichtbar und bearbeitet" },
+    { title: "Mitgliederbereich", body: "Profil, Tickets, Feedback und direkte Kommunikation" }
+  ];
+  const landingDescription = siteContent.communityBody || "SONARA verbindet Community, Creator, Events und Team an einem Ort.";
+  const landingPanelHtml = page === "landing"
+    ? `
         <section class="panel">
           <div class="section-head">
             <div>
               <p class="eyebrow">Portal</p>
               <h2>${escapeHtml(siteContent.communityTitle || "Das Wichtigste zuerst")}</h2>
-              <p class="section-copy">${escapeHtml(siteContent.communityBody || "SONARA verbindet Community, Creator, Events und Team an einem Ort.")}</p>
+              <p class="section-copy">${escapeHtml(landingDescription)}</p>
             </div>
           </div>
           <div class="feature-grid">
@@ -10459,29 +10573,86 @@ function renderPublicPortal() {
 
           ${renderLivePreviewPanel(4)}
         </section>
+      `
+    : `
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Portal</p>
+              <h2>${page === "login" ? "Einloggen" : "Registrieren"}</h2>
+              <p class="section-copy">${escapeHtml(landingDescription)}</p>
+            </div>
+          </div>
+          <div class="feature-grid">
+            ${siteCards
+              .slice(0, 3)
+              .map(
+                (card) => `
+                  <article class="feature-card">
+                    <h3>${escapeHtml(card.title || "SONARA")}</h3>
+                    <p>${escapeHtml(card.body || "")}</p>
+                  </article>
+                `
+              )
+              .join("")}
+          </div>
+        </section>
+      `;
+  const landingBottomHtml = page === "landing"
+    ? `
+      <div class="dashboard-grid community-home-grid">
+        ${renderPublicStarterPanel()}
+        ${renderPublicCommunityOverview()}
+        ${renderPublicEventsPanel()}
+        ${renderCommunityPulsePanel()}
+        ${renderCommunityParticipationPanel()}
+        ${renderPublicRulesPanel()}
+        ${renderPublicTeamPanel()}
+        ${renderPublicLegalPanel()}
+      </div>
+    `
+    : "";
+
+  return `
+    <div class="app-shell">
+      ${renderSonaraHero({
+        eyebrow,
+        title,
+        intro,
+        chips
+      })}
+
+      ${renderFlash()}
+      ${renderSystemNoticeBanner()}
+      ${renderPromoVideoPanel()}
+      <div class="public-page-nav">${pageNav}</div>
+
+      <div class="auth-layout public-grid">
+        ${landingPanelHtml}
 
         <div class="auth-stack public-auth-stack">
           <section class="panel auth-card public-auth-cta">
             <div>
-              <p class="eyebrow">Discord zuerst</p>
-              <h3>Mit Discord starten</h3>
-              <p class="helper-text">Logge dich direkt mit Discord ein oder erstelle dein Konto darueber. Passwort bleibt als Fallback fuer bestehende Accounts verfuegbar.</p>
+              <p class="eyebrow">SONARA Portal</p>
+              <h3>${page === "landing" ? "Login oder Registrierung" : page === "login" ? "Login" : "Registrieren"}</h3>
+              <p class="helper-text">${page === "landing" ? "Starte hier ins Portal. Wer moechte, kann spaeter weitere Verknuepfungen wie Discord ergaenzen." : page === "login" ? "Mit E-Mail oder Benutzername einloggen." : "Erstelle dir einen SONARA-Account für Community, Creator und Team."}</p>
             </div>
-            <div class="public-auth-cta-actions discord-primary-actions">
-              <a class="creator-action-link discord-auth-link discord-primary-link" href="${escapeHtml(discordLoginHref)}">Mit Discord einloggen</a>
-              <a class="creator-action-link discord-auth-link discord-primary-link" href="${escapeHtml(discordRegisterHref)}">Mit Discord registrieren</a>
+            <div class="public-auth-cta-actions">
+              <button type="button" class="creator-action-link ${page === "login" ? "active" : ""}" data-action="set-public-page" data-page="login">Login</button>
+              <button type="button" class="creator-action-link ${page === "register" ? "active" : ""}" data-action="set-public-page" data-page="register">Registrieren</button>
             </div>
           </section>
 
+          ${showLogin ? `
           <form class="panel auth-card password-fallback-card" data-form="login" id="portal-login">
             <div>
-              <p class="eyebrow">${vrchatLink ? "VRChat Fallback" : "Passwort-Fallback"}</p>
-              <h3>${vrchatLink ? "Mit Passwort verbinden" : "Mit Passwort einloggen"}</h3>
-              <p class="helper-text">Fuer bestehende Konten, falls Discord gerade nicht passt.</p>
+              <p class="eyebrow">Login</p>
+              <h3>Willkommen zur Community</h3>
+              <p class="helper-text">Mit E-Mail oder Benutzername einloggen.</p>
             </div>
             <div class="auth-fieldset">
               <div class="field">
-                <label for="loginIdentifier">VRChat-Name oder Discord-Name</label>
+                <label for="loginIdentifier">Benutzername oder E-Mail</label>
                 <input id="loginIdentifier" name="identifier" type="text" autocomplete="username" required>
               </div>
               <div class="field">
@@ -10489,30 +10660,28 @@ function renderPublicPortal() {
                 <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
               </div>
             </div>
-            ${vrchatLink ? '<p class="login-note">Nach dem Login springst du direkt in dein Portal-Profil.</p>' : ""}
-            <button type="submit">${loginButtonLabel}</button>
-            <a class="creator-action-link discord-auth-link" href="${escapeHtml(discordLoginHref)}">Stattdessen mit Discord einloggen</a>
+            <div class="auth-footer-row">
+              <button type="submit">${escapeHtml(loginButtonLabel)}</button>
+              ${page === "login" ? `<button type="button" class="ghost small" data-action="set-public-page" data-page="register">Zur Registrierung</button>` : ""}
+            </div>
           </form>
+          ` : ""}
 
+          ${showRegister ? `
           <form class="panel auth-card" data-form="register" id="portal-register">
             <div>
-              <p class="eyebrow">${vrchatLink ? "Neu verbinden" : "Registrierung"}</p>
-              <h3>${vrchatLink ? "Noch kein Konto? Direkt hier anlegen" : "Konto anlegen"}</h3>
-              <p class="helper-text">Discord ist der bevorzugte Weg. Manuell geht weiter mit VRChat-Name, Discord-Name und Passwort.</p>
+              <p class="eyebrow">Registrieren</p>
+              <h3>Neues Konto erstellen</h3>
+              <p class="helper-text">Trage Name, Discord-Name und Passwort ein.</p>
             </div>
-            <a class="creator-action-link discord-auth-link discord-register-inline" href="${escapeHtml(discordRegisterHref)}">Mit Discord registrieren</a>
             <div class="auth-fieldset">
               <div class="field">
-                <label for="registerVrchatName">VRChat-Name</label>
+                <label for="registerVrchatName">Name</label>
                 <input id="registerVrchatName" name="vrchatName" type="text" required>
               </div>
               <div class="field">
                 <label for="registerDiscordName">Discord-Name</label>
-                <input id="registerDiscordName" name="discordName" type="text" required>
-              </div>
-              <div class="field">
-                <label for="registerAvatarFile">Profilbild</label>
-                <input id="registerAvatarFile" name="avatarFile" type="file" accept="image/*">
+                <input id="registerDiscordName" name="discordName" type="text" placeholder="z. B. name#1234" required>
               </div>
               <div class="field span-all">
                 <label for="registerBio">Kurzprofil</label>
@@ -10527,22 +10696,16 @@ function renderPublicPortal() {
                 <input id="registerConfirmPassword" name="confirmPassword" type="password" required>
               </div>
             </div>
-            ${vrchatLink ? '<p class="login-note">Nach der Registrierung wird dein neues Konto direkt mit diesem VRChat-Link markiert und eingeloggt.</p>' : ""}
-            <button type="submit">${registerButtonLabel}</button>
+            <div class="auth-footer-row">
+              <button type="submit">${escapeHtml(registerButtonLabel)}</button>
+              ${page === "register" ? `<button type="button" class="ghost small" data-action="set-public-page" data-page="login">Zum Login</button>` : ""}
+            </div>
           </form>
+          ` : ""}
         </div>
       </div>
 
-      <div class="dashboard-grid community-home-grid">
-        ${renderPublicStarterPanel()}
-        ${renderPublicCommunityOverview()}
-        ${renderPublicEventsPanel()}
-        ${renderCommunityPulsePanel()}
-        ${renderCommunityParticipationPanel()}
-        ${renderPublicRulesPanel()}
-        ${renderPublicTeamPanel()}
-        ${renderPublicLegalPanel()}
-      </div>
+      ${landingBottomHtml}
     </div>
   `;
 }
@@ -10562,9 +10725,14 @@ function renderDashboard() {
         intro: manager ? "Community, Team und Staff laufen hier zusammen." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
         chips: [getRoleLabel(user.role), user.vrchatName || "", user.discordName || ""].filter(Boolean)
       })}
-      <div class="dashboard-shell">
+      <div class="dashboard-shell${state.ui.mobileMenuOpen ? " menu-open" : ""}">
         ${renderFlash()}
         <section class="panel toolbar">
+          <button type="button" class="hamburger mobile-menu-toggle" data-action="toggle-mobile-menu" aria-label="Menü öffnen">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
           <div class="toolbar-user">
             ${renderUserAvatar(user, "toolbar-avatar")}
             <div>
@@ -13800,7 +13968,7 @@ function renderFeedPanel() {
 
 function getDashboardTabSections() {
   const communityTabs = [
-    { id: "overview", label: "Dashboard" },
+    { id: "overview", label: "Home" },
     { id: "feed", label: "Feed" },
     { id: "community", label: "Community" },
     { id: "calendar", label: "Kalender" },
@@ -13954,7 +14122,7 @@ function renderDashboardTabs(activeTab) {
   const activityMeta = getUserActivityMeta(state.session);
 
   return `
-    <aside class="panel dashboard-sidebar" aria-label="Hauptbereiche">
+    <aside class="panel dashboard-sidebar ${state.ui.mobileMenuOpen ? "is-open" : ""}" aria-label="Hauptbereiche">
       <div class="dashboard-sidebar-head">
         <p class="eyebrow">Navigation</p>
         <h3>${escapeHtml(getPrimaryDisplayName(state.session || {}))}</h3>
