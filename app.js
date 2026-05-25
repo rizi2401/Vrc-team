@@ -11710,12 +11710,8 @@ function renderManagerDashboard(activeTab) {
       return renderProfileWorkspace(true);
     case "settings":
       return renderSettingsPanel();
-    case "site-admin":
-      return renderSiteContentAdminPanel();
     case "roles":
       return renderRolePermissionAdminPanel();
-    case "collections":
-      return renderCollectionsAdminPanel();
     case "documents":
       return [renderDocumentsAdminPanel(), renderUploadsAdminPanel()].join("");
     case "overview":
@@ -13960,11 +13956,8 @@ function getDashboardTabSections() {
         title: "System",
         tabs: [
           { id: "settings", label: "Einstellungen" },
-          { id: "site-admin", label: "Webseite" },
           { id: "roles", label: "Rollen" },
-          { id: "collections", label: "Datenbuilder" },
-          { id: "documents", label: "Dokumente" },
-          ...(canManageLayout() ? [{ id: "layout", label: "Layout" }] : [])
+          { id: "documents", label: "Dokumente" }
         ]
       }
     ];
@@ -14346,19 +14339,13 @@ function renderManagerDashboard(activeTab) {
       return renderPortalPanel("profile.workspace", renderProfileWorkspace(true));
     case "settings":
       return renderSettingsPanel();
-    case "site-admin":
-      return renderPortalPanel("site.content", renderSiteContentAdminPanel());
     case "roles":
       return renderPortalPanel("roles.permissions", renderRolePermissionAdminPanel());
-    case "collections":
-      return renderPortalPanel("collections.builder", renderCollectionsAdminPanel());
     case "documents":
       return renderPortalPanelList("documents", [
         { id: "documents.documents", render: renderDocumentsAdminPanel },
         { id: "documents.uploads", render: renderUploadsAdminPanel }
       ]);
-    case "layout":
-      return renderPortalPanel("layout.editor", renderLayoutSettingsAdminPanel(), { span: "span-12", order: 10 });
     case "overview":
     default:
       return renderPortalPanelList("overview", [
