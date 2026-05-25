@@ -11,7 +11,9 @@ const ROLE_LABELS = {
 const REQUEST_STATUSES = [
   { value: "offen", label: "Offen" },
   { value: "in_planung", label: "In Planung" },
-  { value: "beruecksichtigt", label: "Beruecksichtigt" }
+  { value: "beruecksichtigt", label: "Beruecksichtigt" },
+  { value: "erledigt", label: "Erledigt" },
+  { value: "abgelehnt", label: "Abgelehnt" }
 ];
 
 const SHIFT_WINDOW_PRESETS = [
@@ -3671,6 +3673,9 @@ function renderTeamPanelV2() {
 
 function renderFeedbackAdminPanel() {
   const requests = state.data.requests || [];
+  const activeRequests = requests.filter((r) => !["erledigt", "abgelehnt"].includes(r.status));
+  const completedRequests = requests.filter((r) => ["erledigt", "abgelehnt"].includes(r.status));
+  const activeTab = state.ui.feedbackAdminTab || "active";
 
   return `
     <section class="panel span-5">
@@ -3682,11 +3687,24 @@ function renderFeedbackAdminPanel() {
         </div>
       </div>
 
+      <div class="tab-controls">
+        <button type="button" class="tab-btn ${activeTab === "active" ? "active" : ""}" data-action="set-feedback-admin-tab" data-tab-id="active">
+          Aktive Tickets ${activeRequests.length > 0 ? `(${activeRequests.length})` : ""}
+        </button>
+        <button type="button" class="tab-btn ${activeTab === "completed" ? "active" : ""}" data-action="set-feedback-admin-tab" data-tab-id="completed">
+          Abgeschlossene Tickets ${completedRequests.length > 0 ? `(${completedRequests.length})` : ""}
+        </button>
+      </div>
+
       <div class="stack-list">
         ${
-          requests.length
-            ? requests.map((entry) => renderAdminRequestCard(entry)).join("")
-            : renderEmptyState("Kein Feedback", "Sobald das Team etwas einreicht, erscheint es hier.")
+          activeTab === "active"
+            ? activeRequests.length
+              ? activeRequests.map((entry) => renderAdminRequestCard(entry)).join("")
+              : renderEmptyState("Keine aktiven Tickets", "Alle Rueckmeldungen wurden bearbeitet.")
+            : completedRequests.length
+              ? completedRequests.map((entry) => renderAdminRequestCard(entry)).join("")
+              : renderEmptyState("Keine abgeschlossenen Tickets", "Noch keine Tickets als erledigt oder abgelehnt markiert.")
         }
       </div>
     </section>
@@ -4633,7 +4651,7 @@ async function handleSubmit(event) {
 }
 
 function renderAdminRequestCard(entry) {
-  const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "in_planung" ? "amber" : "rose";
+  const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "erledigt" ? "success" : entry.status === "in_planung" ? "amber" : entry.status === "abgelehnt" ? "slate" : "rose";
 
   return `
     <article class="request-card">
@@ -5790,6 +5808,11 @@ async function handleClick(event) {
       rememberTabBarState(actionElement);
       state.ui.activeTab = normalizeActiveTab(actionElement.dataset.tab || "");
       state.ui.mobileMenuOpen = false;
+      render();
+      break;
+
+    case "set-feedback-admin-tab":
+      state.ui.feedbackAdminTab = actionElement.dataset.tabId || "active";
       render();
       break;
 
@@ -13702,7 +13725,7 @@ function renderMemberRequestCard(entry) {
 }
 
 function renderAdminRequestCard(entry) {
-  const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "in_planung" ? "amber" : "rose";
+  const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "erledigt" ? "success" : entry.status === "in_planung" ? "amber" : entry.status === "abgelehnt" ? "slate" : "rose";
   const decisionTone = entry.memberDecision === "accepted" ? "success" : entry.memberDecision === "declined" ? "rose" : "amber";
 
   return `

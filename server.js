@@ -6577,7 +6577,7 @@ function validateRequestPayload(body) {
 
 function validateRequestStatus(status) {
   const normalized = String(status || "").trim();
-  return ["offen", "in_planung", "beruecksichtigt"].includes(normalized) ? normalized : "offen";
+  return ["offen", "in_planung", "beruecksichtigt", "erledigt", "abgelehnt"].includes(normalized) ? normalized : "offen";
 }
 
 function validateAnnouncementPayload(body) {
