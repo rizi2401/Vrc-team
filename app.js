@@ -1476,11 +1476,10 @@ function renderManagerDashboard(activeTab) {
     case "overview":
     default:
       return [
-        renderNotificationsPanel(),
-        renderDashboardGuidePanel("manager"),
+        renderWelcomeHeroPanel(),
         renderNewsSpotlightPanel(),
-        renderCommunityOverviewPanel(),
-        renderRequestAdminPanel()
+        renderDashboardGuidePanel("manager"),
+        renderCommunityOverviewPanel()
       ].join("");
   }
 }
@@ -1508,10 +1507,9 @@ function renderModeratorDashboard(activeTab) {
     case "overview":
     default:
       return [
-        renderNotificationsPanel(),
-        renderDashboardGuidePanel("moderator"),
+        renderWelcomeHeroPanel(),
         renderNewsSpotlightPanel(),
-        renderMySchedulePanel(),
+        renderDashboardGuidePanel("moderator"),
         renderCommunityOverviewPanel()
       ].join("");
   }
@@ -1536,12 +1534,81 @@ function renderMemberDashboard(activeTab) {
     case "overview":
     default:
       return [
-        renderNotificationsPanel(),
-        renderDashboardGuidePanel("member"),
+        renderWelcomeHeroPanel(),
         renderNewsSpotlightPanel(),
+        renderDashboardGuidePanel("member"),
         renderCommunityOverviewPanel()
       ].join("");
   }
+}
+
+function renderWelcomeHeroPanel() {
+  return `
+    <section class="panel span-12 welcome-hero">
+      <div class="hero-content">
+        <div class="hero-text">
+          <p class="eyebrow">Willkommen</p>
+          <h1>SONARA Community</h1>
+          <p class="hero-description">
+            SONARA ist eine vibrierende deutschsprachige Gaming- und Kreativ-Community, die sich in virtuellen Welten trifft,
+            gemeinsam Events erlebt und sich gegenseitig unterstützt. Wir legen Wert auf Respekt,
+            Zusammenhalt und faire Umgangston.
+          </p>
+          <div class="hero-stats">
+            <div class="stat">
+              <span class="stat-number">500+</span>
+              <span class="stat-label">Community-Mitglieder</span>
+            </div>
+            <div class="stat">
+              <span class="stat-number">12</span>
+              <span class="stat-label">Events pro Monat</span>
+            </div>
+            <div class="stat">
+              <span class="stat-number">7</span>
+              <span class="stat-label">Kreative Communities</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-section">
+        <h2>Unsere Werte</h2>
+        <div class="values-grid">
+          <div class="value-card">
+            <h3>Respekt</h3>
+            <p>Wir behandeln einander fair, freundlich und ohne persönliche Angriffe.</p>
+          </div>
+          <div class="value-card">
+            <h3>Zusammenhalt</h3>
+            <p>Als Team unterstützen wir uns gegenseitig und feiern Erfolge gemeinsam.</p>
+          </div>
+          <div class="value-card">
+            <h3>Transparenz</h3>
+            <p>Offene Kommunikation und ehrliches Feedback prägen unsere Kultur.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-section">
+        <h2>Kooperationen</h2>
+        <p class="section-copy">SONARA arbeitet mit ausgewählten Creator-Communities und Streaming-Netzwerken zusammen.</p>
+        <div class="coop-list">
+          <div class="coop-item">
+            <span class="coop-name">VRChat Community Hub</span>
+            <span class="coop-desc">Gemeinsame Events und World-Hosting</span>
+          </div>
+          <div class="coop-item">
+            <span class="coop-name">Creator Network Deutsch</span>
+            <span class="coop-desc">Cross-Promotion und Collab-Möglichkeiten</span>
+          </div>
+          <div class="coop-item">
+            <span class="coop-name">Gaming Creators Alliance</span>
+            <span class="coop-desc">Knowledge-Sharing und Joint Events</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
 }
 
 function renderDashboardGuidePanel(mode) {
