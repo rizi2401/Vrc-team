@@ -99,7 +99,7 @@
       ],
       "availabilityUpdatedAt": "",
       "lastLoginAt": "",
-      "lastSeenAt": "",
+      "lastSeenAt": "2026-05-25T22:04:12.650Z",
       "isBlocked": false,
       "blockReason": "",
       "blockedAt": "",
@@ -226,8 +226,8 @@
       "Support Room"
     ],
     "tasks": [
-      "Begruessung / Eingang",
-      "Streife / Regelueberwachung",
+      "Begrüßung / Eingang",
+      "Streife / Regelüberwachung",
       "Event-Betreuung",
       "Support / Hilfe",
       "Leitung / Koordination"
@@ -254,7 +254,7 @@
     "draft": {
       "heroKicker": "SONARA Community",
       "heroTitle": "Willkommen in SONARA",
-      "heroSubtitle": "Ein magischer Treffpunkt fuer Community, Creator, Events und ein Team, das zusammenhaelt.",
+      "heroSubtitle": "Ein magischer Treffpunkt für Community, Creator, Events und ein Team, das zusammenhaelt.",
       "primaryButtonLabel": "Einloggen",
       "primaryButtonUrl": "/",
       "secondaryButtonLabel": "Registrieren",
@@ -262,7 +262,7 @@
       "imageUrl": "",
       "videoUrl": "",
       "communityTitle": "Mehr als ein Moderationspanel",
-      "communityBody": "SONARA soll ein Zuhause fuer Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt fuer Schritt selbst pflegen.",
+      "communityBody": "SONARA soll ein Zuhause für Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt für Schritt selbst pflegen.",
       "infoCards": [
         {
           "title": "Community",
@@ -272,14 +272,14 @@
         },
         {
           "title": "Creator",
-          "body": "Creator koennen ihre Bereiche aufbauen und ihre Community sichtbarer machen.",
+          "body": "Creator können ihre Bereiche aufbauen und ihre Community sichtbarer machen.",
           "linkLabel": "Creator entdecken",
           "linkUrl": "/"
         },
         {
           "title": "Team",
-          "body": "Schichten, Zeiten und Verfuegbarkeit bleiben fuer die Moderation geordnet.",
-          "linkLabel": "Portal oeffnen",
+          "body": "Schichten, Zeiten und Verfügbarkeit bleiben für die Moderation geordnet.",
+          "linkLabel": "Portal öffnen",
           "linkUrl": "/"
         }
       ]
@@ -287,7 +287,7 @@
     "published": {
       "heroKicker": "SONARA Community",
       "heroTitle": "Willkommen in SONARA",
-      "heroSubtitle": "Ein magischer Treffpunkt fuer Community, Creator, Events und ein Team, das zusammenhaelt.",
+      "heroSubtitle": "Ein magischer Treffpunkt für Community, Creator, Events und ein Team, das zusammenhaelt.",
       "primaryButtonLabel": "Einloggen",
       "primaryButtonUrl": "/",
       "secondaryButtonLabel": "Registrieren",
@@ -295,7 +295,7 @@
       "imageUrl": "",
       "videoUrl": "",
       "communityTitle": "Mehr als ein Moderationspanel",
-      "communityBody": "SONARA soll ein Zuhause fuer Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt fuer Schritt selbst pflegen.",
+      "communityBody": "SONARA soll ein Zuhause für Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt für Schritt selbst pflegen.",
       "infoCards": [
         {
           "title": "Community",
@@ -305,14 +305,14 @@
         },
         {
           "title": "Creator",
-          "body": "Creator koennen ihre Bereiche aufbauen und ihre Community sichtbarer machen.",
+          "body": "Creator können ihre Bereiche aufbauen und ihre Community sichtbarer machen.",
           "linkLabel": "Creator entdecken",
           "linkUrl": "/"
         },
         {
           "title": "Team",
-          "body": "Schichten, Zeiten und Verfuegbarkeit bleiben fuer die Moderation geordnet.",
-          "linkLabel": "Portal oeffnen",
+          "body": "Schichten, Zeiten und Verfügbarkeit bleiben für die Moderation geordnet.",
+          "linkLabel": "Portal öffnen",
           "linkUrl": "/"
         }
       ]
@@ -441,7 +441,7 @@
       "title": "World Tour",
       "world": "Event Arena",
       "host": "Event Team",
-      "summary": "Gemeinsame Weltreise mit Stopps fuer Screenshots, Spiele und kleine Community-Momente.",
+      "summary": "Gemeinsame Weltreise mit Stopps für Screenshots, Spiele und kleine Community-Momente.",
       "scheduleType": "single",
       "eventDate": "",
       "eventTime": "",

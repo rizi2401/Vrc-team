@@ -5599,3 +5599,141 @@ input[type="file"]::-webkit-file-upload-button {
     }
   }
 }
+
+.welcome-hero {
+  background: linear-gradient(135deg, rgba(111, 177, 255, 0.08) 0%, rgba(255, 171, 63, 0.04) 100%);
+  border: 1px solid rgba(111, 177, 255, 0.1);
+}
+
+.hero-content {
+  margin-bottom: 2.5rem;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid rgba(111, 177, 255, 0.08);
+}
+
+.hero-text h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0.5rem 0 1.5rem;
+  color: #fff;
+}
+
+.hero-description {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 2rem;
+  max-width: 600px;
+}
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 2rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.stat-number {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #6fb1ff;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hero-section {
+  margin-bottom: 2.5rem;
+}
+
+.hero-section h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  color: #fff;
+}
+
+.values-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.value-card {
+  background: rgba(111, 177, 255, 0.05);
+  border: 1px solid rgba(111, 177, 255, 0.1);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.value-card:hover {
+  background: rgba(111, 177, 255, 0.08);
+  border-color: rgba(111, 177, 255, 0.15);
+}
+
+.value-card h3 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+  color: #6fb1ff;
+}
+
+.value-card p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.5;
+}
+
+.coop-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.coop-item {
+  background: rgba(255, 171, 63, 0.05);
+  border-left: 3px solid #ffab3f;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.coop-name {
+  font-weight: 600;
+  color: #ffab3f;
+  font-size: 1rem;
+}
+
+.coop-desc {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+@media (max-width: 900px) {
+  .hero-text h1 {
+    font-size: 2rem;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .values-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coop-list {
+    grid-template-columns: 1fr;
+  }
+}

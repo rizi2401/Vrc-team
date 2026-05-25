@@ -11,7 +11,9 @@ const ROLE_LABELS = {
 const REQUEST_STATUSES = [
   { value: "offen", label: "Offen" },
   { value: "in_planung", label: "In Planung" },
-  { value: "beruecksichtigt", label: "Beruecksichtigt" }
+  { value: "beruecksichtigt", label: "Beruecksichtigt" },
+  { value: "erledigt", label: "Erledigt" },
+  { value: "abgelehnt", label: "Abgelehnt" }
 ];
 
 const SHIFT_WINDOW_PRESETS = [
@@ -61,20 +63,20 @@ const PORTAL_LAYOUT_PANEL_CATALOG = [
   { id: "overview.voice", tab: "overview", tabLabel: "Dashboard", label: "Voice Schnellzugriff", defaultSpan: "span-12", defaultOrder: 20 },
   { id: "overview.feed", tab: "overview", tabLabel: "Dashboard", label: "Community Feed", defaultSpan: "span-12", defaultOrder: 30 },
   { id: "overview.livePreview", tab: "overview", tabLabel: "Dashboard", label: "Sonara Live Vorschau", defaultSpan: "span-12", defaultOrder: 40 },
-  { id: "overview.availabilityReminder", tab: "overview", tabLabel: "Dashboard", label: "Verfuegbarkeit Hinweis", defaultSpan: "span-12", defaultOrder: 50 },
+  { id: "overview.availabilityReminder", tab: "overview", tabLabel: "Dashboard", label: "Verfügbarkeit Hinweis", defaultSpan: "span-12", defaultOrder: 50 },
   { id: "overview.warningAdmin", tab: "overview", tabLabel: "Dashboard", label: "Verwarnungen", defaultSpan: "span-12", defaultOrder: 60 },
   { id: "overview.newsSpotlight", tab: "overview", tabLabel: "Dashboard", label: "News Spotlight", defaultSpan: "span-12", defaultOrder: 70 },
   { id: "overview.creators", tab: "overview", tabLabel: "Dashboard", label: "Creator", defaultSpan: "span-12", defaultOrder: 80 },
-  { id: "overview.requests", tab: "overview", tabLabel: "Dashboard", label: "Rueckmeldungen", defaultSpan: "span-4", defaultOrder: 90 },
+  { id: "overview.requests", tab: "overview", tabLabel: "Dashboard", label: "Rückmeldungen", defaultSpan: "span-4", defaultOrder: 90 },
   { id: "overview.memberActions", tab: "overview", tabLabel: "Dashboard", label: "Mitglieder Aktionen", defaultSpan: "span-12", defaultOrder: 100 },
   { id: "overview.memberPulse", tab: "overview", tabLabel: "Dashboard", label: "Community Puls", defaultSpan: "span-5", defaultOrder: 110 },
   { id: "overview.memberForum", tab: "overview", tabLabel: "Dashboard", label: "Forum Spotlight", defaultSpan: "span-7", defaultOrder: 120 },
-  { id: "overview.communityOverview", tab: "overview", tabLabel: "Dashboard", label: "Community Uebersicht", defaultSpan: "span-12", defaultOrder: 130 },
+  { id: "overview.communityOverview", tab: "overview", tabLabel: "Dashboard", label: "Community Übersicht", defaultSpan: "span-12", defaultOrder: 130 },
   { id: "overview.mySchedule", tab: "overview", tabLabel: "Dashboard", label: "Meine Schichten", defaultSpan: "span-12", defaultOrder: 140 },
   { id: "feed.main", tab: "feed", tabLabel: "Feed", label: "Feed", defaultSpan: "span-12", defaultOrder: 10 },
   { id: "community.memberActions", tab: "community", tabLabel: "Community", label: "Mitmachen", defaultSpan: "span-12", defaultOrder: 10 },
   { id: "community.memberPulse", tab: "community", tabLabel: "Community", label: "Community Puls", defaultSpan: "span-5", defaultOrder: 20 },
-  { id: "community.overview", tab: "community", tabLabel: "Community", label: "Community Uebersicht", defaultSpan: "span-12", defaultOrder: 30 },
+  { id: "community.overview", tab: "community", tabLabel: "Community", label: "Community Übersicht", defaultSpan: "span-12", defaultOrder: 30 },
   { id: "community.memberForum", tab: "community", tabLabel: "Community", label: "Forum Spotlight", defaultSpan: "span-7", defaultOrder: 40 },
   { id: "community.rules", tab: "community", tabLabel: "Community", label: "Regeln", defaultSpan: "span-12", defaultOrder: 50 },
   { id: "community.team", tab: "community", tabLabel: "Community", label: "Team", defaultSpan: "span-12", defaultOrder: 60 },
@@ -87,12 +89,12 @@ const PORTAL_LAYOUT_PANEL_CATALOG = [
   { id: "voice.main", tab: "voice", tabLabel: "Voice", label: "Voice", defaultSpan: "span-12", defaultOrder: 10 },
   { id: "schedule.myShifts", tab: "schedule", tabLabel: "Meine Schichten", label: "Meine Schichten", defaultSpan: "span-12", defaultOrder: 10 },
   { id: "schedule.swap", tab: "schedule", tabLabel: "Meine Schichten", label: "Tauschwunsch", defaultSpan: "span-12", defaultOrder: 20 },
-  { id: "availability.workspace", tab: "availability", tabLabel: "Verfuegbarkeit", label: "Verfuegbarkeit", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "availability.workspace", tab: "availability", tabLabel: "Verfügbarkeit", label: "Verfügbarkeit", defaultSpan: "span-12", defaultOrder: 10 },
   { id: "feedback.admin", tab: "feedback", tabLabel: "Feedback", label: "Feedback Admin", defaultSpan: "span-12", defaultOrder: 10 },
   { id: "feedback.member", tab: "feedback", tabLabel: "Feedback", label: "Feedback", defaultSpan: "span-12", defaultOrder: 10 },
   { id: "planning.planner", tab: "planning", tabLabel: "Planung", label: "Schichtplanung", defaultSpan: "span-12", defaultOrder: 10 },
-  { id: "planning.swap", tab: "planning", tabLabel: "Planung", label: "Tauschwuensche", defaultSpan: "span-4", defaultOrder: 20 },
-  { id: "planning.requests", tab: "planning", tabLabel: "Planung", label: "Rueckmeldungen", defaultSpan: "span-4", defaultOrder: 30 },
+  { id: "planning.swap", tab: "planning", tabLabel: "Planung", label: "Tauschwünsche", defaultSpan: "span-4", defaultOrder: 20 },
+  { id: "planning.requests", tab: "planning", tabLabel: "Planung", label: "Rückmeldungen", defaultSpan: "span-4", defaultOrder: 30 },
   { id: "capacity.main", tab: "capacity", tabLabel: "Auslastung", label: "Auslastung", defaultSpan: "span-12", defaultOrder: 10 },
   { id: "activity.main", tab: "activity", tabLabel: "Portal-Aktivitaet", label: "Portal-Aktivitaet", defaultSpan: "span-12", defaultOrder: 10 },
   { id: "team.warnings", tab: "team", tabLabel: "Team", label: "Verwarnungen", defaultSpan: "span-12", defaultOrder: 10 },
@@ -492,7 +494,7 @@ function handleFocusOut() {
 
 async function boot() {
   if (root) {
-    root.innerHTML = renderBootShell("Portal wird geladen", "Ich hole gerade die Startdaten fuer SONARA. Wenn es etwas laenger dauert, liegt es meistens an der Server-Antwort und nicht an deinem Browser.");
+    root.innerHTML = renderBootShell("Portal wird geladen", "Ich hole gerade die Startdaten für SONARA. Wenn es etwas laenger dauert, liegt es meistens an der Server-Antwort und nicht an deinem Browser.");
   }
   syncNotificationPermission();
   await refreshBootstrap();
@@ -578,7 +580,7 @@ async function refreshVrchatOverview(showErrors = true) {
 
 async function refreshDiscordStatus(showErrors = true) {
   state.discordLoading = true;
-  if (showErrors) setFlash("Discord-Status wird geprueft.", "info");
+  if (showErrors) setFlash("Discord-Status wird geprüft.", "info");
   render();
 
   try {
@@ -691,7 +693,7 @@ function describeVoiceError(error) {
   const message = String(error?.message || error || "").trim();
   const name = String(error?.name || "").trim();
   if (name === "NotAllowedError" || /permission|denied|notallowed|microphone|mikro/i.test(message)) {
-    return "Der Browser blockiert dein Mikrofon. Bitte Mikrofon fuer diese Webseite erlauben und danach Voice erneut betreten.";
+    return "Der Browser blockiert dein Mikrofon. Bitte Mikrofon für diese Webseite erlauben und danach Voice erneut betreten.";
   }
   if (/livekit.*client|cdn|script|geladen/i.test(message)) {
     return message;
@@ -754,7 +756,7 @@ async function joinVoiceRoom(roomId) {
     });
 
     if (!payload?.serverUrl || !payload?.token) {
-      throw new Error("LiveKit-Tokenantwort ist unvollstaendig. Bitte pruefe die Server-Konfiguration.");
+      throw new Error("LiveKit-Tokenantwort ist unvollständig. Bitte pruefe die Server-Konfiguration.");
     }
 
     state.voice.clientStatus = "Client wird vorbereitet";
@@ -931,14 +933,14 @@ function renderFatalAppError(error) {
           <div class="section-head">
             <div>
               <p class="eyebrow">Ladefehler</p>
-              <h2>Die Ansicht konnte nicht vollstaendig aufgebaut werden</h2>
-              <p class="section-copy">Bitte lade die Seite einmal neu. Wenn es direkt wieder passiert, schick mir den Text unten, dann ziehe ich den naechsten Fehler raus.</p>
+              <h2>Die Ansicht konnte nicht vollständig aufgebaut werden</h2>
+              <p class="section-copy">Bitte lade die Seite einmal neu. Wenn es direkt wieder passiert, schick mir den Text unten, dann ziehe ich den nächsten Fehler raus.</p>
             </div>
           </div>
           <div class="stack-list">
             <article class="mini-card">
               <p><strong>Fehler:</strong> ${escapeHtml(message)}</p>
-              <p class="helper-text">Falls du gerade auf einem speziellen Tab warst, springt das Portal beim naechsten Versuch automatisch wieder auf eine sichere Uebersicht.</p>
+              <p class="helper-text">Falls du gerade auf einem speziellen Tab warst, springt das Portal beim nächsten Versuch automatisch wieder auf eine sichere Übersicht.</p>
             </article>
           </div>
         </section>
@@ -962,12 +964,12 @@ function renderBootShell(title, intro) {
             <div>
               <p class="eyebrow">Verbindung</p>
               <h2>Die Seite baut sich gerade auf</h2>
-              <p class="section-copy">Wenn du bisher nur das Hintergrundbild gesehen hast, bekommst du hier jetzt zumindest eine sichtbare Rueckmeldung statt einer leeren Flaeche.</p>
+              <p class="section-copy">Wenn du bisher nur das Hintergrundbild gesehen hast, bekommst du hier jetzt zumindest eine sichtbare Rückmeldung statt einer leeren Flaeche.</p>
             </div>
           </div>
           <div class="stack-list">
             <article class="mini-card">
-              <p>Das Portal verbindet sich mit dem Server und laedt deine Community-Daten.</p>
+              <p>Das Portal verbindet sich mit dem Server und lädt deine Community-Daten.</p>
               <p class="helper-text">Wenn dieser Zustand laenger stehen bleibt, liegt sehr wahrscheinlich die API-Antwort quer oder es laeuft noch ein alter Deploy.</p>
             </article>
           </div>
@@ -1090,7 +1092,7 @@ function renderPublicPortal() {
   const stats = community.stats || {};
   const eyebrow = "SONARA Community Portal";
   const title = "Community, News und Team an einem Ort";
-  const intro = "Hier landet das Wichtigste aus SONARA: News, Events, Regeln, Community-Team und der Zugang fuer Mitglieder und Staff.";
+  const intro = "Hier landet das Wichtigste aus SONARA: News, Events, Regeln, Community-Team und der Zugang für Mitglieder und Staff.";
   const chips = [
     `${stats.members || 0} Mitglieder`,
     `${stats.moderators || 0} Moderatoren`,
@@ -1108,19 +1110,19 @@ function renderPublicPortal() {
           <p class="eyebrow">Community Einstieg</p>
           <h2>Was du auf der Webseite findest</h2>
           <p class="auth-kicker">
-            Die Webseite ist der zentrale Hub fuer die SONARA Community. Oeffentliche News, kommende Events,
-            Regeln, Ansprechpartner und der Mitgliederbereich liegen an einem Ort, waehrend Moderation und
+            Die Webseite ist der zentrale Hub für die SONARA Community. Öffentliche News, kommende Events,
+            Regeln, Ansprechpartner und der Mitgliederbereich liegen an einem Ort, während Moderation und
             Planung intern getrennt bleiben.
           </p>
 
           <div class="feature-grid">
             <article class="feature-card">
               <h3>Community News</h3>
-              <p>Wichtige Hinweise, Event-Ankuendigungen und sichtbare Updates stehen direkt auf der Seite.</p>
+              <p>Wichtige Hinweise, Event-Ankündigungen und sichtbare Updates stehen direkt auf der Seite.</p>
             </article>
             <article class="feature-card">
               <h3>Events</h3>
-              <p>Kommende Treffen, Welten und Hosts sind fuer jedes Mitglied schnell sichtbar.</p>
+              <p>Kommende Treffen, Welten und Hosts sind für jedes Mitglied schnell sichtbar.</p>
             </article>
             <article class="feature-card">
               <h3>Mitgliederbereich</h3>
@@ -1175,7 +1177,7 @@ function renderPublicPortal() {
               </div>
               <div class="field">
                 <label for="registerBio">Kurzprofil</label>
-                <textarea id="registerBio" name="bio" placeholder="Wofuer du in SONARA bekannt sein willst"></textarea>
+                <textarea id="registerBio" name="bio" placeholder="Wofür du in SONARA bekannt sein willst"></textarea>
               </div>
               <div class="field">
                 <label for="registerPassword">Passwort</label>
@@ -1217,7 +1219,7 @@ function renderPublicPortal() {
               <div class="demo-item">
                 <div>
                   <strong>Leitung und Admin</strong>
-                  <p class="subtle">Verwalten News, Team, Planung, Rollen und spaeter Integrationen.</p>
+                  <p class="subtle">Verwalten News, Team, Planung, Rollen und später Integrationen.</p>
                 </div>
                 <code>Nur intern</code>
               </div>
@@ -1250,7 +1252,7 @@ function renderDashboard() {
 
   let eyebrow = "SONARA Community";
   let title = "Dein Community-Bereich";
-  let intro = "News, Events, Profil und Community-Funktionen liegen fuer dich an einem Ort.";
+  let intro = "News, Events, Profil und Community-Funktionen liegen für dich an einem Ort.";
   let chips = [
     ROLE_LABELS[user.role] || user.role,
     `${announcements.length} News`,
@@ -1269,7 +1271,7 @@ function renderDashboard() {
   } else if (staff) {
     eyebrow = "SONARA Staff";
     title = "Dein Staff-Bereich";
-    intro = "Community-Bereich und Moderationsarbeit laufen hier zusammen, ohne dass die Seite unuebersichtlich wird.";
+    intro = "Community-Bereich und Moderationsarbeit laufen hier zusammen, ohne dass die Seite unübersichtlich wird.";
     chips = [
       ROLE_LABELS[user.role] || user.role,
       upcomingShifts[0] ? `${formatDate(upcomingShifts[0].date)} | ${formatShiftWindow(upcomingShifts[0])}` : "Noch kein Einsatz",
@@ -1388,8 +1390,8 @@ function renderStatsStrip() {
       <section class="stats-strip">
         ${renderStatCard("Mitglieder", memberCount, "Registrierte Community-Accounts", "teal")}
         ${renderStatCard("Moderatoren", moderatorCount, "Aktive Staff-Mitglieder", "amber")}
-        ${renderStatCard("Schichten", nextWeekShifts.length, "Einsaetze in den naechsten 7 Tagen", "amber")}
-        ${renderStatCard("Offenes Feedback", openRequests, "Rueckmeldungen warten auf Sichtung", "rose")}
+        ${renderStatCard("Schichten", nextWeekShifts.length, "Einsätze in den nächsten 7 Tagen", "amber")}
+        ${renderStatCard("Offenes Feedback", openRequests, "Rückmeldungen warten auf Sichtung", "rose")}
         ${renderStatCard("Eingestempelt", liveEntries, "Aktuell aktive Moderatoren", "sky")}
       </section>
     `;
@@ -1407,8 +1409,8 @@ function renderStatsStrip() {
     return `
       <section class="stats-strip">
         ${renderStatCard("Naechste Schicht", nextShift ? `${formatDate(nextShift.date)} | ${formatShiftWindow(nextShift)}` : "-", nextShift ? `${nextShift.shiftType} | ${nextShift.world}` : "Noch nichts geplant", "teal")}
-        ${renderStatCard("Meine Einsaetze", myShifts.length, "Aktuell in deinem Plan", "amber")}
-        ${renderStatCard("Offene Notizen", openRequests, "Rueckmeldungen mit offenem Status", "rose")}
+        ${renderStatCard("Meine Einsätze", myShifts.length, "Aktuell in deinem Plan", "amber")}
+        ${renderStatCard("Offene Notizen", openRequests, "Rückmeldungen mit offenem Status", "rose")}
         ${renderStatCard("Erfasste Zeit", formatDuration(totalHours), activeEntry ? "Gerade aktiv eingestempelt" : "Gesamt aus abgeschlossenen Schichten", "sky")}
       </section>
     `;
@@ -1422,7 +1424,7 @@ function renderStatsStrip() {
     <section class="stats-strip">
       ${renderStatCard("Community News", getAnnouncementFeed().length, "Aktuelle sichtbare Updates", "teal")}
       ${renderStatCard("Events", (community.events || []).length, "Geplante Community-Termine", "amber")}
-      ${renderStatCard("Feedback", openRequests, "Deine offenen Rueckmeldungen", "rose")}
+      ${renderStatCard("Feedback", openRequests, "Deine offenen Rückmeldungen", "rose")}
       ${renderStatCard("Staff", (stats.moderators || 0) + (stats.planners || 0), "Moderation und Leitung im Portal", "sky")}
     </section>
   `;
@@ -1430,8 +1432,8 @@ function renderStatsStrip() {
   return `
     <section class="stats-strip">
       ${renderStatCard("Naechste Schicht", nextShift ? `${formatDate(nextShift.date)} · ${formatShiftWindow(nextShift)}` : "-", nextShift ? `${nextShift.shiftType} · ${nextShift.world}` : "Noch nichts geplant", "teal")}
-      ${renderStatCard("Meine Einsaetze", myShifts.length, "Aktuell in deinem Plan", "amber")}
-      ${renderStatCard("Offene Notizen", openRequests, "Rueckmeldungen mit offenem Status", "rose")}
+      ${renderStatCard("Meine Einsätze", myShifts.length, "Aktuell in deinem Plan", "amber")}
+      ${renderStatCard("Offene Notizen", openRequests, "Rückmeldungen mit offenem Status", "rose")}
       ${renderStatCard("Erfasste Zeit", formatDuration(totalHours), activeEntry ? "Gerade aktiv eingestempelt" : "Gesamt aus abgeschlossenen Schichten", "sky")}
     </section>
   `;
@@ -1474,11 +1476,10 @@ function renderManagerDashboard(activeTab) {
     case "overview":
     default:
       return [
-        renderNotificationsPanel(),
-        renderDashboardGuidePanel("manager"),
+        renderWelcomeHeroPanel(),
         renderNewsSpotlightPanel(),
-        renderCommunityOverviewPanel(),
-        renderRequestAdminPanel()
+        renderDashboardGuidePanel("manager"),
+        renderCommunityOverviewPanel()
       ].join("");
   }
 }
@@ -1506,10 +1507,9 @@ function renderModeratorDashboard(activeTab) {
     case "overview":
     default:
       return [
-        renderNotificationsPanel(),
-        renderDashboardGuidePanel("moderator"),
+        renderWelcomeHeroPanel(),
         renderNewsSpotlightPanel(),
-        renderMySchedulePanel(),
+        renderDashboardGuidePanel("moderator"),
         renderCommunityOverviewPanel()
       ].join("");
   }
@@ -1534,12 +1534,81 @@ function renderMemberDashboard(activeTab) {
     case "overview":
     default:
       return [
-        renderNotificationsPanel(),
-        renderDashboardGuidePanel("member"),
+        renderWelcomeHeroPanel(),
         renderNewsSpotlightPanel(),
+        renderDashboardGuidePanel("member"),
         renderCommunityOverviewPanel()
       ].join("");
   }
+}
+
+function renderWelcomeHeroPanel() {
+  return `
+    <section class="panel span-12 welcome-hero">
+      <div class="hero-content">
+        <div class="hero-text">
+          <p class="eyebrow">Willkommen</p>
+          <h1>SONARA Community</h1>
+          <p class="hero-description">
+            SONARA ist eine vibrierende deutschsprachige Gaming- und Kreativ-Community, die sich in virtuellen Welten trifft,
+            gemeinsam Events erlebt und sich gegenseitig unterstützt. Wir legen Wert auf Respekt,
+            Zusammenhalt und faire Umgangston.
+          </p>
+          <div class="hero-stats">
+            <div class="stat">
+              <span class="stat-number">500+</span>
+              <span class="stat-label">Community-Mitglieder</span>
+            </div>
+            <div class="stat">
+              <span class="stat-number">12</span>
+              <span class="stat-label">Events pro Monat</span>
+            </div>
+            <div class="stat">
+              <span class="stat-number">7</span>
+              <span class="stat-label">Kreative Communities</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-section">
+        <h2>Unsere Werte</h2>
+        <div class="values-grid">
+          <div class="value-card">
+            <h3>Respekt</h3>
+            <p>Wir behandeln einander fair, freundlich und ohne persönliche Angriffe.</p>
+          </div>
+          <div class="value-card">
+            <h3>Zusammenhalt</h3>
+            <p>Als Team unterstützen wir uns gegenseitig und feiern Erfolge gemeinsam.</p>
+          </div>
+          <div class="value-card">
+            <h3>Transparenz</h3>
+            <p>Offene Kommunikation und ehrliches Feedback prägen unsere Kultur.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-section">
+        <h2>Kooperationen</h2>
+        <p class="section-copy">SONARA arbeitet mit ausgewählten Creator-Communities und Streaming-Netzwerken zusammen.</p>
+        <div class="coop-list">
+          <div class="coop-item">
+            <span class="coop-name">VRChat Community Hub</span>
+            <span class="coop-desc">Gemeinsame Events und World-Hosting</span>
+          </div>
+          <div class="coop-item">
+            <span class="coop-name">Creator Network Deutsch</span>
+            <span class="coop-desc">Cross-Promotion und Collab-Möglichkeiten</span>
+          </div>
+          <div class="coop-item">
+            <span class="coop-name">Gaming Creators Alliance</span>
+            <span class="coop-desc">Knowledge-Sharing und Joint Events</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
 }
 
 function renderDashboardGuidePanel(mode) {
@@ -1548,24 +1617,24 @@ function renderDashboardGuidePanel(mode) {
       ? [
           { title: "Community", text: "Hier pflegst du oeffentliche Bereiche wie Teamvorstellung, Regeln und den Community-Eindruck." },
           { title: "Events", text: "Hier sehen Mitglieder die wichtigsten Termine, Welten und Hosts." },
-          { title: "Planung", text: "Hier legst du Schichten, Welten und Aufgaben fuer das Team an." },
-          { title: "Team", text: "Hier verwaltest du Rollen, Benutzer und den Ueberblick pro Moderator." },
-          { title: "News", text: "Hier veroeffentlichst du sichtbare Community- und Team-News." },
-          { title: "Zeiten", text: "Hier siehst du, wer aktiv eingestempelt ist und welche Einsaetze liefen." }
+          { title: "Planung", text: "Hier legst du Schichten, Welten und Aufgaben für das Team an." },
+          { title: "Team", text: "Hier verwaltest du Rollen, Benutzer und den Überblick pro Moderator." },
+          { title: "News", text: "Hier veröffentlichst du sichtbare Community- und Team-News." },
+          { title: "Zeiten", text: "Hier siehst du, wer aktiv eingestempelt ist und welche Einsätze liefen." }
         ]
       : mode === "moderator"
         ? [
             { title: "Community", text: "Hier findest du die oeffentlichen SONARA-Bereiche wie Mitglieder sie sehen." },
-            { title: "Meine Schichten", text: "Hier findest du nur deine eigenen Einsaetze mit Welt und Aufgabe." },
-            { title: "Feedback", text: "Hier schickst du Feedback, Wuensche und Hinweise an die Leitung." },
+            { title: "Meine Schichten", text: "Hier findest du nur deine eigenen Einsätze mit Welt und Aufgabe." },
+            { title: "Feedback", text: "Hier schickst du Feedback, Wünsche und Hinweise an die Leitung." },
             { title: "Chat", text: "Hier laufen Staff-Absprachen und schnelle Rueckfragen." },
             { title: "Zeiten", text: "Hier stempelst du ein und aus und siehst deine Einsatzzeiten." }
           ]
         : [
             { title: "Community", text: "Hier findest du Teamvorstellung, Regeln, FAQ und den Aufbau der Community." },
             { title: "Events", text: "Hier siehst du die kommenden Termine, Welten und Hosts." },
-            { title: "News", text: "Hier stehen die aktuellsten Hinweise und Ankuendigungen aus SONARA." },
-            { title: "Feedback", text: "Hier schickst du Fragen, Wuensche oder Rueckmeldungen an die Leitung." },
+            { title: "News", text: "Hier stehen die aktuellsten Hinweise und Ankündigungen aus SONARA." },
+            { title: "Feedback", text: "Hier schickst du Fragen, Wünsche oder Rückmeldungen an die Leitung." },
             { title: "Chat", text: "Hier kannst du dich direkt im Portal mit der Community austauschen." }
           ];
 
@@ -1575,7 +1644,7 @@ function renderDashboardGuidePanel(mode) {
         <div>
           <p class="eyebrow">Schnellzugriff</p>
           <h2>${mode === "manager" ? "So ist das Portal aufgebaut" : "So findest du dich schnell zurecht"}</h2>
-          <p class="section-copy">Jeder Bereich hat genau einen klaren Zweck, damit die Seite uebersichtlich bleibt.</p>
+          <p class="section-copy">Jeder Bereich hat genau einen klaren Zweck, damit die Seite übersichtlich bleibt.</p>
         </div>
       </div>
       <div class="card-list guide-grid">
@@ -1610,7 +1679,7 @@ function renderNewsSpotlightPanel() {
         ${
           featured.length
             ? featured.map((entry) => renderAnnouncementCard(entry, false)).join("")
-            : renderEmptyState("Noch keine News", "Sobald etwas fuer die Community wichtig ist, taucht es hier auf.")
+            : renderEmptyState("Noch keine News", "Sobald etwas für die Community wichtig ist, taucht es hier auf.")
         }
       </div>
     </section>
@@ -1626,8 +1695,8 @@ function renderNotificationsPanel() {
       <div class="section-head">
         <div>
           <p class="eyebrow">Benachrichtigungen</p>
-          <h2>Automatische Hinweise fuer Schichten und Team-Infos</h2>
-          <p class="section-copy">Heute, morgen und bald anstehende Einsaetze werden hier automatisch zusammengefasst.</p>
+          <h2>Automatische Hinweise für Schichten und Team-Infos</h2>
+          <p class="section-copy">Heute, morgen und bald anstehende Einsätze werden hier automatisch zusammengefasst.</p>
         </div>
         ${
           browserSupport
@@ -1718,7 +1787,7 @@ function renderPlannerPanel() {
         <div>
           <p class="eyebrow">Schichtplanung</p>
           <h2>Schichten sauber planen und ruhig abarbeiten</h2>
-          <p class="section-copy">Eine klare Planungsflaeche fuer Datum, Person und Aufgabe. Abgeschlossene Zeiten bleiben im Archiv, auch wenn alte Schichten spaeter geloescht werden.</p>
+          <p class="section-copy">Eine klare Planungsflaeche für Datum, Person und Aufgabe. Abgeschlossene Zeiten bleiben im Archiv, auch wenn alte Schichten später geloescht werden.</p>
         </div>
         <span class="pill neutral">Server speichert live</span>
       </div>
@@ -1727,7 +1796,7 @@ function renderPlannerPanel() {
         ${renderStatCard("Schichten", shifts.length, "Aktuell sichtbar", "amber")}
         ${renderStatCard("Personen", plannerGroups.length, "Gerade eingeplant", "sky")}
         ${renderStatCard("Welten", worldCount, "Aktive Einsatzorte", "teal")}
-        ${renderStatCard("Offene Rueckmeldungen", openRequests, "Zur Planung noch offen", openRequests ? "rose" : "neutral")}
+        ${renderStatCard("Offene Rückmeldungen", openRequests, "Zur Planung noch offen", openRequests ? "rose" : "neutral")}
       </div>
 
       <div class="planner-layout">
@@ -1770,7 +1839,7 @@ function renderPlannerPanel() {
                     </div>
                     <div class="field">
                       <label for="shiftType">Schichttyp</label>
-                      <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Abloese" required>
+                      <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Ablöse" required>
                     </div>
                     <div class="field">
                       <label for="shiftWorld">Welt</label>
@@ -1814,18 +1883,18 @@ function renderPlannerPanel() {
 
             <article class="mini-card planner-compact-note">
               <h3>Planungsrhythmus</h3>
-              <p class="helper-text">Die Uebersicht sortiert jetzt nach aktiv, offen, geplant und zuletzt erledigt. Nutze oben die Einzelschicht fuer Korrekturen, die Sammelplanung darunter fuer ganze Wochen oder wiederkehrende Muster.</p>
+              <p class="helper-text">Die Übersicht sortiert jetzt nach aktiv, offen, geplant und zuletzt erledigt. Nutze oben die Einzelschicht für Korrekturen, die Sammelplanung darunter für ganze Wochen oder wiederkehrende Muster.</p>
             </article>
           </div>
 
           <details class="mystic-expander planner-bulk-shell">
-            <summary>Sammelplanung fuer mehrere Tage</summary>
+            <summary>Sammelplanung für mehrere Tage</summary>
             <div class="mystic-expander-body">
               <form class="stack-form planner-bulk-form" data-form="shift-bulk">
                 <div class="form-grid">
                   <div class="field span-all">
                     <div class="field-head">
-                      <label>Moderatoren auswaehlen</label>
+                      <label>Moderatoren auswählen</label>
                       <div class="bulk-selector-toolbar">
                         <button type="button" class="ghost small" data-action="bulk-select-all-members">Alle</button>
                         <button type="button" class="ghost small" data-action="bulk-clear-members">Keine</button>
@@ -1834,7 +1903,7 @@ function renderPlannerPanel() {
                     <div class="bulk-checkbox-grid">
                       ${buildBulkMemberChecks(users)}
                     </div>
-                    <p class="helper-text">Ein Haken bedeutet Wochenplanung fuer diese Person. Mehrere Haken erzeugen denselben Einsatz fuer mehrere Moderatoren.</p>
+                    <p class="helper-text">Ein Haken bedeutet Wochenplanung für diese Person. Mehrere Haken erzeugen denselben Einsatz für mehrere Moderatoren.</p>
                   </div>
                   <div class="field">
                     <label for="bulkDateStart">Von</label>
@@ -1885,7 +1954,7 @@ function renderPlannerPanel() {
                   </div>
                   <div class="field span-all">
                     <label for="bulkNotes">Interne Notiz</label>
-                    <textarea id="bulkNotes" name="notes" placeholder="Gleiche Notiz fuer alle angelegten Schichten">${escapeHtml(plannerFormValues.notes || "")}</textarea>
+                    <textarea id="bulkNotes" name="notes" placeholder="Gleiche Notiz für alle angelegten Schichten">${escapeHtml(plannerFormValues.notes || "")}</textarea>
                   </div>
                 </div>
 
@@ -2026,19 +2095,19 @@ function buildBulkShiftEntries(formData) {
   };
 
   if (!memberIds.length) {
-    throw new Error("Bitte mindestens einen Moderator fuer die Sammelplanung auswaehlen.");
+    throw new Error("Bitte mindestens einen Moderator für die Sammelplanung auswählen.");
   }
   if (!dateStart || !dateEnd) {
-    throw new Error("Bitte Start- und Enddatum fuer die Sammelplanung angeben.");
+    throw new Error("Bitte Start- und Enddatum für die Sammelplanung angeben.");
   }
   if (dateStart > dateEnd) {
     throw new Error("Das Enddatum muss nach dem Startdatum liegen.");
   }
   if (!weekdays.size) {
-    throw new Error("Bitte mindestens einen Wochentag fuer die Sammelplanung auswaehlen.");
+    throw new Error("Bitte mindestens einen Wochentag für die Sammelplanung auswählen.");
   }
   if (!basePayload.startTime || !basePayload.endTime || !basePayload.shiftType || !basePayload.world || !basePayload.task) {
-    throw new Error("Bitte Beginn, Ende, Schichttyp, Welt und Aufgabe fuer die Sammelplanung ausfuellen.");
+    throw new Error("Bitte Beginn, Ende, Schichttyp, Welt und Aufgabe für die Sammelplanung ausfuellen.");
   }
 
   const entries = [];
@@ -2196,7 +2265,7 @@ function renderPlannerSidebar(groups) {
     <aside class="planner-sidebar">
       <details class="mystic-expander planner-sidebar-expander" open>
         <summary>
-          <span>Wochenuebersicht</span>
+          <span>Wochenübersicht</span>
           <span class="pill neutral">${escapeHtml(String(groups.length))} Personen</span>
         </summary>
         <div class="mystic-expander-body">
@@ -2205,7 +2274,7 @@ function renderPlannerSidebar(groups) {
             ${
               groups.length
                 ? groups.map((group, index) => renderPlannerSidebarGroup(group, index)).join("")
-                : renderEmptyState("Noch keine Personen im Plan", "Sobald du Schichten speicherst, erscheint hier die Schnelluebersicht.")
+                : renderEmptyState("Noch keine Personen im Plan", "Sobald du Schichten speicherst, erscheint hier die Schnellübersicht.")
             }
           </div>
         </div>
@@ -2513,7 +2582,7 @@ function renderShiftCalendarPanel() {
       <div class="section-head calendar-panel-head">
         <div>
           <p class="eyebrow">Kalender</p>
-          <h2>Wochenkalender fuer Schichten</h2>
+          <h2>Wochenkalender für Schichten</h2>
           <p class="section-copy">Jede Woche steht jetzt als eigenes Planungsboard da. Du erkennst schneller, was offen ist, was laeuft und welche alten Wochen du sauber rausnehmen kannst.</p>
         </div>
       </div>
@@ -2843,36 +2912,36 @@ function renderCapacityPanel() {
       <div class="section-head">
         <div>
           <p class="eyebrow">Auslastung</p>
-          <h2>Stunden und Verfuegbarkeit im Blick</h2>
-          <p class="section-copy">Hier siehst du pro Staff-Mitglied diese Woche, letzte Woche und die gesamte Ueberstundenbank. Ausgleich fuer freie Tage oder freie Wochen kannst du direkt hier verbuchen.</p>
+          <h2>Stunden und Verfügbarkeit im Blick</h2>
+          <p class="section-copy">Hier siehst du pro Staff-Mitglied diese Woche, letzte Woche und die gesamte Überstundenbank. Ausgleich für freie Tage oder freie Wochen kannst du direkt hier verbuchen.</p>
         </div>
       </div>
 
-      <p class="pill-note">Bitte bis Samstag die Verfuegbarkeiten fuer die naechste Woche einsammeln. Moderatoren und Leitung tragen das direkt im Profil ein. Ohne Rueckmeldung keine Einplanung; wiederholt fehlend kann zu Verwarnungen fuehren.</p>
+      <p class="pill-note">Bitte bis Samstag die Verfügbarkeiten für die naechste Woche einsammeln. Moderatoren und Leitung tragen das direkt im Profil ein. Ohne Rückmeldung keine Einplanung; wiederholt fehlend kann zu Verwarnungen fuehren.</p>
 
       <div class="stats-strip compact-stats">
         ${renderStatCard("Geleistet", formatHoursValue(totalWorkedHours), "Bisher erfasste Stunden diese Woche", "teal")}
         ${renderStatCard("Geplant", formatHoursValue(totalPlannedHours), "Eingetragene Schichtstunden diese Woche", "amber")}
         ${renderStatCard("Kapazitaet", totalCapacityHours ? formatHoursValue(totalCapacityHours) : "-", totalCapacityHours ? "Gemeldete Wochenstunden aus Profilen" : "Noch keine Profilangaben", "sky")}
-        ${renderStatCard("Diese Woche ueber Soll", totalOvertimeHours ? formatHoursValue(totalOvertimeHours) : "-", totalOvertimeHours ? "Aktueller Ueberhang in dieser Woche" : "Diese Woche noch kein Ueberhang", totalOvertimeHours ? "rose" : "neutral")}
-        ${renderStatCard("Ueberstundenbank", Math.abs(totalOvertimeBankHours) > 0.001 ? formatSignedHoursValue(totalOvertimeBankHours) : "0 Std.", "Gesammelte Ueberstunden inklusive manueller Ausgleichsbuchungen", totalOvertimeBankHours > 0 ? "rose" : totalOvertimeBankHours < 0 ? "amber" : "neutral")}
+        ${renderStatCard("Diese Woche über Soll", totalOvertimeHours ? formatHoursValue(totalOvertimeHours) : "-", totalOvertimeHours ? "Aktueller Überhang in dieser Woche" : "Diese Woche noch kein Überhang", totalOvertimeHours ? "rose" : "neutral")}
+        ${renderStatCard("Überstundenbank", Math.abs(totalOvertimeBankHours) > 0.001 ? formatSignedHoursValue(totalOvertimeBankHours) : "0 Std.", "Gesammelte Überstunden inklusive manueller Ausgleichsbuchungen", totalOvertimeBankHours > 0 ? "rose" : totalOvertimeBankHours < 0 ? "amber" : "neutral")}
         ${renderStatCard("Noch offen", totalCapacityHours ? formatHoursValue(openHours) : "-", totalCapacityHours ? "Noch nicht verplante gemeldete Stunden" : "Keine Kapazitaet hinterlegt", "rose")}
       </div>
 
       ${
         missingRows.length
           ? `
-            <p class="pill-note">Rueckmeldung fehlt aktuell bei ${escapeHtml(String(missingRows.length))} Person${missingRows.length === 1 ? "" : "en"}: ${escapeHtml(missingNames.join(", "))}.</p>
-            <p class="helper-text">Diese Staff-Mitglieder haben noch keine Stunden, Tage oder Zeitfenster fuer diese Woche eingetragen.</p>
+            <p class="pill-note">Rückmeldung fehlt aktuell bei ${escapeHtml(String(missingRows.length))} Person${missingRows.length === 1 ? "" : "en"}: ${escapeHtml(missingNames.join(", "))}.</p>
+            <p class="helper-text">Diese Staff-Mitglieder haben noch keine Stunden, Tage oder Zeitfenster für diese Woche eingetragen.</p>
           `
-          : '<p class="pill-note">Alle Staff-Rueckmeldungen fuer die aktuelle Woche sind vorhanden.</p>'
+          : '<p class="pill-note">Alle Staff-Rückmeldungen für die aktuelle Woche sind vorhanden.</p>'
       }
 
       <div class="calendar-members">
         ${
           rows.length
             ? rows.map((entry) => renderCapacityCard(entry)).join("")
-            : renderEmptyState("Noch keine Staff-Daten", "Sobald Staff-Mitglieder angelegt sind und ihre Verfuegbarkeit im Profil eintragen, erscheint die Wochenuebersicht hier.")
+            : renderEmptyState("Noch keine Staff-Daten", "Sobald Staff-Mitglieder angelegt sind und ihre Verfügbarkeit im Profil eintragen, erscheint die Wochenübersicht hier.")
         }
       </div>
     </section>
@@ -2899,7 +2968,7 @@ function renderCapacityCard(entry) {
       ${
         entry.availabilitySchedule
           ? `<p><strong>Hinweise:</strong> ${escapeHtml(entry.availabilitySchedule)}</p>`
-          : '<p class="helper-text">Keine Zusatzhinweise fuer diese Woche hinterlegt.</p>'
+          : '<p class="helper-text">Keine Zusatzhinweise für diese Woche hinterlegt.</p>'
       }
       ${entry.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt aktualisiert: ${escapeHtml(formatDateTime(entry.availabilityUpdatedAt))}</p>` : '<p class="timeline-meta">Noch nie im Portal hinterlegt.</p>'}
     </div>
@@ -2908,11 +2977,11 @@ function renderCapacityCard(entry) {
     <div class="capacity-detail-stack">
       <p><strong>Letzte Woche:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekHours || 0))}${entry.capacityHours > 0 ? ` | ${escapeHtml(formatSignedHoursValue(entry.previousWeekBalanceHours || 0))}` : ""}</p>
       <p><strong>Aktueller Saldo:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatSignedHoursValue(entry.hourBalance) : "Kein Wochenrahmen gesetzt")}</p>
-      <p><strong>Ueberstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
+      <p><strong>Überstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
       ${entry.shiftOverrunHours > 0 ? `<p class="helper-text"><strong>Schicht-Mehrzeit diese Woche:</strong> ${escapeHtml(formatHoursValue(entry.shiftOverrunHours))}</p>` : ""}
-      ${entry.overtimeHours > 0 ? `<p class="helper-text"><strong>Diese Woche ueber Soll:</strong> ${escapeHtml(formatHoursValue(entry.overtimeHours))}</p>` : ""}
+      ${entry.overtimeHours > 0 ? `<p class="helper-text"><strong>Diese Woche über Soll:</strong> ${escapeHtml(formatHoursValue(entry.overtimeHours))}</p>` : ""}
       ${entry.previousWeekShiftOverrunHours > 0 ? `<p class="helper-text"><strong>Schicht-Mehrzeit letzte Woche:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekShiftOverrunHours))}</p>` : ""}
-      ${entry.previousWeekOvertimeHours > 0 ? `<p class="helper-text"><strong>Letzte Woche ueber Soll:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekOvertimeHours))}</p>` : ""}
+      ${entry.previousWeekOvertimeHours > 0 ? `<p class="helper-text"><strong>Letzte Woche über Soll:</strong> ${escapeHtml(formatHoursValue(entry.previousWeekOvertimeHours))}</p>` : ""}
       ${Math.abs(entry.overtimeAdjustmentHours || 0) > 0.001 ? `<p class="helper-text"><strong>Ausgleich gebucht:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeAdjustmentHours))}</p>` : ""}
       ${renderOvertimeAdjustmentHistory(entry.recentOvertimeAdjustments || [])}
       ${renderOvertimeAdjustmentForm(entry)}
@@ -2942,7 +3011,7 @@ function renderCapacityCard(entry) {
           : `<p class="helper-text">${escapeHtml(buildCapacityDeltaText(plannedDelta, dayDelta))}</p>`
       }
       <details class="mystic-expander compact-inline-expander">
-        <summary>Verfuegbarkeit und Slots</summary>
+        <summary>Verfügbarkeit und Slots</summary>
         <div class="mystic-expander-body">
           ${availabilityDetails}
         </div>
@@ -2959,7 +3028,7 @@ function renderCapacityCard(entry) {
 
 function renderOvertimeAdjustmentHistory(adjustments) {
   if (!adjustments.length) {
-    return '<p class="helper-text">Noch kein manueller Ueberstunden-Ausgleich gebucht.</p>';
+    return '<p class="helper-text">Noch kein manueller Überstunden-Ausgleich gebucht.</p>';
   }
 
   return `
@@ -2990,7 +3059,7 @@ function renderOvertimeAdjustmentForm(entry) {
       <div class="section-head compact-section-head">
         <div>
           <p class="eyebrow">Ausgleich</p>
-          <h3>Ueberstunden verbuchen</h3>
+          <h3>Überstunden verbuchen</h3>
         </div>
       </div>
       <div class="form-grid">
@@ -3010,8 +3079,8 @@ function renderOvertimeAdjustmentForm(entry) {
           <textarea id="overtimeNote-${escapeHtml(entry.user.id)}" name="note" placeholder="z. B. freie Woche, Event-Ausgleich oder manuelle Korrektur"></textarea>
         </div>
       </div>
-      <p class="helper-text">Wenn jemand Ueberstunden abbummelt, buchst du hier den Abzug. So bleibt die Bank sauber und du verlierst den Ueberblick nicht.</p>
-      <button type="submit" class="small">Ueberstunden buchen</button>
+      <p class="helper-text">Wenn jemand Überstunden abbummelt, buchst du hier den Abzug. So bleibt die Bank sauber und du verlierst den Überblick nicht.</p>
+      <button type="submit" class="small">Überstunden buchen</button>
     </form>
   `;
 }
@@ -3027,32 +3096,32 @@ function renderAvailabilityReminderPanel() {
   const updatedLabel = user.availabilityUpdatedAt ? formatDateTime(user.availabilityUpdatedAt) : "";
   const activeSlotCount = normalizeClientAvailabilitySlots(availabilitySlots).filter((slot) => slot.enabled && (slot.startTime || slot.endTime || slot.note)).length;
   const memberView = user.role === "member";
-  const eyebrow = memberView ? "Meine Zeiten" : "Verfuegbarkeit";
-  const title = memberView ? "Wann du meistens in SONARA da bist" : "Dein Wochenrahmen fuer die Planung";
+  const eyebrow = memberView ? "Meine Zeiten" : "Verfügbarkeit";
+  const title = memberView ? "Wann du meistens in SONARA da bist" : "Dein Wochenrahmen für die Planung";
   const copy = memberView
-    ? "Ein eigener Bereich nur fuer deine Zeiten. So sehen Community und Team besser, wann du oft erreichbar bist oder gern bei Events dabei waerst."
-    : "Ein eigener Bereich nur fuer freie Zeiten. Stunden, Tage und Slots stehen gesammelt an einer Stelle und bleiben bei Live-Updates stabil.";
+    ? "Ein eigener Bereich nur für deine Zeiten. So sehen Community und Team besser, wann du oft erreichbar bist oder gern bei Events dabei waerst."
+    : "Ein eigener Bereich nur für freie Zeiten. Stunden, Tage und Slots stehen gesammelt an einer Stelle und bleiben bei Live-Updates stabil.";
   const statusLabel = hasAnyAvailability ? "Eingetragen" : memberView ? "Noch offen" : "Fehlt noch";
   const statusCopy = hasAnyAvailability
     ? "Du kannst bestehende Angaben direkt anpassen."
     : memberView
       ? "Trag einmal grob ein, wann du meistens da bist."
-      : "Bitte einmal sauber fuer die kommende Woche ausfuellen.";
+      : "Bitte einmal sauber für die kommende Woche ausfuellen.";
   const scopeLabel = memberView ? "Community-Rahmen" : "Staff-Planung";
   const headTitle = memberView ? "Deine typischen Zeitfenster" : "Dein Wochenrahmen";
   const headCopy = memberView
-    ? "Stunden, Tage und Slots helfen bei Events, spontanen Treffen und besserer Uebersicht im Portal."
-    : "Erst die harten Zeiten, darunter nur noch kurze Sonderfaelle oder Hinweise.";
+    ? "Stunden, Tage und Slots helfen bei Events, spontanen Treffen und besserer Übersicht im Portal."
+    : "Erst die harten Zeiten, darunter nur noch kurze Sonderfälle oder Hinweise.";
   const slotCopy = memberView
     ? "Hier traegst du pro Tag grob ein, wann du meistens online oder erreichbar bist."
     : "Hier traegst du pro Tag direkt ein, wann du wirklich eingesetzt werden kannst.";
-  const scheduleLabel = memberView ? "Zusatzhinweise zu deinen Zeiten" : "Zusatzhinweise fuer diese Woche";
+  const scheduleLabel = memberView ? "Zusatzhinweise zu deinen Zeiten" : "Zusatzhinweise für diese Woche";
   const schedulePlaceholder = memberView
-    ? "z. B. unter der Woche eher spaet, Sonntag oft spontan oder Freitag fast immer online."
-    : "z. B. Mittwoch eventuell spaeter, Samstag nur spontan oder Sonntag nur fuer kurze Absprachen.";
+    ? "z. B. unter der Woche eher spät, Sonntag oft spontan oder Freitag fast immer online."
+    : "z. B. Mittwoch eventuell später, Samstag nur spontan oder Sonntag nur für kurze Absprachen.";
   const scheduleCopy = memberView
-    ? "Nur fuer Ausnahmen, Hinweise oder kleine Erklaerungen."
-    : "Nur fuer Ausnahmen, flexible Hinweise oder kurze Erklaerungen.";
+    ? "Nur für Ausnahmen, Hinweise oder kleine Erklärungen."
+    : "Nur für Ausnahmen, flexible Hinweise oder kurze Erklärungen.";
 
   return `
     <section class="panel span-12">
@@ -3115,8 +3184,8 @@ function renderAvailabilityReminderPanel() {
           </div>
         </div>
         <div class="card-actions">
-          <button type="submit">Verfuegbarkeit speichern</button>
-          <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Vollstaendiges Profil oeffnen</button>
+          <button type="submit">Verfügbarkeit speichern</button>
+          <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Vollstaendiges Profil öffnen</button>
         </div>
         ${updatedLabel ? `<p class="timeline-meta">Zuletzt gespeichert: ${escapeHtml(updatedLabel)}</p>` : ""}
       </form>
@@ -3134,9 +3203,9 @@ function renderAvailabilityOverviewPanel() {
     <section class="panel span-12">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Team-Verfuegbarkeit</p>
+          <p class="eyebrow">Team-Verfügbarkeit</p>
           <h2>Wer hat schon Zeiten eingetragen?</h2>
-          <p class="section-copy">Hier siehst du die Verfuegbarkeit pro Person als eigenen Bereich, ohne erst ueber Auslastung oder einzelne Profile zu gehen.</p>
+          <p class="section-copy">Hier siehst du die Verfügbarkeit pro Person als eigenen Bereich, ohne erst über Auslastung oder einzelne Profile zu gehen.</p>
         </div>
         <span class="pill ${missingRows.length ? "rose" : "success"}">${escapeHtml(missingRows.length ? `${missingRows.length} offen` : "Alles da")}</span>
       </div>
@@ -3165,7 +3234,7 @@ function renderAvailabilityOverviewPanel() {
                         <summary>Zeitfenster und Hinweise</summary>
                         <div class="mystic-expander-body">
                           ${renderAvailabilitySlotList(entry.availabilitySlots, "Noch keine Zeitfenster eingetragen.")}
-                          ${entry.availabilitySchedule ? `<p class="helper-text"><strong>Hinweise:</strong> ${escapeHtml(entry.availabilitySchedule)}</p>` : '<p class="helper-text">Keine Zusatzhinweise fuer diese Woche hinterlegt.</p>'}
+                          ${entry.availabilitySchedule ? `<p class="helper-text"><strong>Hinweise:</strong> ${escapeHtml(entry.availabilitySchedule)}</p>` : '<p class="helper-text">Keine Zusatzhinweise für diese Woche hinterlegt.</p>'}
                           ${entry.availabilityUpdatedAt ? `<p class="timeline-meta">Zuletzt geaendert: ${escapeHtml(formatDateTime(entry.availabilityUpdatedAt))}</p>` : '<p class="timeline-meta">Noch nie im Portal hinterlegt.</p>'}
                         </div>
                       </details>
@@ -3173,7 +3242,7 @@ function renderAvailabilityOverviewPanel() {
                   `;
                 })
                 .join("")
-            : renderEmptyState("Noch keine Staff-Daten", "Sobald Team-Mitglieder im Portal angelegt sind, erscheint ihre Verfuegbarkeit hier.")
+            : renderEmptyState("Noch keine Staff-Daten", "Sobald Team-Mitglieder im Portal angelegt sind, erscheint ihre Verfügbarkeit hier.")
         }
       </div>
     </section>
@@ -3238,11 +3307,11 @@ function renderPortalActivityPanel() {
         <div>
           <p class="eyebrow">Portal-Aktivitaet</p>
           <h2>Nur die wichtigen Signale aus dem Portal</h2>
-          <p class="section-copy">Das ist bewusst keine Komplett-Ueberwachung. Du siehst hier nur, ob Leute online waren, wann sie ihre Wochenangaben gepflegt haben und wann die letzte Stempelung passiert ist.</p>
+          <p class="section-copy">Das ist bewusst keine Komplett-Überwachung. Du siehst hier nur, ob Leute online waren, wann sie ihre Wochenangaben gepflegt haben und wann die letzte Stempelung passiert ist.</p>
         </div>
       </div>
 
-      <p class="pill-note"><strong>Verfuegbarkeit zuletzt gepflegt</strong> zeigt den letzten Speichervorgang fuer Wochenrahmen oder Slots. <strong>Letzte Stempelung</strong> ist der letzte Check-in oder Check-out. <strong>Mehrzeit diese Woche</strong> rechnet laengeres Arbeiten als geplant automatisch mit ein.</p>
+      <p class="pill-note"><strong>Verfügbarkeit zuletzt gepflegt</strong> zeigt den letzten Speichervorgang für Wochenrahmen oder Slots. <strong>Letzte Stempelung</strong> ist der letzte Check-in oder Check-out. <strong>Mehrzeit diese Woche</strong> rechnet laengeres Arbeiten als geplant automatisch mit ein.</p>
 
       <div class="activity-overview-grid">
         ${
@@ -3257,12 +3326,12 @@ function renderPortalActivityPanel() {
                     <p class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</p>
                     <p><strong>Letzter Login:</strong> ${escapeHtml(entry.activityMeta.loginLabel)}</p>
                     <p><strong>Zuletzt online:</strong> ${escapeHtml(entry.activityMeta.seenLabel)}</p>
-                    <p><strong>Verfuegbarkeit zuletzt gepflegt:</strong> ${escapeHtml(entry.latestAvailabilityAt ? formatDateTime(entry.latestAvailabilityAt) : "Noch nicht gepflegt")}</p>
+                    <p><strong>Verfügbarkeit zuletzt gepflegt:</strong> ${escapeHtml(entry.latestAvailabilityAt ? formatDateTime(entry.latestAvailabilityAt) : "Noch nicht gepflegt")}</p>
                     <p><strong>Letzte Stempelung:</strong> ${escapeHtml(entry.latestTimeEntryAt ? formatDateTime(entry.latestTimeEntryAt) : "Noch kein Zeiteneintrag")}</p>
                     <p><strong>Mehrzeit diese Woche:</strong> ${escapeHtml(entry.currentWeekExtraHours > 0 ? formatHoursValue(entry.currentWeekExtraHours) : "0 Std.")}</p>
-                    <p><strong>Ueberstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
-                    <p><strong>Rueckmeldungen offen:</strong> ${escapeHtml(String(entry.openRequests))}</p>
-                    ${entry.latestRequestAt ? `<p class="timeline-meta">Letzte Rueckmeldung: ${escapeHtml(formatDateTime(entry.latestRequestAt))}</p>` : ""}
+                    <p><strong>Überstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
+                    <p><strong>Rückmeldungen offen:</strong> ${escapeHtml(String(entry.openRequests))}</p>
+                    ${entry.latestRequestAt ? `<p class="timeline-meta">Letzte Rückmeldung: ${escapeHtml(formatDateTime(entry.latestRequestAt))}</p>` : ""}
                     ${entry.currentlyClockedIn ? '<p class="helper-text">Gerade noch eingestempelt.</p>' : entry.currentWeekShiftOverrunHours > 0 ? `<p class="helper-text">Davon gegen Schichtplan bereits ${escapeHtml(formatHoursValue(entry.currentWeekShiftOverrunHours))} Mehrzeit.</p>` : ""}
                   </article>
                 `)
@@ -3308,7 +3377,7 @@ function renderShiftActionRow(shift, openEntry) {
       ${blockByOtherShift
         ? "Du bist bereits in einer anderen Schicht eingestempelt."
         : isToday
-          ? "Stempelbuttons sind fuer heutige Einsaetze aktiv."
+          ? "Stempelbuttons sind für heutige Einsätze aktiv."
           : "Stempeln ist am Einsatztag verfuegbar."}
     </p>
   `;
@@ -3322,11 +3391,11 @@ function renderSwapPanel(managerView) {
       <div class="section-head">
         <div>
           <p class="eyebrow">Schichttausch</p>
-          <h2>${managerView ? "Tauschwuesche genehmigen" : "Tauschwuesche und Uebernahmen"}</h2>
+          <h2>${managerView ? "Tauschwuesche genehmigen" : "Tauschwuesche und Übernahmen"}</h2>
           <p class="section-copy">
             ${managerView
-              ? "Waehle einen angebotenen Moderator aus und uebernimm die Schicht direkt im Plan."
-              : "Stelle fuer eigene Schichten einen Tauschwunsch oder biete die Uebernahme fuer andere an."}
+              ? "Wähle einen angebotenen Moderator aus und übernimm die Schicht direkt im Plan."
+              : "Stelle für eigene Schichten einen Tauschwunsch oder biete die Übernahme für andere an."}
           </p>
         </div>
       </div>
@@ -3369,7 +3438,7 @@ function renderSwapRequestCard(entry, managerView) {
       </p>
       ${
         entry.approvedCandidateName
-          ? `<p class="helper-text">Genehmigt fuer: ${escapeHtml(entry.approvedCandidateName)}</p>`
+          ? `<p class="helper-text">Genehmigt für: ${escapeHtml(entry.approvedCandidateName)}</p>`
           : ""
       }
       ${
@@ -3377,9 +3446,9 @@ function renderSwapRequestCard(entry, managerView) {
           ? `
             <form class="stack-form compact-form" data-form="swap-decision" data-swap-request-id="${escapeHtml(entry.id)}">
               <div class="field">
-                <label for="swap-candidate-${escapeHtml(entry.id)}">Uebernahme durch</label>
+                <label for="swap-candidate-${escapeHtml(entry.id)}">Übernahme durch</label>
                 <select id="swap-candidate-${escapeHtml(entry.id)}" name="candidateId">
-                  <option value="">Moderator waehlen</option>
+                  <option value="">Moderator wählen</option>
                   ${entry.candidates
                     .map((candidate) => `<option value="${escapeHtml(candidate.id)}">${escapeHtml(candidate.name)}</option>`)
                     .join("")}
@@ -3392,9 +3461,9 @@ function renderSwapRequestCard(entry, managerView) {
             </form>
           `
           : canOffer
-            ? `<button type="button" class="ghost small" data-action="offer-swap" data-swap-request-id="${escapeHtml(entry.id)}">Ich uebernehme</button>`
+            ? `<button type="button" class="ghost small" data-action="offer-swap" data-swap-request-id="${escapeHtml(entry.id)}">Ich übernehme</button>`
             : iAmCandidate
-              ? '<p class="helper-text">Du hast die Uebernahme bereits angeboten.</p>'
+              ? '<p class="helper-text">Du hast die Übernahme bereits angeboten.</p>'
               : ""
       }
     </article>
@@ -3450,7 +3519,7 @@ function renderTeamPanel() {
             </div>
             <div class="field">
               <label for="password-${escapeHtml(user.id)}">Neues Passwort</label>
-              <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen fuer keine Aenderung">
+              <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen für keine Aenderung">
             </div>
             <div class="card-actions">
               <button type="submit" class="ghost small">Speichern</button>
@@ -3529,8 +3598,8 @@ function renderRequestAdminPanel() {
     <section class="panel span-4">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Wuensche und Notizen</p>
-          <h2>Rueckmeldungen aus dem Team</h2>
+          <p class="eyebrow">Wünsche und Notizen</p>
+          <h2>Rückmeldungen aus dem Team</h2>
         </div>
       </div>
 
@@ -3538,7 +3607,7 @@ function renderRequestAdminPanel() {
         ${
           requests.length
             ? requests.map((entry) => renderAdminRequestCard(entry)).join("")
-            : renderEmptyState("Keine Rueckmeldungen", "Sobald das Team Wuensche oder Notizen sendet, erscheinen sie hier.")
+            : renderEmptyState("Keine Rückmeldungen", "Sobald das Team Wünsche oder Notizen sendet, erscheinen sie hier.")
         }
       </div>
     </section>
@@ -3590,11 +3659,11 @@ function renderTeamPanelV2() {
                   </div>
                   <div class="field">
                     <label for="bio-${escapeHtml(user.id)}">Kurzprofil</label>
-                    <textarea id="bio-${escapeHtml(user.id)}" name="bio" placeholder="Kurze Beschreibung fuer die Teamseite">${escapeHtml(user.bio || "")}</textarea>
+                    <textarea id="bio-${escapeHtml(user.id)}" name="bio" placeholder="Kurze Beschreibung für die Teamseite">${escapeHtml(user.bio || "")}</textarea>
                   </div>
                   <div class="field">
                     <label for="password-${escapeHtml(user.id)}">Neues Passwort</label>
-                    <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen fuer keine Aenderung">
+                    <input id="password-${escapeHtml(user.id)}" name="password" type="password" placeholder="Leer lassen für keine Aenderung">
                   </div>
                   <div class="card-actions">
                     <button type="submit" class="ghost small">Speichern</button>
@@ -3606,7 +3675,7 @@ function renderTeamPanelV2() {
                   </div>
                 </form>
               `
-              : `<p class="helper-text">Dieser Account ist fuer Schichten, News und Feedback im Portal aktiv.</p>`
+              : `<p class="helper-text">Dieser Account ist für Schichten, News und Feedback im Portal aktiv.</p>`
           }
         </article>
       `;
@@ -3647,7 +3716,7 @@ function renderTeamPanelV2() {
                 </div>
                 <div class="field">
                   <label for="newBio">Kurzprofil</label>
-                  <textarea id="newBio" name="bio" placeholder="Kurzbeschreibung fuer die Teamseite"></textarea>
+                  <textarea id="newBio" name="bio" placeholder="Kurzbeschreibung für die Teamseite"></textarea>
                 </div>
                 <div class="field">
                   <label for="newPassword">Startpasswort</label>
@@ -3671,22 +3740,38 @@ function renderTeamPanelV2() {
 
 function renderFeedbackAdminPanel() {
   const requests = state.data.requests || [];
+  const activeRequests = requests.filter((r) => !["erledigt", "abgelehnt"].includes(r.status));
+  const completedRequests = requests.filter((r) => ["erledigt", "abgelehnt"].includes(r.status));
+  const activeTab = state.ui.feedbackAdminTab || "active";
 
   return `
     <section class="panel span-5">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Tickets und Wuensche</p>
-          <h2>Rueckmeldungen aus dem Team</h2>
+          <p class="eyebrow">Tickets und Wünsche</p>
+          <h2>Rückmeldungen aus dem Team</h2>
           <p class="section-copy">Hier landen Stimmungsbilder, Hinweise, Schichtwuensche und echte Ticket-Eintraege.</p>
         </div>
       </div>
 
+      <div class="tab-controls">
+        <button type="button" class="tab-btn ${activeTab === "active" ? "active" : ""}" data-action="set-feedback-admin-tab" data-tab-id="active">
+          Aktive Tickets ${activeRequests.length > 0 ? `(${activeRequests.length})` : ""}
+        </button>
+        <button type="button" class="tab-btn ${activeTab === "completed" ? "active" : ""}" data-action="set-feedback-admin-tab" data-tab-id="completed">
+          Abgeschlossene Tickets ${completedRequests.length > 0 ? `(${completedRequests.length})` : ""}
+        </button>
+      </div>
+
       <div class="stack-list">
         ${
-          requests.length
-            ? requests.map((entry) => renderAdminRequestCard(entry)).join("")
-            : renderEmptyState("Kein Feedback", "Sobald das Team etwas einreicht, erscheint es hier.")
+          activeTab === "active"
+            ? activeRequests.length
+              ? activeRequests.map((entry) => renderAdminRequestCard(entry)).join("")
+              : renderEmptyState("Keine aktiven Tickets", "Alle Rückmeldungen wurden bearbeitet.")
+            : completedRequests.length
+              ? completedRequests.map((entry) => renderAdminRequestCard(entry)).join("")
+              : renderEmptyState("Keine abgeschlossenen Tickets", "Noch keine Tickets als erledigt oder abgelehnt markiert.")
         }
       </div>
     </section>
@@ -3741,25 +3826,25 @@ function renderProfilePanel(managerView) {
             </div>
             <div class="field">
               <label for="profilePassword">Neues Passwort</label>
-              <input id="profilePassword" name="password" type="password" placeholder="Leer lassen fuer keine Aenderung">
+              <input id="profilePassword" name="password" type="password" placeholder="Leer lassen für keine Aenderung">
             </div>
             <div class="field span-all">
               <label for="profileBio">Kurzprofil</label>
-              <textarea id="profileBio" name="bio" placeholder="Schreibe kurz, wofuer du in SONARA stehst">${escapeHtml(user.bio || "")}</textarea>
+              <textarea id="profileBio" name="bio" placeholder="Schreibe kurz, wofür du in SONARA stehst">${escapeHtml(user.bio || "")}</textarea>
             </div>
           </div>
           <button type="submit">Profil speichern</button>
         </form>
 
         <details class="mystic-expander profile-secondary-expander" ${creatorApplicationOpen ? "open" : ""}>
-          <summary>Creator-Pruefung und Freischaltung</summary>
+          <summary>Creator-Prüfung und Freischaltung</summary>
           <div class="mystic-expander-body">
             <section class="availability-form-shell creator-application-shell compact">
               <div class="availability-form-head">
                 <div>
-                  <p class="eyebrow">Creator-Pruefung</p>
-                  <h3>Freischaltung fuer deinen eigenen Creator-Hub</h3>
-                  <p class="helper-text">Damit nicht jeder sich einfach selbst zum Creator macht, landet dein Bereich erst nach einer kurzen Pruefung im Netzwerk. Aktuell ist ${escapeHtml(String(CREATOR_MIN_FOLLOWERS))}+ Follower die grobe Einstiegsschwelle.</p>
+                  <p class="eyebrow">Creator-Prüfung</p>
+                  <h3>Freischaltung für deinen eigenen Creator-Hub</h3>
+                  <p class="helper-text">Damit nicht jeder sich einfach selbst zum Creator macht, landet dein Bereich erst nach einer kurzen Prüfung im Netzwerk. Aktuell ist ${escapeHtml(String(CREATOR_MIN_FOLLOWERS))}+ Follower die grobe Einstiegsschwelle.</p>
                 </div>
                 <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
               </div>
@@ -3770,7 +3855,7 @@ function renderProfilePanel(managerView) {
                   ${creatorApplication.primaryPlatform ? `<span class="pill neutral">${escapeHtml(creatorApplication.primaryPlatform)}</span>` : ""}
                   ${creatorApplication.reviewedLabel ? `<span class="timeline-meta">${escapeHtml(creatorApplication.reviewedLabel)}</span>` : ""}
                 </div>
-                ${creatorApplication.reviewNote ? `<p class="helper-text"><strong>Rueckmeldung:</strong> ${escapeHtml(creatorApplication.reviewNote)}</p>` : ""}
+                ${creatorApplication.reviewNote ? `<p class="helper-text"><strong>Rückmeldung:</strong> ${escapeHtml(creatorApplication.reviewNote)}</p>` : ""}
               </div>
               <form class="stack-form creator-application-form" data-form="creator-application">
                 <div class="creator-presence-form-grid">
@@ -3787,11 +3872,11 @@ function renderProfilePanel(managerView) {
                     <input id="profileCreatorProofUrl" name="creatorProofUrl" type="url" value="${escapeHtml(user.creatorProofUrl || "")}" placeholder="Profil, Kanal oder Linktree mit sichtbaren Zahlen">
                   </div>
                   <div class="field span-all">
-                    <label for="profileCreatorApplicationNote">Kurze Einordnung fuer die Leitung</label>
-                    <textarea id="profileCreatorApplicationNote" name="creatorApplicationNote" placeholder="Worum geht es bei deinem Content und was soll dein Hub hier spaeter sammeln?">${escapeHtml(user.creatorApplicationNote || "")}</textarea>
+                    <label for="profileCreatorApplicationNote">Kurze Einordnung für die Leitung</label>
+                    <textarea id="profileCreatorApplicationNote" name="creatorApplicationNote" placeholder="Worum geht es bei deinem Content und was soll dein Hub hier später sammeln?">${escapeHtml(user.creatorApplicationNote || "")}</textarea>
                   </div>
                 </div>
-                <button type="submit">${creatorApplication.pending ? "Bewerbung aktualisieren" : creatorApplication.rejected ? "Erneut pruefen lassen" : "Creator-Pruefung absenden"}</button>
+                <button type="submit">${creatorApplication.pending ? "Bewerbung aktualisieren" : creatorApplication.rejected ? "Erneut pruefen lassen" : "Creator-Prüfung absenden"}</button>
               </form>
             </section>
           </div>
@@ -3814,7 +3899,7 @@ function renderProfileFallback(managerView, error = null) {
         <div>
           <p class="eyebrow">Profil</p>
           <h2>Dein Community-Profil</h2>
-          <p class="section-copy">Diese abgesicherte Profilansicht bleibt bewusst einfacher, damit Profil und Verfuegbarkeit auf jeden Fall erreichbar bleiben.</p>
+          <p class="section-copy">Diese abgesicherte Profilansicht bleibt bewusst einfacher, damit Profil und Verfügbarkeit auf jeden Fall erreichbar bleiben.</p>
         </div>
       </div>
 
@@ -3875,7 +3960,7 @@ function renderProfileFallback(managerView, error = null) {
                     <input id="profileWeeklyDaysCapacityFallback" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}">
                   </div>
                   <div class="field span-all">
-                    <label>Zeitfenster fuer diese Woche</label>
+                    <label>Zeitfenster für diese Woche</label>
                     ${renderAvailabilitySlotsEditor(availabilitySlots, "profile-fallback-availability")}
                   </div>
                   <div class="field span-all">
@@ -3928,7 +4013,7 @@ function renderProfileFallback(managerView, error = null) {
               <input id="profileCreatorPresenceUrlFallback" name="creatorPresenceUrl" type="url" value="${escapeHtml(user.creatorPresenceUrl || "")}">
             </div>
             <div class="field span-all">
-              <label for="profileCreatorPresenceTextFallback">Kurztext fuer Sonara Live</label>
+              <label for="profileCreatorPresenceTextFallback">Kurztext für Sonara Live</label>
               <textarea id="profileCreatorPresenceTextFallback" name="creatorPresenceText">${escapeHtml(user.creatorPresenceText || "")}</textarea>
             </div>
             <div class="field span-all">
@@ -4037,7 +4122,7 @@ async function handleSubmit(event) {
       const password = String(formData.get("password") || "");
       const confirmPassword = String(formData.get("confirmPassword") || "");
       if (password !== confirmPassword) {
-        setFlash("Die Passwoerter stimmen nicht ueberein.", "danger");
+        setFlash("Die Passwörter stimmen nicht überein.", "danger");
         render();
         return;
       }
@@ -4118,7 +4203,7 @@ async function handleSubmit(event) {
               rating: formData.get("rating")
             })
           }),
-        "Deine Rueckmeldung wurde gespeichert."
+        "Deine Rückmeldung wurde gespeichert."
       );
       break;
     }
@@ -4135,7 +4220,7 @@ async function handleSubmit(event) {
               adminNote: formData.get("adminNote")
             })
           }),
-        "Rueckmeldung fuer das Teammitglied gespeichert."
+        "Rückmeldung für das Teammitglied gespeichert."
       );
       break;
     }
@@ -4167,7 +4252,7 @@ async function handleSubmit(event) {
               imageUrl: formData.get("imageUrl")
             })
           }),
-        "Neue Info wurde veroeffentlicht."
+        "Neue Info wurde veröffentlicht."
       );
       break;
     }
@@ -4350,7 +4435,7 @@ async function handleSubmit(event) {
               creatorCommunityId: formData.get("creatorCommunityId")
             })
           }),
-        "Beitrag wurde im Feed veroeffentlicht."
+        "Beitrag wurde im Feed veröffentlicht."
       );
       break;
     }
@@ -4603,7 +4688,7 @@ async function handleSubmit(event) {
             method: "PATCH",
             body: JSON.stringify(payload)
           }),
-        "Verfuegbarkeit wurde aktualisiert."
+        "Verfügbarkeit wurde aktualisiert."
       );
       break;
     }
@@ -4622,7 +4707,7 @@ async function handleSubmit(event) {
               note: formData.get("note")
             })
           }),
-        mode === "deduct" ? "Ueberstunden-Ausgleich wurde abgezogen." : "Ueberstunden wurden gutgeschrieben."
+        mode === "deduct" ? "Überstunden-Ausgleich wurde abgezogen." : "Überstunden wurden gutgeschrieben."
       );
       break;
     }
@@ -4633,7 +4718,7 @@ async function handleSubmit(event) {
 }
 
 function renderAdminRequestCard(entry) {
-  const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "in_planung" ? "amber" : "rose";
+  const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "erledigt" ? "success" : entry.status === "in_planung" ? "amber" : entry.status === "abgelehnt" ? "slate" : "rose";
 
   return `
     <article class="request-card">
@@ -4658,10 +4743,10 @@ function renderAdminRequestCard(entry) {
           </select>
         </div>
         <div class="field">
-          <label for="adminNote-${escapeHtml(entry.id)}">Notiz fuer den Moderator</label>
-          <textarea id="adminNote-${escapeHtml(entry.id)}" name="adminNote" placeholder="Kurze Rueckmeldung oder Bestaetigung">${escapeHtml(entry.adminNote || "")}</textarea>
+          <label for="adminNote-${escapeHtml(entry.id)}">Notiz für den Moderator</label>
+          <textarea id="adminNote-${escapeHtml(entry.id)}" name="adminNote" placeholder="Kurze Rückmeldung oder Bestaetigung">${escapeHtml(entry.adminNote || "")}</textarea>
         </div>
-        <button type="submit" class="ghost small">Rueckmeldung speichern</button>
+        <button type="submit" class="ghost small">Rückmeldung speichern</button>
       </form>
     </article>
   `;
@@ -4700,7 +4785,7 @@ function renderAnnouncementsPanel(managerView) {
                 <input name="pinned" type="checkbox">
                 <span>Oben anheften</span>
               </label>
-              <button type="submit">News veroeffentlichen</button>
+              <button type="submit">News veröffentlichen</button>
             </form>
           `
           : ""
@@ -4777,7 +4862,7 @@ function renderAttendancePanel(managerView) {
 
           <div class="stack-list attendance-column">
             <h3>Letzte Stempelungen</h3>
-            ${history.length ? history.map((entry) => renderTimeEntry(entry, false)).join("") : renderEmptyState("Noch keine Eintraege", "Sobald Einsaetze gestempelt wurden, erscheinen sie hier.")}
+            ${history.length ? history.map((entry) => renderTimeEntry(entry, false)).join("") : renderEmptyState("Noch keine Eintraege", "Sobald Einsätze gestempelt wurden, erscheinen sie hier.")}
           </div>
 
           <div class="stack-list attendance-column">
@@ -4821,7 +4906,7 @@ function renderAttendanceSummaryCard(entry) {
   return `
     <article class="mini-card attendance-summary-card">
       <div class="status-row">
-        <span class="pill ${entry.overtimeHours > 0 || entry.overtimeBankHours > 0 ? "rose" : entry.liveEntry ? "teal" : "neutral"}">${escapeHtml(entry.overtimeHours > 0 ? "Ueber Soll" : entry.liveEntry ? "Live" : "Diese Woche")}</span>
+        <span class="pill ${entry.overtimeHours > 0 || entry.overtimeBankHours > 0 ? "rose" : entry.liveEntry ? "teal" : "neutral"}">${escapeHtml(entry.overtimeHours > 0 ? "Über Soll" : entry.liveEntry ? "Live" : "Diese Woche")}</span>
         <span class="timeline-meta">${escapeHtml(ROLE_LABELS[entry.user.role] || entry.user.role)}</span>
       </div>
       <h3>${escapeHtml(getPrimaryDisplayName(entry.user))}</h3>
@@ -4830,12 +4915,12 @@ function renderAttendanceSummaryCard(entry) {
       <p><strong>Heute:</strong> ${escapeHtml(formatHoursValue(entry.todayHours))}</p>
       <p><strong>Wochenrahmen:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatHoursValue(entry.capacityHours) : "Keine Angabe")}</p>
       <p><strong>Aktueller Saldo:</strong> ${escapeHtml(entry.capacityHours > 0 ? formatSignedHoursValue(entry.balanceHours) : "Kein Soll gesetzt")}</p>
-      <p><strong>Ueberstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
+      <p><strong>Überstundenbank:</strong> ${escapeHtml(formatSignedHoursValue(entry.overtimeBankHours || 0))}</p>
       ${
         entry.overtimeHours > 0
-          ? `<p class="helper-text">Diese Person liegt aktuell ${escapeHtml(formatHoursValue(entry.overtimeHours))} ueber ihrem Wochenrahmen.</p>`
+          ? `<p class="helper-text">Diese Person liegt aktuell ${escapeHtml(formatHoursValue(entry.overtimeHours))} über ihrem Wochenrahmen.</p>`
           : entry.previousWeekOvertimeHours > 0
-            ? `<p class="helper-text">Letzte Woche kamen ${escapeHtml(formatHoursValue(entry.previousWeekOvertimeHours))} an Ueberstunden zusammen.</p>`
+            ? `<p class="helper-text">Letzte Woche kamen ${escapeHtml(formatHoursValue(entry.previousWeekOvertimeHours))} an Überstunden zusammen.</p>`
           : entry.liveEntry
             ? `<p class="helper-text">Aktiv seit ${escapeHtml(formatTime(entry.liveEntry.checkInAt))}</p>`
           : '<p class="helper-text">Aktuell nicht eingestempelt.</p>'
@@ -4928,8 +5013,8 @@ function renderSettingsPanel() {
       <div class="section-head">
         <div>
           <p class="eyebrow">Systemhinweis</p>
-          <h2>Hinweis bei Stoerungen oder Ausfaellen</h2>
-          <p class="section-copy">Wenn etwas im Portal hakt, kannst du hier sofort eine sichtbare Nachricht fuer alle setzen, inklusive kurzer Kontaktinfo.</p>
+          <h2>Hinweis bei Störungen oder Ausfaellen</h2>
+          <p class="section-copy">Wenn etwas im Portal hakt, kannst du hier sofort eine sichtbare Nachricht für alle setzen, inklusive kurzer Kontaktinfo.</p>
         </div>
         ${
           notice.enabled
@@ -5065,7 +5150,7 @@ function renderDiscordPanel() {
 
       ${
         !status
-          ? renderEmptyState("Noch kein Discord-Status", "Sobald du den Status laedst, erscheint hier die aktuelle Bot-Pruefung.")
+          ? renderEmptyState("Noch kein Discord-Status", "Sobald du den Status laedst, erscheint hier die aktuelle Bot-Prüfung.")
           : `
             <div class="discord-status-grid">
               ${renderStatCard("Bot", status.configured ? "Bereit" : "Fehlt", status.configured ? "DISCORD_BOT_TOKEN und DISCORD_CHANNEL_ID sind gesetzt" : "Bitte in Render unter Umwelt eintragen", status.configured ? "teal" : "rose")}
@@ -5246,7 +5331,7 @@ function renderChatPanel(managerView, compact = false) {
       <div class="section-head">
         <div>
           <p class="eyebrow">Team-Chat</p>
-          <h2>Echtzeit-Chat fuer schnelle Absprachen</h2>
+          <h2>Echtzeit-Chat für schnelle Absprachen</h2>
           <p class="section-copy">Neue Nachrichten erscheinen automatisch, ohne dass jemand neu laden muss.</p>
         </div>
         <span class="pill ${state.ui.liveChatConnected ? "success" : "amber"}">${state.ui.liveChatConnected ? "Live verbunden" : "Verbindung wird aufgebaut"}</span>
@@ -5263,7 +5348,7 @@ function renderChatPanel(managerView, compact = false) {
           </div>
           <div class="field">
             <label for="chatMessage">Nachricht</label>
-            <textarea id="chatMessage" name="content" placeholder="z. B. Kann jemand meine Spaetschicht am Freitag uebernehmen?" required></textarea>
+            <textarea id="chatMessage" name="content" placeholder="z. B. Kann jemand meine Spaetschicht am Freitag übernehmen?" required></textarea>
           </div>
         </div>
 
@@ -5274,7 +5359,7 @@ function renderChatPanel(managerView, compact = false) {
         ${
           messages.length
             ? messages.map((message) => renderChatMessage(message)).join("")
-            : renderEmptyState("Noch kein Team-Chat", "Die erste Nachricht erscheint sofort fuer alle online.")
+            : renderEmptyState("Noch kein Team-Chat", "Die erste Nachricht erscheint sofort für alle online.")
         }
       </div>
     </section>
@@ -5309,7 +5394,7 @@ function renderMySchedulePanel() {
         <div>
           <p class="eyebrow">Mein Plan</p>
           <h2>Nur deine eigenen Schichten</h2>
-          <p class="section-copy">Du siehst hier ausschliesslich deine Einsaetze inklusive Welt, Aufgabe und Briefing-Notizen.</p>
+          <p class="section-copy">Du siehst hier ausschliesslich deine Einsätze inklusive Welt, Aufgabe und Briefing-Notizen.</p>
         </div>
       </div>
 
@@ -5317,7 +5402,7 @@ function renderMySchedulePanel() {
         ${
           shifts.length
             ? shifts.map((shift) => renderShiftCard(shift, { adminView: false })).join("")
-            : renderEmptyState("Noch keine Einsaetze", "Sobald die Teamleitung dich plant, erscheinen deine Schichten hier.")
+            : renderEmptyState("Noch keine Einsätze", "Sobald die Teamleitung dich plant, erscheinen deine Schichten hier.")
         }
       </div>
     </section>
@@ -5332,8 +5417,8 @@ function renderRequestMemberPanel() {
       <div class="section-head">
         <div>
           <p class="eyebrow">Tickets an die Leitung</p>
-          <h2>Wuensche, Hinweise und Stimmungsbild</h2>
-          <p class="section-copy">Hier meldest du Verfuegbarkeit, gibst Tickets zum Teamalltag oder schickst eine kurze Notiz an die Leitung.</p>
+          <h2>Wünsche, Hinweise und Stimmungsbild</h2>
+          <p class="section-copy">Hier meldest du Verfügbarkeit, gibst Tickets zum Teamalltag oder schickst eine kurze Notiz an die Leitung.</p>
         </div>
       </div>
 
@@ -5345,7 +5430,7 @@ function renderRequestMemberPanel() {
               <option value="Feedback">Feedback</option>
               <option value="Wunsch">Wunsch</option>
               <option value="Notiz">Notiz</option>
-              <option value="Verfuegbarkeit">Verfuegbarkeit</option>
+              <option value="Verfügbarkeit">Verfügbarkeit</option>
             </select>
           </div>
           <div class="field">
@@ -5375,7 +5460,7 @@ function renderRequestMemberPanel() {
         ${
           requests.length
             ? requests.map((entry) => renderMemberRequestCard(entry)).join("")
-            : renderEmptyState("Noch keine Notizen", "Deine Rueckmeldungen an die Leitung erscheinen hier mit Status.")
+            : renderEmptyState("Noch keine Notizen", "Deine Rückmeldungen an die Leitung erscheinen hier mit Status.")
         }
       </div>
     </section>
@@ -5457,7 +5542,7 @@ async function handleSubmit(event) {
       const password = String(formData.get("password") || "");
       const confirmPassword = String(formData.get("confirmPassword") || "");
       if (password !== confirmPassword) {
-        setFlash("Die Passwoerter stimmen nicht ueberein.", "danger");
+        setFlash("Die Passwörter stimmen nicht überein.", "danger");
         render();
         return;
       }
@@ -5541,7 +5626,7 @@ async function handleSubmit(event) {
               rating: formData.get("rating")
             })
           }),
-        "Deine Rueckmeldung wurde gespeichert."
+        "Deine Rückmeldung wurde gespeichert."
       );
       break;
     }
@@ -5558,7 +5643,7 @@ async function handleSubmit(event) {
               adminNote: formData.get("adminNote")
             })
           }),
-        "Rueckmeldung fuer das Teammitglied gespeichert."
+        "Rückmeldung für das Teammitglied gespeichert."
       );
       break;
     }
@@ -5576,7 +5661,7 @@ async function handleSubmit(event) {
               imageUrl: formData.get("imageUrl")
             })
           }),
-        "Neue Info wurde veroeffentlicht."
+        "Neue Info wurde veröffentlicht."
       );
       break;
     }
@@ -5754,7 +5839,7 @@ async function handleSubmit(event) {
             method: "PATCH",
             body: JSON.stringify(payload)
           }),
-        "Verfuegbarkeit wurde aktualisiert."
+        "Verfügbarkeit wurde aktualisiert."
       );
       break;
     }
@@ -5790,6 +5875,11 @@ async function handleClick(event) {
       rememberTabBarState(actionElement);
       state.ui.activeTab = normalizeActiveTab(actionElement.dataset.tab || "");
       state.ui.mobileMenuOpen = false;
+      render();
+      break;
+
+    case "set-feedback-admin-tab":
+      state.ui.feedbackAdminTab = actionElement.dataset.tabId || "active";
       render();
       break;
 
@@ -5925,7 +6015,7 @@ async function handleClick(event) {
       break;
 
     case "reset-demo":
-      if (!window.confirm("Demo-Daten wirklich komplett zuruecksetzen?")) return;
+      if (!window.confirm("Demo-Daten wirklich komplett zurücksetzen?")) return;
       await performAction(
         () =>
           api("/api/admin/reset-demo", {
@@ -5939,19 +6029,19 @@ async function handleClick(event) {
       break;
 
     case "publish-site-content":
-      if (!window.confirm("Den aktuellen Webseiten-Entwurf wirklich veroeffentlichen?")) return;
+      if (!window.confirm("Den aktuellen Webseiten-Entwurf wirklich veröffentlichen?")) return;
       await performAction(
         () =>
           api("/api/admin/site-content/publish", {
             method: "POST",
             body: "{}"
           }),
-        "Webseite wurde veroeffentlicht."
+        "Webseite wurde veröffentlicht."
       );
       break;
 
     case "reset-site-draft":
-      if (!window.confirm("Entwurf auf den veroeffentlichten Stand zuruecksetzen?")) return;
+      if (!window.confirm("Entwurf auf den veröffentlichten Stand zurücksetzen?")) return;
       await performAction(
         () =>
           api("/api/admin/site-content/reset-draft", {
@@ -6163,7 +6253,7 @@ async function handleClick(event) {
             method: "POST",
             body: JSON.stringify({
               shiftId: shift.id,
-              message: `Ich suche einen Tausch fuer ${shift.shiftType} am ${formatDate(shift.date)} von ${formatShiftWindow(shift)} in ${shift.world}. Bitte hier melden.`
+              message: `Ich suche einen Tausch für ${shift.shiftType} am ${formatDate(shift.date)} von ${formatShiftWindow(shift)} in ${shift.world}. Bitte hier melden.`
             })
           }),
         "Tauschwunsch wurde erstellt."
@@ -6178,7 +6268,7 @@ async function handleClick(event) {
             method: "POST",
             body: "{}"
           }),
-        "Du hast die Uebernahme angeboten."
+        "Du hast die Übernahme angeboten."
       );
       break;
 
@@ -6410,7 +6500,7 @@ function renderCreatorCard(user, options = {}) {
           ? `
             <div class="card-actions">
               <button type="button" class="ghost small" data-action="set-creator-focus" data-creator-id="${escapeHtml(user.id)}">
-                ${selected ? "Gerade im Fokus" : "Creator-Hub oeffnen"}
+                ${selected ? "Gerade im Fokus" : "Creator-Hub öffnen"}
               </button>
               <a class="creator-action-link" href="${escapeHtml(publicPath)}">Slash-Seite</a>
             </div>
@@ -6454,7 +6544,7 @@ function renderChatWorkspace(mode) {
 function renderChatPanel(mode = "community", compact = false) {
   const messages = getChatFeed(mode);
   const title = mode === "staff" ? "Staff-Chat" : "Allgemeiner Chat";
-  const copy = mode === "staff" ? "Interne Abstimmung im Team." : "Offener Live-Chat fuer die Community.";
+  const copy = mode === "staff" ? "Interne Abstimmung im Team." : "Offener Live-Chat für die Community.";
   const shifts = mode === "staff" && canAccessStaffArea() ? getSortedShifts(state.data?.shifts || []) : [];
 
   return `
@@ -6576,7 +6666,7 @@ function renderDirectMessagesPanel() {
         <div class="field">
           <label for="dmRecipient">An</label>
           <select id="dmRecipient" name="recipientId" required>
-            <option value="">Person auswaehlen</option>
+            <option value="">Person auswählen</option>
             ${recipients.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(getPrimaryDisplayName(entry))}</option>`).join("")}
           </select>
         </div>
@@ -6643,7 +6733,7 @@ function renderForumPanel(managerView) {
         <div>
           <p class="eyebrow">Forum</p>
           <h2>Fragen, Ideen und Anfragen</h2>
-          <p class="section-copy">Themen koennen allgemein bleiben oder direkt einer Creator-Community zugeordnet werden.</p>
+          <p class="section-copy">Themen können allgemein bleiben oder direkt einer Creator-Community zugeordnet werden.</p>
         </div>
       </div>
 
@@ -6752,7 +6842,7 @@ function renderTeamPanelV2() {
                     </div>
                     <div class="field">
                       <label for="newCreatorBlurb">Creator-Text</label>
-                      <input id="newCreatorBlurb" name="creatorBlurb" type="text" placeholder="Kurztext fuer Creator-Bereich">
+                      <input id="newCreatorBlurb" name="creatorBlurb" type="text" placeholder="Kurztext für Creator-Bereich">
                     </div>
                     <div class="field span-all">
                       <label for="newCreatorLinks">Creator-Links</label>
@@ -6842,7 +6932,7 @@ function renderTeamPanelV2() {
               availabilitySummary
                 ? `
                   <details class="mystic-expander">
-                    <summary>Verfuegbarkeit ansehen</summary>
+                    <summary>Verfügbarkeit ansehen</summary>
                     <div class="mystic-expander-body">
                       ${availabilitySummary}
                     </div>
@@ -6892,7 +6982,7 @@ function renderTeamPanelV2() {
                   canManagePortal() && (creatorApplication.status !== "none" || user.creatorVisible)
                     ? `
                       <details class="mystic-expander editor-expander">
-                        <summary>Creator-Pruefung ansehen</summary>
+                        <summary>Creator-Prüfung ansehen</summary>
                         <div class="mystic-expander-body">
                           ${renderCreatorReviewCard(user, "team-card")}
                         </div>
@@ -6952,8 +7042,8 @@ function renderTeamPanelV2() {
                                     <div class="span-all availability-form-shell compact">
                                       <div class="availability-form-head">
                                         <div>
-                                          <p class="eyebrow">Verfuegbarkeit</p>
-                                          <h3>Wochenrahmen fuer die Planung</h3>
+                                          <p class="eyebrow">Verfügbarkeit</p>
+                                          <h3>Wochenrahmen für die Planung</h3>
                                         </div>
                                       </div>
                                       <div class="availability-form-grid">
@@ -6971,8 +7061,8 @@ function renderTeamPanelV2() {
                                           <p class="helper-text">Bitte bis Samstag eintragen. Die Eingaben bleiben auch bei Live-Updates stabil bestehen.</p>
                                         </div>
                                         <div class="field span-all">
-                                          <label for="availability-${escapeHtml(user.id)}">Zusatzhinweise fuer diese Woche</label>
-                                          <textarea id="availability-${escapeHtml(user.id)}" name="availabilitySchedule" placeholder="z. B. Freitag spaeter oder Sonntag nur spontan.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+                                          <label for="availability-${escapeHtml(user.id)}">Zusatzhinweise für diese Woche</label>
+                                          <textarea id="availability-${escapeHtml(user.id)}" name="availabilitySchedule" placeholder="z. B. Freitag später oder Sonntag nur spontan.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
                                         </div>
                                       </div>
                                     </div>
@@ -7054,7 +7144,7 @@ function renderProfilePanel(managerView) {
             <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
             ${
               user.vrchatLinkedAt
-                ? `<p class="helper-text">VRChat-Link aktiv seit ${escapeHtml(formatDateTime(user.vrchatLinkedAt))}${user.vrchatLinkSource ? ` ueber ${escapeHtml(formatVrchatLinkSourceLabel(user.vrchatLinkSource))}` : ""}.</p>`
+                ? `<p class="helper-text">VRChat-Link aktiv seit ${escapeHtml(formatDateTime(user.vrchatLinkedAt))}${user.vrchatLinkSource ? ` über ${escapeHtml(formatVrchatLinkSourceLabel(user.vrchatLinkSource))}` : ""}.</p>`
                 : ""
             }
             ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
@@ -7068,8 +7158,8 @@ function renderProfilePanel(managerView) {
           showAvailabilityFields
             ? `
               <article class="mini-card">
-                <h3>Verfuegbarkeit fuer die Planung</h3>
-                <p class="helper-text">Genau hier tragen Moderatoren und Leitung ihre freien Stunden, Tage und konkreten Zeitfenster fuer die kommende Woche ein. Diese Angaben landen danach direkt im Bereich Auslastung der Leitung.</p>
+                <h3>Verfügbarkeit für die Planung</h3>
+                <p class="helper-text">Genau hier tragen Moderatoren und Leitung ihre freien Stunden, Tage und konkreten Zeitfenster für die kommende Woche ein. Diese Angaben landen danach direkt im Bereich Auslastung der Leitung.</p>
               </article>
             `
             : ""
@@ -7086,7 +7176,7 @@ function renderProfilePanel(managerView) {
               <input id="profileDiscordName" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
             </div>
             <div class="field">
-              <label for="profileDiscordUserId">Discord User-ID fuer Bot-DMs</label>
+              <label for="profileDiscordUserId">Discord User-ID für Bot-DMs</label>
               <input id="profileDiscordUserId" name="discordUserId" type="text" inputmode="numeric" value="${escapeHtml(user.discordUserId || "")}" placeholder="z. B. 123456789012345678">
               <p class="helper-text">Damit der Bot einzelne Moderatoren privat an Schichten erinnern kann. In Discord: Entwicklermodus aktivieren, Rechtsklick auf Profil, ID kopieren.</p>
             </div>
@@ -7364,10 +7454,10 @@ function buildCapacityRows() {
       let statusLabel = "Noch offen";
       let statusTone = "amber";
       if (!hasAvailability) {
-        statusLabel = "Rueckmeldung fehlt";
+        statusLabel = "Rückmeldung fehlt";
         statusTone = "rose";
       } else if (overHours || overDays) {
-        statusLabel = "Ueberplant";
+        statusLabel = "Überplant";
         statusTone = "rose";
       } else if (fullyPlanned) {
         statusLabel = "Gedeckt";
@@ -7751,13 +7841,13 @@ function buildCapacityDeltaText(plannedDelta, dayDelta) {
   const parts = [];
   if (plannedDelta !== null) {
     if (plannedDelta > 0) parts.push(`${formatHoursValue(plannedDelta)} noch frei`);
-    else if (plannedDelta < 0) parts.push(`${formatHoursValue(Math.abs(plannedDelta))} ueberplant`);
+    else if (plannedDelta < 0) parts.push(`${formatHoursValue(Math.abs(plannedDelta))} überplant`);
     else parts.push("Stunden genau gedeckt");
   }
 
   if (dayDelta !== null) {
     if (dayDelta > 0) parts.push(`${dayDelta} Tage noch frei`);
-    else if (dayDelta < 0) parts.push(`${Math.abs(dayDelta)} Tage ueberplant`);
+    else if (dayDelta < 0) parts.push(`${Math.abs(dayDelta)} Tage überplant`);
     else parts.push("Tage genau gedeckt");
   }
 
@@ -7836,7 +7926,7 @@ function buildShiftAuditRows() {
 
 function buildUserOptions(users, selectedId) {
   return [
-    '<option value="">Moderator waehlen</option>',
+    '<option value="">Moderator wählen</option>',
     ...users.map(
       (user) => `
         <option value="${escapeHtml(user.id)}" ${user.id === selectedId ? "selected" : ""}>
@@ -8075,7 +8165,7 @@ async function handleSubmit(event) {
       const password = String(formData.get("password") || "");
       const confirmPassword = String(formData.get("confirmPassword") || "");
       if (password !== confirmPassword) {
-        setFlash("Die Passwoerter stimmen nicht ueberein.", "danger");
+        setFlash("Die Passwörter stimmen nicht überein.", "danger");
         render();
         return;
       }
@@ -8197,7 +8287,7 @@ async function handleSubmit(event) {
               rating: formData.get("rating")
             })
           }),
-        "Deine Rueckmeldung wurde gespeichert."
+        "Deine Rückmeldung wurde gespeichert."
       );
       break;
     }
@@ -8214,7 +8304,7 @@ async function handleSubmit(event) {
               adminNote: formData.get("adminNote")
             })
           }),
-        "Rueckmeldung fuer das Teammitglied gespeichert."
+        "Rückmeldung für das Teammitglied gespeichert."
       );
       break;
     }
@@ -8232,7 +8322,7 @@ async function handleSubmit(event) {
               imageUrl: formData.get("imageUrl")
             })
           }),
-        "Neue Info wurde veroeffentlicht."
+        "Neue Info wurde veröffentlicht."
       );
       break;
     }
@@ -8561,7 +8651,7 @@ async function handleSubmit(event) {
               creatorCommunityId: formData.get("creatorCommunityId")
             })
           }),
-        "Beitrag wurde im Feed veroeffentlicht."
+        "Beitrag wurde im Feed veröffentlicht."
       );
       break;
     }
@@ -8827,7 +8917,7 @@ async function handleSubmit(event) {
             method: "PATCH",
             body: JSON.stringify(payload)
           }),
-        "Verfuegbarkeit wurde aktualisiert."
+        "Verfügbarkeit wurde aktualisiert."
       );
       break;
     }
@@ -9069,9 +9159,9 @@ function renderPromoVideoPanel() {
                 ? `<iframe class="promo-video-media" src="${escapeHtml(embed.src)}" title="${escapeHtml(promoVideo.title || "SONARA Promo-Video")}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe>`
                 : `
                   <div class="promo-video-fallback">
-                    <strong>Video extern oeffnen</strong>
+                    <strong>Video extern öffnen</strong>
                     <p class="helper-text">Diese Plattform wird hier nicht direkt eingebettet. Der Link fuehrt aber direkt zum Video.</p>
-                    <a class="creator-action-link" href="${escapeHtml(embed.src)}" target="_blank" rel="noreferrer">Video oeffnen</a>
+                    <a class="creator-action-link" href="${escapeHtml(embed.src)}" target="_blank" rel="noreferrer">Video öffnen</a>
                   </div>
                 `
           }
@@ -9079,9 +9169,9 @@ function renderPromoVideoPanel() {
 
         <aside class="mini-card promo-video-aside">
           <p class="eyebrow">Direkt im Einstieg</p>
-          <h3>Dein erster Eindruck fuer neue Besucher</h3>
-          <p class="helper-text">Das Video liegt jetzt bewusst weit oben, damit Menschen direkt sehen, fuehlen und hoeren koennen, was SONARA ist.</p>
-          <a class="creator-action-link" href="${escapeHtml(promoVideo.url)}" target="_blank" rel="noreferrer">Originalvideo oeffnen</a>
+          <h3>Dein erster Eindruck für neue Besucher</h3>
+          <p class="helper-text">Das Video liegt jetzt bewusst weit oben, damit Menschen direkt sehen, fuehlen und hoeren können, was SONARA ist.</p>
+          <a class="creator-action-link" href="${escapeHtml(promoVideo.url)}" target="_blank" rel="noreferrer">Originalvideo öffnen</a>
         </aside>
       </div>
     </section>
@@ -9156,7 +9246,7 @@ function getVrchatLinkFlowMeta() {
     "vrchat-chat": {
       eyebrow: "VRChat Chat-Link",
       title: "Chat-Link mit SONARA verbinden",
-      intro: "Du bist ueber einen VRChat- oder Discord-Chat-Link hier gelandet. Logge dich ein, dann ist dein Portal direkt bereit.",
+      intro: "Du bist über einen VRChat- oder Discord-Chat-Link hier gelandet. Logge dich ein, dann ist dein Portal direkt bereit.",
       sourceLabel: "Chat-Link"
     },
     "vrchat-world": {
@@ -9454,7 +9544,7 @@ function renderCreatorPublicPage(creator) {
                         `
                       )
                       .join("")
-                  : renderEmptyState("Noch keine News", "Sobald SONARA neue Hinweise veroeffentlicht, tauchen sie hier auf.")
+                  : renderEmptyState("Noch keine News", "Sobald SONARA neue Hinweise veröffentlicht, tauchen sie hier auf.")
               }
             </div>
           </div>
@@ -9658,34 +9748,34 @@ function getLegalDocument(page) {
       eyebrow: "Rechtliches",
       title: "Nutzungsbedingungen",
       intro:
-        "Diese Regeln beschreiben, wie SONARA genutzt werden soll, damit Community, Creator und Staff-Bereich fuer alle fair und sicher bleiben.",
+        "Diese Regeln beschreiben, wie SONARA genutzt werden soll, damit Community, Creator und Staff-Bereich für alle fair und sicher bleiben.",
       path: "/nutzungsbedingungen",
       updatedAt,
       sections: [
         {
           title: "1. Nutzung des Portals",
           body:
-            "Das Portal ist fuer SONARA-Mitglieder, Creator und Teammitglieder gedacht. Accounts sollen ehrlich gepflegt werden, damit Planung, Community-Funktionen und Kontaktwege funktionieren."
+            "Das Portal ist für SONARA-Mitglieder, Creator und Teammitglieder gedacht. Accounts sollen ehrlich gepflegt werden, damit Planung, Community-Funktionen und Kontaktwege funktionieren."
         },
         {
           title: "2. Verhalten in der Community",
           body:
-            "Respektvoller Umgang ist Pflicht. Beleidigungen, Belaestigung, Spam, Identitaetstaeuschung, gezielte Stoerungen und das Verbreiten schaedlicher Inhalte sind nicht erlaubt."
+            "Respektvoller Umgang ist Pflicht. Beleidigungen, Belaestigung, Spam, Identitaetstaeuschung, gezielte Störungen und das Verbreiten schaedlicher Inhalte sind nicht erlaubt."
         },
         {
           title: "3. Team- und Schichtfunktionen",
           body:
-            "Schichtplanung, Verfuegbarkeiten, Ein- und Ausstempeln sowie Ueberstunden dienen der internen Organisation. Falsche Eintraege oder absichtliche Manipulationen koennen eingeschraenkt oder korrigiert werden."
+            "Schichtplanung, Verfügbarkeiten, Ein- und Ausstempeln sowie Überstunden dienen der internen Organisation. Falsche Eintraege oder absichtliche Manipulationen können eingeschraenkt oder korrigiert werden."
         },
         {
           title: "4. Creator-Bereiche",
           body:
-            "Creator koennen eigene Inhalte, Links und Community-Hinweise pflegen, sofern sie freigegeben wurden. Inhalte muessen zur Community passen und duerfen keine Rechte Dritter verletzen."
+            "Creator können eigene Inhalte, Links und Community-Hinweise pflegen, sofern sie freigegeben wurden. Inhalte muessen zur Community passen und duerfen keine Rechte Dritter verletzen."
         },
         {
           title: "5. Aenderungen und Kontakt",
           body:
-            "SONARA kann Funktionen, Regeln oder Zugriffe anpassen, wenn es fuer Sicherheit, Stabilitaet oder Community-Organisation notwendig ist. Bei Problemen bitte die Leitung direkt kontaktieren."
+            "SONARA kann Funktionen, Regeln oder Zugriffe anpassen, wenn es für Sicherheit, Stabilitaet oder Community-Organisation notwendig ist. Bei Problemen bitte die Leitung direkt kontaktieren."
         }
       ]
     };
@@ -9695,34 +9785,34 @@ function getLegalDocument(page) {
     eyebrow: "Datenschutz",
     title: "Datenschutz und Datenverarbeitung",
     intro:
-      "Diese Seite erklaert, welche Daten SONARA im Portal nutzt und warum sie fuer Community, Planung und Sicherheit gebraucht werden.",
+      "Diese Seite erklaert, welche Daten SONARA im Portal nutzt und warum sie für Community, Planung und Sicherheit gebraucht werden.",
     path: "/datenschutz",
     updatedAt,
     sections: [
       {
         title: "1. Verantwortlicher Kontakt",
         body:
-          "Verantwortlich ist das SONARA-Team. Bis ein offizieller Kontakt hinterlegt ist, werden Datenschutz- und Account-Anfragen direkt ueber die bekannte SONARA-Leitung oder den Community-Kontakt bearbeitet."
+          "Verantwortlich ist das SONARA-Team. Bis ein offizieller Kontakt hinterlegt ist, werden Datenschutz- und Account-Anfragen direkt über die bekannte SONARA-Leitung oder den Community-Kontakt bearbeitet."
       },
       {
         title: "2. Welche Daten gespeichert werden",
         body:
-          "Gespeichert werden koennen Kontodaten wie VRChat-Name, Discord-Name, optionale Discord User-ID, Profilbild, Profiltext, Creator-Links, Verfuegbarkeiten, Schichten, Zeitstempel, Ueberstunden, Forum-/Feed-Beitraege und technische Sitzungsdaten."
+          "Gespeichert werden können Kontodaten wie VRChat-Name, Discord-Name, optionale Discord User-ID, Profilbild, Profiltext, Creator-Links, Verfügbarkeiten, Schichten, Zeitstempel, Überstunden, Forum-/Feed-Beitraege und technische Sitzungsdaten."
       },
       {
-        title: "3. Wofuer die Daten genutzt werden",
+        title: "3. Wofür die Daten genutzt werden",
         body:
           "Die Daten werden genutzt, um Login, Profile, Community-Ansichten, Creator-Seiten, Moderationsplanung, Ein- und Ausstempeln, Schichterinnerungen und interne Organisation bereitzustellen."
       },
       {
         title: "4. Discord und Benachrichtigungen",
         body:
-          "Wenn eine Discord User-ID gepflegt ist, kann der Bot einzelne Schicht-Erinnerungen per Direktnachricht senden. Kanalnachrichten oder Bot-Fehler koennen technisch protokolliert werden, damit der Versand geprueft werden kann."
+          "Wenn eine Discord User-ID gepflegt ist, kann der Bot einzelne Schicht-Erinnerungen per Direktnachricht senden. Kanalnachrichten oder Bot-Fehler können technisch protokolliert werden, damit der Versand geprüft werden kann."
       },
       {
         title: "5. Zugriff, Aufbewahrung und Rechte",
         body:
-          "Zugriff erhalten nur berechtigte Rollen wie Admin, Planung oder Moderationsleitung. Mitglieder koennen Auskunft, Korrektur oder Loeschung ihrer personenbezogenen Daten anfragen, soweit keine internen Nachweise zwingend erhalten bleiben muessen."
+          "Zugriff erhalten nur berechtigte Rollen wie Admin, Planung oder Moderationsleitung. Mitglieder können Auskunft, Korrektur oder Loeschung ihrer personenbezogenen Daten anfragen, soweit keine internen Nachweise zwingend erhalten bleiben muessen."
       }
     ]
   };
@@ -9752,16 +9842,16 @@ function renderPublicLegalPanel() {
         <article class="feature-card legal-link-card">
           <h3>Datenschutz</h3>
           <p>Welche Portal-, Discord-, Schicht- und Profildaten SONARA verarbeitet.</p>
-          <a class="creator-action-link" href="/datenschutz">Datenschutz oeffnen</a>
+          <a class="creator-action-link" href="/datenschutz">Datenschutz öffnen</a>
         </article>
         <article class="feature-card legal-link-card">
           <h3>Nutzungsbedingungen</h3>
-          <p>Die Grundregeln fuer Community, Staff-Bereich, Creator-Hubs und Portalnutzung.</p>
-          <a class="creator-action-link" href="/nutzungsbedingungen">Bedingungen oeffnen</a>
+          <p>Die Grundregeln für Community, Staff-Bereich, Creator-Hubs und Portalnutzung.</p>
+          <a class="creator-action-link" href="/nutzungsbedingungen">Bedingungen öffnen</a>
         </article>
       </div>
 
-      <p class="pill-note">Hinweis: Das ist ein technischer Starttext fuer die Webseite. Betreiberangaben und finaler Rechtstext sollten vor dem oeffentlichen Betrieb nochmal geprueft werden.</p>
+      <p class="pill-note">Hinweis: Das ist ein technischer Starttext für die Webseite. Betreiberangaben und finaler Rechtstext sollten vor dem oeffentlichen Betrieb nochmal geprüft werden.</p>
     </section>
   `;
 }
@@ -9818,7 +9908,7 @@ function renderCommunityOverviewPanel() {
     <section class="panel span-12">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Community Ueberblick</p>
+          <p class="eyebrow">Community Überblick</p>
           <h2>Die wichtigsten Community-Daten auf einen Blick</h2>
           <p class="section-copy">Hier laufen Stimmung, News und sichtbare Kerninfos zusammen, ohne den Staff-Bereich zu vermischen.</p>
         </div>
@@ -9835,7 +9925,7 @@ function renderCommunityOverviewPanel() {
           ${
             latestNews.length
               ? latestNews.map((entry) => renderAnnouncementCard(entry, false)).join("")
-              : renderEmptyState("Noch keine News", "Sobald es Ankuendigungen gibt, erscheinen sie hier.")
+              : renderEmptyState("Noch keine News", "Sobald es Ankündigungen gibt, erscheinen sie hier.")
           }
         </div>
       </div>
@@ -9852,7 +9942,7 @@ function renderCommunityRulesPanel() {
         <div>
           <p class="eyebrow">Community Leitlinien</p>
           <h2>Regeln, Haltung und Antworten</h2>
-          <p class="section-copy">So bleibt die Community fuer Mitglieder klar, freundlich und leicht verstaendlich.</p>
+          <p class="section-copy">So bleibt die Community für Mitglieder klar, freundlich und leicht verstaendlich.</p>
         </div>
       </div>
 
@@ -9876,7 +9966,7 @@ function renderCommunityTeamPanel() {
         <div>
           <p class="eyebrow">Staff-Vorstellung</p>
           <h2>Moderation und Leitung</h2>
-          <p class="section-copy">Die Community sieht hier, wer fuer Moderation, Events und Organisation zustaendig ist.</p>
+          <p class="section-copy">Die Community sieht hier, wer für Moderation, Events und Organisation zustaendig ist.</p>
         </div>
       </div>
 
@@ -9903,7 +9993,7 @@ function renderEventsPanel() {
         <div>
           <p class="eyebrow">Eventplan</p>
           <h2>Kommende SONARA-Events</h2>
-          <p class="section-copy">Welten, Hosts und Zeiten bleiben fuer Mitglieder und Staff an einem Ort sichtbar.</p>
+          <p class="section-copy">Welten, Hosts und Zeiten bleiben für Mitglieder und Staff an einem Ort sichtbar.</p>
         </div>
       </div>
 
@@ -9961,7 +10051,7 @@ function renderPublicStarterPanel() {
         <div>
           <p class="eyebrow">Neu hier?</p>
           <h2>So kommst du in SONARA an</h2>
-          <p class="section-copy">Ein klarer Einstieg fuer neue Mitglieder, ohne dass man sich erst durchs ganze Portal suchen muss.</p>
+          <p class="section-copy">Ein klarer Einstieg für neue Mitglieder, ohne dass man sich erst durchs ganze Portal suchen muss.</p>
         </div>
       </div>
 
@@ -10006,7 +10096,7 @@ function renderCommunityPulsePanel() {
     {
       label: "Aktuelle News",
       title: latestNews ? latestNews.title : "Zurzeit ruhig",
-      body: latestNews ? latestNews.body : "Wenn etwas wichtig wird, landet es hier fuer alle sichtbar.",
+      body: latestNews ? latestNews.body : "Wenn etwas wichtig wird, landet es hier für alle sichtbar.",
       tone: "sky"
     },
     {
@@ -10052,7 +10142,7 @@ function renderCommunityParticipationPanel() {
     },
     {
       title: "Feedback dalassen",
-      body: "Wuensche, Ideen und kleine Stolpersteine landen direkt bei der Leitung statt irgendwo verloren zu gehen."
+      body: "Wünsche, Ideen und kleine Stolpersteine landen direkt bei der Leitung statt irgendwo verloren zu gehen."
     },
     {
       title: "Creator entdecken",
@@ -10070,7 +10160,7 @@ function renderCommunityParticipationPanel() {
         <div>
           <p class="eyebrow">Mitmachen</p>
           <h2>Was du hier wirklich tun kannst</h2>
-          <p class="section-copy">Eine Community-Seite lebt erst dann richtig, wenn Leute nicht nur lesen, sondern direkt etwas damit anfangen koennen.</p>
+          <p class="section-copy">Eine Community-Seite lebt erst dann richtig, wenn Leute nicht nur lesen, sondern direkt etwas damit anfangen können.</p>
         </div>
       </div>
 
@@ -10169,7 +10259,7 @@ function renderNewsSpotlightPanel() {
         ${
           featured.length
             ? featured.map((entry) => renderAnnouncementCard(entry, false)).join("")
-            : renderEmptyState("Noch keine News", "Sobald etwas fuer die Community wichtig ist, taucht es hier auf.")
+            : renderEmptyState("Noch keine News", "Sobald etwas für die Community wichtig ist, taucht es hier auf.")
         }
       </div>
     </section>
@@ -10182,17 +10272,17 @@ function renderNotificationsPanel() {
   const manager = canManagePortal();
   const staff = canAccessStaffArea();
   const title = manager
-    ? "Automatische Hinweise fuer Leitung und Planung"
+    ? "Automatische Hinweise für Leitung und Planung"
     : staff
-      ? "Automatische Hinweise fuer Schichten und Staff-News"
+      ? "Automatische Hinweise für Schichten und Staff-News"
       : "Das Wichtigste aus Community, News und Events";
   const copy = manager
-    ? "Offene Rueckmeldungen, heutige Einsaetze und laufende Schichten werden hier automatisch zusammengefasst."
+    ? "Offene Rückmeldungen, heutige Einsätze und laufende Schichten werden hier automatisch zusammengefasst."
     : staff
-      ? "Heute, morgen und bald anstehende Einsaetze erscheinen hier zusammen mit angehefteten Staff-Infos."
-      : "Angeheftete News und kommende Events werden hier automatisch fuer dich gesammelt.";
+      ? "Heute, morgen und bald anstehende Einsätze erscheinen hier zusammen mit angehefteten Staff-Infos."
+      : "Angeheftete News und kommende Events werden hier automatisch für dich gesammelt.";
   const emptyBody = manager
-    ? "Sobald neue Rueckmeldungen oder Einsaetze anstehen, erscheinen sie hier."
+    ? "Sobald neue Rückmeldungen oder Einsätze anstehen, erscheinen sie hier."
     : staff
       ? "Sobald neue Staff-Hinweise oder Schichten anstehen, erscheinen sie hier."
       : "Sobald es neue News oder Events gibt, erscheinen sie hier.";
@@ -10269,7 +10359,7 @@ function renderAnnouncementsPanel(managerView) {
                 <input name="pinned" type="checkbox">
                 <span>Oben anheften</span>
               </label>
-              <button type="submit">News veroeffentlichen</button>
+              <button type="submit">News veröffentlichen</button>
             </form>
           `
           : ""
@@ -10292,17 +10382,17 @@ function renderChatPanel(mode = "community", compact = false) {
   const messages = getChatFeed(mode);
   const sectionSpan = compact ? "span-5" : staffMode ? "span-8" : "span-12";
   const eyebrow = staffMode ? "Staff-Chat" : "Community-Chat";
-  const title = staffMode ? "Echtzeit-Chat fuer schnelle Staff-Absprachen" : "Echtzeit-Chat fuer die Community";
+  const title = staffMode ? "Echtzeit-Chat für schnelle Staff-Absprachen" : "Echtzeit-Chat für die Community";
   const copy = staffMode
     ? "Neue Nachrichten erscheinen automatisch, ohne dass jemand neu laden muss."
-    : "Mitglieder koennen sich hier direkt im Portal austauschen, ohne auf Discord wechseln zu muessen.";
+    : "Mitglieder können sich hier direkt im Portal austauschen, ohne auf Discord wechseln zu muessen.";
   const placeholder = staffMode
-    ? "z. B. Wer kann die Schicht heute spaeter uebernehmen?"
+    ? "z. B. Wer kann die Schicht heute später übernehmen?"
     : "z. B. Wer ist heute Abend beim Event dabei?";
   const emptyTitle = staffMode ? "Noch kein Staff-Chat" : "Noch kein Community-Chat";
   const emptyText = staffMode
-    ? "Die erste Nachricht erscheint sofort fuer alle Staff-Mitglieder online."
-    : "Die erste Nachricht erscheint sofort fuer alle Mitglieder online.";
+    ? "Die erste Nachricht erscheint sofort für alle Staff-Mitglieder online."
+    : "Die erste Nachricht erscheint sofort für alle Mitglieder online.";
 
   return `
     <section class="panel ${sectionSpan}">
@@ -10455,7 +10545,7 @@ function renderPublicPortal() {
     .join("");
   const siteCards = Array.isArray(siteContent.infoCards) && siteContent.infoCards.length ? siteContent.infoCards : [
     { title: "Community", body: "Chat, Regeln, Team und Support an einem Ort" },
-    { title: "News & Events", body: "Aktuelle Termine, Ankuendigungen und Creator-Updates" },
+    { title: "News & Events", body: "Aktuelle Termine, Ankündigungen und Creator-Updates" },
     { title: "Bewerbungen", body: "Creator- und Team-Anfragen werden hier sichtbar und bearbeitet" },
     { title: "Mitgliederbereich", body: "Profil, Tickets, Feedback und direkte Kommunikation" }
   ];
@@ -10496,7 +10586,7 @@ function renderPublicPortal() {
                     <span class="pill amber">${escapeHtml(vrchatLink.sourceLabel)}</span>
                   </div>
                   <p class="helper-text">1. Die Welt oder der Chat oeffnet diesen Link. 2. Du meldest dich hier an oder registrierst dich. 3. Danach landest du automatisch in deinem SONARA-Profil.</p>
-                  <p class="helper-text">Die eigentliche Welt kann spaeter einfach genau diese URL oeffnen: <strong>/vrchat-link</strong> oder <strong>/vrchat-link?source=world</strong>.</p>
+                  <p class="helper-text">Die eigentliche Welt kann später einfach genau diese URL öffnen: <strong>/vrchat-link</strong> oder <strong>/vrchat-link?source=world</strong>.</p>
                 </article>
               `
               : ""
@@ -10579,7 +10669,7 @@ function renderPublicPortal() {
             <div>
               <p class="eyebrow">SONARA Portal</p>
               <h3>${page === "landing" ? "Login oder Registrierung" : page === "login" ? "Login" : "Registrieren"}</h3>
-              <p class="helper-text">${page === "landing" ? "Starte hier ins Portal. Wer moechte, kann spaeter weitere Verknuepfungen wie Discord ergaenzen." : page === "login" ? "Mit E-Mail oder Benutzername einloggen." : "Erstelle dir einen SONARA-Account für Community, Creator und Team."}</p>
+              <p class="helper-text">${page === "landing" ? "Starte hier ins Portal. Wer moechte, kann später weitere Verknuepfungen wie Discord ergaenzen." : page === "login" ? "Mit E-Mail oder Benutzername einloggen." : "Erstelle dir einen SONARA-Account für Community, Creator und Team."}</p>
             </div>
             <div class="public-auth-cta-actions">
               <button type="button" class="creator-action-link ${page === "login" ? "active" : ""}" data-action="set-public-page" data-page="login">Login</button>
@@ -10967,7 +11057,7 @@ function collectCollectionUpdatePayload(form) {
 function readFileAsDataUrl(fileInput) {
   const file = fileInput?.files?.[0];
   if (!file) {
-    return Promise.reject(new Error("Bitte eine Datei auswaehlen."));
+    return Promise.reject(new Error("Bitte eine Datei auswählen."));
   }
   if (file.size > 5 * 1024 * 1024) {
     return Promise.reject(new Error("Die Datei ist groesser als 5 MB."));
@@ -11079,7 +11169,7 @@ function renderSiteContentAdminPanel() {
         <div class="card-actions">
           <button type="submit">Entwurf speichern</button>
           <button type="button" class="ghost small" data-action="publish-site-content">Veroeffentlichen</button>
-          <button type="button" class="ghost small" data-action="reset-site-draft">Entwurf zuruecksetzen</button>
+          <button type="button" class="ghost small" data-action="reset-site-draft">Entwurf zurücksetzen</button>
         </div>
       </form>
     </section>
@@ -11095,7 +11185,7 @@ function renderRolePermissionAdminPanel() {
       <div class="section-head">
         <div>
           <p class="eyebrow">Rollen & Rechte</p>
-          <h2>Haken-Matrix fuer Zugriff</h2>
+          <h2>Haken-Matrix für Zugriff</h2>
           <p class="section-copy">Admin bleibt geschuetzt. Neue Rollen kannst du unten als eigene Zeile anlegen und danach Teammitgliedern zuweisen.</p>
         </div>
       </div>
@@ -11295,11 +11385,11 @@ function renderCollectionsAdminPanel() {
         </div>
         <div class="guide-grid">
           <article class="mini-card">
-            <h3>Sichtbar fuer Rollen</h3>
+            <h3>Sichtbar für Rollen</h3>
             ${roles.map((role) => `<label class="checkbox-row"><input name="visibleRoles" value="${escapeHtml(role.key)}" type="checkbox"><span>${escapeHtml(role.label)}</span></label>`).join("")}
           </article>
           <article class="mini-card">
-            <h3>Bearbeitbar fuer Rollen</h3>
+            <h3>Bearbeitbar für Rollen</h3>
             ${roles.map((role) => `<label class="checkbox-row"><input name="editableRoles" value="${escapeHtml(role.key)}" type="checkbox"><span>${escapeHtml(role.label)}</span></label>`).join("")}
           </article>
         </div>
@@ -11357,11 +11447,11 @@ function renderCollectionEditor(collection, records) {
 
             <div class="guide-grid">
               <article class="mini-card">
-                <h3>Sichtbar fuer Rollen</h3>
+                <h3>Sichtbar für Rollen</h3>
                 ${roles.map((role) => `<label class="checkbox-row"><input name="visibleRoles" value="${escapeHtml(role.key)}" type="checkbox" ${(collection.visibleRoles || []).includes(role.key) ? "checked" : ""}><span>${escapeHtml(role.label)}</span></label>`).join("")}
               </article>
               <article class="mini-card">
-                <h3>Bearbeitbar fuer Rollen</h3>
+                <h3>Bearbeitbar für Rollen</h3>
                 ${roles.map((role) => `<label class="checkbox-row"><input name="editableRoles" value="${escapeHtml(role.key)}" type="checkbox" ${(collection.editableRoles || []).includes(role.key) ? "checked" : ""}><span>${escapeHtml(role.label)}</span></label>`).join("")}
               </article>
             </div>
@@ -11402,10 +11492,10 @@ function renderNoCodeFieldInput(field) {
     return `<label class="checkbox-row"><input name="${escapeHtml(name)}" data-field-key="${escapeHtml(field.key)}" type="checkbox"><span>${escapeHtml(field.label)}</span></label>${helper}`;
   }
   if (field.type === "select") {
-    return `<select name="${escapeHtml(name)}" ${field.required ? "required" : ""}><option value="">Bitte waehlen</option>${(field.options || []).map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("")}</select>${helper}`;
+    return `<select name="${escapeHtml(name)}" ${field.required ? "required" : ""}><option value="">Bitte wählen</option>${(field.options || []).map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("")}</select>${helper}`;
   }
   if (field.type === "user") {
-    return `<select name="${escapeHtml(name)}" ${field.required ? "required" : ""}><option value="">Bitte waehlen</option>${(state.data?.users || state.data?.directory || []).map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(getPrimaryDisplayName(user))}</option>`).join("")}</select>${helper}`;
+    return `<select name="${escapeHtml(name)}" ${field.required ? "required" : ""}><option value="">Bitte wählen</option>${(state.data?.users || state.data?.directory || []).map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(getPrimaryDisplayName(user))}</option>`).join("")}</select>${helper}`;
   }
   const inputType = field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "time" ? "time" : "text";
   const multiHelper = field.type === "multiselect" ? '<p class="helper-text">Mehrere Werte mit Komma trennen.</p>' : "";
@@ -11556,7 +11646,7 @@ function renderDocumentsAdminPanel() {
         <div>
           <p class="eyebrow">Dokumente</p>
           <h2>Regeln, Handbuch, FAQ und Team-Wissen</h2>
-          <p class="section-copy">Textdokumente koennen als Entwurf bleiben oder veroeffentlicht werden.</p>
+          <p class="section-copy">Textdokumente können als Entwurf bleiben oder veröffentlicht werden.</p>
         </div>
       </div>
       <form class="stack-form" data-form="document-create">
@@ -11710,12 +11800,8 @@ function renderManagerDashboard(activeTab) {
       return renderProfileWorkspace(true);
     case "settings":
       return renderSettingsPanel();
-    case "site-admin":
-      return renderSiteContentAdminPanel();
     case "roles":
       return renderRolePermissionAdminPanel();
-    case "collections":
-      return renderCollectionsAdminPanel();
     case "documents":
       return [renderDocumentsAdminPanel(), renderUploadsAdminPanel()].join("");
     case "overview":
@@ -11809,7 +11895,7 @@ function clearAvatarDraft(key) {
 function renderAvatarDraftHint(draftKey, hasSavedAvatar) {
   const draft = getAvatarDraftInfo(draftKey);
   if (draft?.fileName) {
-    return `<p class="helper-text file-hint">Ausgewaehlt: ${escapeHtml(draft.fileName)}</p>`;
+    return `<p class="helper-text file-hint">Ausgewählt: ${escapeHtml(draft.fileName)}</p>`;
   }
   if (hasSavedAvatar) {
     return '<p class="helper-text file-hint">Aktuelles Profilbild ist gespeichert.</p>';
@@ -11834,7 +11920,7 @@ async function captureAvatarDraft(fileInput) {
       dataUrl,
       fileName: String(file.name || "Bild")
     };
-    setFlash(`Bild ausgewaehlt: ${file.name}`, "info");
+    setFlash(`Bild ausgewählt: ${file.name}`, "info");
   } catch (error) {
     clearAvatarDraft(draftKey);
     fileInput.value = "";
@@ -12037,7 +12123,7 @@ function renderAvailabilitySlotsEditor(slots, idPrefix = "availability") {
                 name="availability-${slot.day}-note"
                 type="text"
                 value="${escapeHtml(slot.note || "")}"
-                placeholder="optional: flexibel, spaeter, nur kurz ..."
+                placeholder="optional: flexibel, später, nur kurz ..."
               >
             </div>
           `;
@@ -12160,7 +12246,7 @@ function renderProfilePanel(managerView) {
               <input id="profileDiscordName" name="discordName" type="text" value="${escapeHtml(user.discordName || "")}" required>
             </div>
             <div class="field">
-              <label for="profileDiscordUserId">Discord User-ID fuer Bot-DMs</label>
+              <label for="profileDiscordUserId">Discord User-ID für Bot-DMs</label>
               <input id="profileDiscordUserId" name="discordUserId" type="text" inputmode="numeric" value="${escapeHtml(user.discordUserId || "")}" placeholder="z. B. 123456789012345678">
               <p class="helper-text">Damit der Bot einzelne Moderatoren privat an Schichten erinnern kann. In Discord: Entwicklermodus aktivieren, Rechtsklick auf Profil, ID kopieren.</p>
             </div>
@@ -12191,8 +12277,8 @@ function renderProfilePanel(managerView) {
                   <div class="span-all availability-form-shell compact">
                     <div class="availability-form-head">
                       <div>
-                        <p class="eyebrow">Verfuegbarkeit</p>
-                        <h3>Dein Wochenrahmen fuer die Planung</h3>
+                        <p class="eyebrow">Verfügbarkeit</p>
+                        <h3>Dein Wochenrahmen für die Planung</h3>
                         <p class="helper-text">Stunden, Tage und Slots in einem Block. Hinweise kommen nur noch extra darunter.</p>
                       </div>
                       <span class="pill neutral">Staff-Planung</span>
@@ -12207,14 +12293,14 @@ function renderProfilePanel(managerView) {
                         <input id="profileWeeklyDaysCapacity" name="weeklyDaysCapacity" type="number" min="0" max="7" step="1" value="${escapeHtml(String(user.weeklyDaysCapacity || ""))}" placeholder="z. B. 3">
                       </div>
                       <div class="field span-all">
-                        <label for="profileAvailabilitySchedule">Zeitfenster fuer diese Woche</label>
+                        <label for="profileAvailabilitySchedule">Zeitfenster für diese Woche</label>
                         ${renderAvailabilitySlotsEditor(availabilitySlots, "profile-availability")}
                         <p class="helper-text">Bitte pro Tag moeglichst konkret eintragen. Die Leitung plant direkt mit diesen Slots weiter.</p>
                       </div>
                       <div class="field span-all">
-                        <label for="profileAvailabilitySchedule">Zusatzhinweise fuer diese Woche</label>
-                        <textarea id="profileAvailabilitySchedule" name="availabilitySchedule" placeholder="z. B. Freitag eventuell spaeter oder Sonntag nur spontan erreichbar.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
-                        <p class="helper-text">Nur fuer Sonderfaelle oder kurze Ergaenzungen.</p>
+                        <label for="profileAvailabilitySchedule">Zusatzhinweise für diese Woche</label>
+                        <textarea id="profileAvailabilitySchedule" name="availabilitySchedule" placeholder="z. B. Freitag eventuell später oder Sonntag nur spontan erreichbar.">${escapeHtml(user.availabilitySchedule || "")}</textarea>
+                        <p class="helper-text">Nur für Sonderfälle oder kurze Ergänzungen.</p>
                       </div>
                     </div>
                   </div>
@@ -12258,7 +12344,7 @@ function renderProfilePanel(managerView) {
                 <div>
                   <p class="eyebrow">Creator Community</p>
                   <h3>Dein kleiner Bereich unter dem grossen Dach</h3>
-                  <p class="helper-text">Du kannst deinen Hub hier schon vorbereiten. Sichtbar fuer andere wird er aber erst, sobald die Creator-Pruefung durch ist.</p>
+                  <p class="helper-text">Du kannst deinen Hub hier schon vorbereiten. Sichtbar für andere wird er aber erst, sobald die Creator-Prüfung durch ist.</p>
                 </div>
                 <span class="pill neutral">Creator Hub</span>
               </div>
@@ -12278,7 +12364,7 @@ function renderProfilePanel(managerView) {
                 <div class="field span-all">
                   <label for="profileCreatorCommunitySummary">Kurzbeschreibung deiner Community</label>
                   <textarea id="profileCreatorCommunitySummary" name="creatorCommunitySummary" placeholder="Worum geht es bei dir, was erwartet Leute in deinem Bereich und weshalb sollten sie dort mitlesen?">${escapeHtml(user.creatorCommunitySummary || "")}</textarea>
-                  <p class="helper-text">Dieser Text erscheint spaeter direkt im Creator-Hub und auf deiner Slash-Seite. Die URL wird automatisch auf <code>/creator/dein-slug</code> gebaut.</p>
+                  <p class="helper-text">Dieser Text erscheint später direkt im Creator-Hub und auf deiner Slash-Seite. Die URL wird automatisch auf <code>/creator/dein-slug</code> gebaut.</p>
                 </div>
               </div>
             </div>
@@ -12305,7 +12391,7 @@ function renderProfilePanel(managerView) {
                   <input id="profileCreatorPresenceUrl" name="creatorPresenceUrl" type="url" value="${escapeHtml(user.creatorPresenceUrl || "")}" placeholder="TikTok Live, Twitch, neues Video oder Profil-Link">
                 </div>
                 <div class="field span-all">
-                  <label for="profileCreatorPresenceText">Kurztext fuer Sonara Live</label>
+                  <label for="profileCreatorPresenceText">Kurztext für Sonara Live</label>
                   <textarea id="profileCreatorPresenceText" name="creatorPresenceText" placeholder="z. B. Heute Abend TikTok Live ab 20 Uhr oder neuer Clip ist online.">${escapeHtml(user.creatorPresenceText || "")}</textarea>
                   <p class="helper-text">Das ist die kurze Notiz, die Mitglieder bei Sonara Live und in ihren Benachrichtigungen sehen.</p>
                 </div>
@@ -12438,7 +12524,7 @@ function renderCreatorBuilderPanel() {
   if (!user) return "";
   const creatorApplication = getCreatorApplicationMeta(user);
   const shouldShowWorkspace = Boolean(
-    canManagePortal() || creatorApplication.status !== "none" || user.creatorSlug || user.creatorCommunityName || user.creatorVisible
+    canManagePortal() || creatorApplication.approved
   );
   if (!shouldShowWorkspace) return "";
 
@@ -12454,7 +12540,7 @@ function renderCreatorBuilderPanel() {
         <div>
           <p class="eyebrow">Mein Creator-Hub</p>
           <h2>Slash-Seite und Creator-Ecke direkt bauen</h2>
-          <p class="section-copy">Hier baust du deinen eigenen kleinen Bereich unter SONARA. Die oeffentliche Freigabe haengt weiter an der Creator-Pruefung, aber du kannst Namen, Slash-Adresse, Einstieg und Live-Status schon komplett vorbereiten.</p>
+          <p class="section-copy">Hier baust du deinen eigenen kleinen Bereich unter SONARA. Die oeffentliche Freigabe haengt weiter an der Creator-Prüfung, aber du kannst Namen, Slash-Adresse, Einstieg und Live-Status schon komplett vorbereiten.</p>
         </div>
         <div class="chip-list">
           <span class="pill ${creatorApplication.tone}">${escapeHtml(creatorApplication.title)}</span>
@@ -12466,7 +12552,7 @@ function renderCreatorBuilderPanel() {
         <article class="mini-card creator-builder-preview">
           <div class="status-row">
             <span class="pill neutral">Vorschau</span>
-            <span class="pill ${hubReady ? "success" : "amber"}">${escapeHtml(hubReady ? "Hub vorbereitet" : "Noch unvollstaendig")}</span>
+            <span class="pill ${hubReady ? "success" : "amber"}">${escapeHtml(hubReady ? "Hub vorbereitet" : "Noch unvollständig")}</span>
           </div>
           <h3>${escapeHtml(creatorCommunity.name)}</h3>
           <p class="helper-text">${escapeHtml(creatorCommunity.summary)}</p>
@@ -12478,7 +12564,7 @@ function renderCreatorBuilderPanel() {
           </div>
           <div class="creator-community-actions">
             ${publicPath ? `<a class="creator-action-link" href="${escapeHtml(publicPath)}" target="_blank" rel="noreferrer">Slash-Seite ansehen</a>` : ""}
-            <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Vollprofil oeffnen</button>
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="profile">Vollprofil öffnen</button>
           </div>
         </article>
 
@@ -12517,7 +12603,7 @@ function renderCreatorBuilderPanel() {
               <input id="creatorHubPresenceUrl" name="creatorPresenceUrl" type="url" value="${escapeHtml(user.creatorPresenceUrl || "")}" placeholder="Stream, neues Video oder Profil-Link">
             </div>
             <div class="field span-all">
-              <label for="creatorHubPresenceText">Kurztext fuer Sonara Live</label>
+              <label for="creatorHubPresenceText">Kurztext für Sonara Live</label>
               <textarea id="creatorHubPresenceText" name="creatorPresenceText" placeholder="z. B. Heute Abend live ab 20 Uhr oder neuer Upload ist online.">${escapeHtml(user.creatorPresenceText || "")}</textarea>
             </div>
             <div class="field span-all">
@@ -12535,7 +12621,7 @@ function renderCreatorBuilderPanel() {
                 : ""
             }
           </div>
-          <p class="helper-text">Die Slash-Seite wird automatisch unter <code>/creator/dein-slug</code> aufgebaut. Wenn die Creator-Pruefung noch offen ist, speicherst du hier trotzdem schon alles vor.</p>
+          <p class="helper-text">Die Slash-Seite wird automatisch unter <code>/creator/dein-slug</code> aufgebaut. Wenn die Creator-Prüfung noch offen ist, speicherst du hier trotzdem schon alles vor.</p>
           <button type="submit">Creator-Hub speichern</button>
         </form>
 
@@ -12573,7 +12659,7 @@ function renderCreatorPublishingPanel() {
 
   const creatorApplication = getCreatorApplicationMeta(user);
   const shouldShowWorkspace = Boolean(
-    canManagePortal() || creatorApplication.status !== "none" || user.creatorSlug || user.creatorCommunityName || user.creatorVisible
+    canManagePortal() || creatorApplication.approved
   );
   if (!shouldShowWorkspace) return "";
 
@@ -12612,13 +12698,13 @@ function renderCreatorPublishingPanel() {
                   <label for="creatorFeedImage">Bild optional</label>
                   <input id="creatorFeedImage" name="imageFile" type="file" accept="image/*">
                 </div>
-                <button type="submit">Feed-Update veroeffentlichen</button>
+                <button type="submit">Feed-Update veröffentlichen</button>
               </form>
 
               <form class="stack-form mini-card creator-publishing-form" data-form="forum-thread">
                 <input type="hidden" name="creatorCommunityId" value="${escapeHtml(user.id)}">
                 <p class="eyebrow">Themenraum</p>
-                <h3>Neues Thema fuer deine Community</h3>
+                <h3>Neues Thema für deine Community</h3>
                 <div class="field">
                   <label for="creatorThreadTitle">Titel</label>
                   <input id="creatorThreadTitle" name="title" type="text" placeholder="z. B. Naechster Stream, Ideen, Fragen" required>
@@ -12631,7 +12717,7 @@ function renderCreatorPublishingPanel() {
                   <label for="creatorThreadContent">Beschreibung</label>
                   <textarea id="creatorThreadContent" name="content" placeholder="Worum geht es und was soll deine Community hier wissen oder besprechen?" required></textarea>
                 </div>
-                <button type="submit">Thema veroeffentlichen</button>
+                <button type="submit">Thema veröffentlichen</button>
               </form>
             </div>
           `
@@ -12693,14 +12779,14 @@ function renderCreatorsPanel(managerView) {
         </div>
         <div class="chip-list">
           <span class="pill neutral">${escapeHtml(String(creators.length))} Creator-Hubs</span>
-          ${pendingApplications.length ? `<span class="pill amber">${escapeHtml(String(pendingApplications.length))} Pruefungen offen</span>` : ""}
+          ${pendingApplications.length ? `<span class="pill amber">${escapeHtml(String(pendingApplications.length))} Prüfungen offen</span>` : ""}
         </div>
       </div>
       ${renderCreatorBuilderPanel()}
       ${renderCreatorPublishingPanel()}
       ${
         managerView
-          ? `<p class="helper-text">Creator pflegen ihre Hub-Daten weiterhin im Profil. Freigaben selbst laufen jetzt getrennt ueber die Creator-Pruefung, damit niemand sich den Bereich einfach selbst zuschalten kann.</p>`
+          ? `<p class="helper-text">Creator pflegen ihre Hub-Daten weiterhin im Profil. Freigaben selbst laufen jetzt getrennt über die Creator-Prüfung, damit niemand sich den Bereich einfach selbst zuschalten kann.</p>`
           : ""
       }
       ${
@@ -12729,7 +12815,7 @@ function renderCreatorsPanel(managerView) {
                 <div class="section-head compact-section-head">
                   <div>
                     <p class="eyebrow">Creator-Navigation</p>
-                    <h3>Wen willst du gerade oeffnen?</h3>
+                    <h3>Wen willst du gerade öffnen?</h3>
                   </div>
                 </div>
                 <div class="creator-rail-list">
@@ -12756,7 +12842,7 @@ function renderCreatorsPanel(managerView) {
                         ${renderCreatorCommunityHub(selectedCreator)}
                       </div>
                     `
-                    : renderEmptyState("Noch kein Creator-Hub", "Sobald Creator freigegeben sind, kannst du ihre Bereiche hier fokussiert oeffnen.")
+                    : renderEmptyState("Noch kein Creator-Hub", "Sobald Creator freigegeben sind, kannst du ihre Bereiche hier fokussiert öffnen.")
                 }
               </div>
             </div>
@@ -12767,7 +12853,7 @@ function renderCreatorsPanel(managerView) {
           `
           : renderEmptyState(
               "Noch keine freigegebenen Creator",
-              `Creator tauchen hier erst nach einer Pruefung auf. Aktuell liegt die Einstiegsschwelle bei ${CREATOR_MIN_FOLLOWERS}+ Followern.`
+              `Creator tauchen hier erst nach einer Prüfung auf. Aktuell liegt die Einstiegsschwelle bei ${CREATOR_MIN_FOLLOWERS}+ Followern.`
             )
       }
     </section>
@@ -12795,7 +12881,7 @@ function renderLivePreviewPanel(limit = 4, spanClass = "span-12") {
       ${
         activityEntries.length
           ? `<div class="live-creator-grid">${activityEntries.map((entry) => renderLiveCreatorCard(entry)).join("")}</div>`
-          : renderEmptyState("Noch kein Creator aktiv", "Sobald jemand streamt oder einen neuen Upload teilt, erscheint der Hinweis hier fuer die Community.")
+          : renderEmptyState("Noch kein Creator aktiv", "Sobald jemand streamt oder einen neuen Upload teilt, erscheint der Hinweis hier für die Community.")
       }
     </section>
   `;
@@ -12830,7 +12916,7 @@ function renderLivePanel() {
         <article class="mini-card live-stage-card live-stage-card-sun">
           <p class="eyebrow">Gerade offen</p>
           <h3>${escapeHtml(leadLive ? `${getPrimaryDisplayName(leadLive)} sendet gerade` : "Gerade kein Stream aktiv")}</h3>
-          <p class="helper-text">${escapeHtml(leadLiveMeta ? leadLiveMeta.summary : "Sobald jemand live geht, landet der Stream hier direkt als schneller Einstieg fuer die Community.")}</p>
+          <p class="helper-text">${escapeHtml(leadLiveMeta ? leadLiveMeta.summary : "Sobald jemand live geht, landet der Stream hier direkt als schneller Einstieg für die Community.")}</p>
           ${
             leadLiveMeta?.actionUrl
               ? `<a class="creator-action-link" href="${escapeHtml(leadLiveMeta.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(leadLiveMeta.actionLabel)}</a>`
@@ -12841,7 +12927,7 @@ function renderLivePanel() {
         <article class="mini-card live-stage-card live-stage-card-moon">
           <p class="eyebrow">Frisch erschienen</p>
           <h3>${escapeHtml(leadRelease ? `Neu von ${getPrimaryDisplayName(leadRelease)}` : "Noch kein neuer Upload markiert")}</h3>
-          <p class="helper-text">${escapeHtml(leadReleaseMeta ? leadReleaseMeta.summary : "Creator koennen hier neue Videos, Musik oder Clips direkt mit einem Link in den Fokus setzen.")}</p>
+          <p class="helper-text">${escapeHtml(leadReleaseMeta ? leadReleaseMeta.summary : "Creator können hier neue Videos, Musik oder Clips direkt mit einem Link in den Fokus setzen.")}</p>
           ${
             leadReleaseMeta?.actionUrl
               ? `<a class="creator-action-link" href="${escapeHtml(leadReleaseMeta.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(leadReleaseMeta.actionLabel)}</a>`
@@ -12930,7 +13016,7 @@ function renderVoiceShortcutPanel() {
   const status = state.voice.room
     ? "Du bist gerade verbunden."
     : config?.enabled
-      ? "LiveKit ist bereit. Du kannst Voice direkt oeffnen."
+      ? "LiveKit ist bereit. Du kannst Voice direkt öffnen."
       : config
         ? "Voice ist sichtbar, aber die Verbindung braucht noch Konfiguration."
         : "Voice ist sichtbar. Der Status wird beim Oeffnen geladen.";
@@ -12940,11 +13026,11 @@ function renderVoiceShortcutPanel() {
       <div class="section-head">
         <div>
           <p class="eyebrow">SONARA Voice</p>
-          <h2>Sprachkanal schnell oeffnen</h2>
+          <h2>Sprachkanal schnell öffnen</h2>
           <p class="section-copy">${escapeHtml(status)}</p>
         </div>
         <div class="card-actions">
-          <button type="button" data-action="set-tab" data-tab="voice">Voice oeffnen</button>
+          <button type="button" data-action="set-tab" data-tab="voice">Voice öffnen</button>
           <button type="button" class="ghost small" data-action="refresh-voice-status" ${state.voice.loading ? "disabled" : ""}>Status pruefen</button>
         </div>
       </div>
@@ -12955,8 +13041,8 @@ function renderVoiceShortcutPanel() {
 function renderVoicePanel() {
   const config = state.voice.config;
   const rooms = config?.rooms || [
-    { id: "community", label: "Community Voice", description: "Offener Sprachraum fuer alle Mitglieder.", allowed: true },
-    { id: "staff", label: "Staff Voice", description: "Interner Sprachraum fuer das Team.", allowed: canAccessStaffArea() }
+    { id: "community", label: "Community Voice", description: "Offener Sprachraum für alle Mitglieder.", allowed: true },
+    { id: "staff", label: "Staff Voice", description: "Interner Sprachraum für das Team.", allowed: canAccessStaffArea() }
   ];
   const connectedRoom = rooms.find((room) => room.id === state.voice.roomId);
 
@@ -12975,7 +13061,7 @@ function renderVoicePanel() {
         <div>
           <p class="eyebrow">SONARA Voice</p>
           <h2>Sprachkanaele direkt im Portal</h2>
-          <p class="section-copy">Audio-only fuer Community und Staff. Community ist fuer alle eingeloggten Mitglieder, Staff bleibt fuer Moderation und Leitung.</p>
+          <p class="section-copy">Audio-only für Community und Staff. Community ist für alle eingeloggten Mitglieder, Staff bleibt für Moderation und Leitung.</p>
         </div>
         <div class="card-actions">
           <button type="button" class="ghost small" data-action="refresh-voice-status" ${state.voice.loading ? "disabled" : ""}>Status neu laden</button>
@@ -13059,17 +13145,17 @@ function renderChatPanel(mode = "community", compact = false) {
   const messages = getChatFeed(mode);
   const sectionSpan = compact ? "span-5" : staffMode ? "span-8" : "span-7";
   const eyebrow = staffMode ? "Staff-Chat" : "Community-Chat";
-  const title = staffMode ? "Echtzeit-Chat fuer schnelle Staff-Absprachen" : "Echtzeit-Chat fuer die Community";
+  const title = staffMode ? "Echtzeit-Chat für schnelle Staff-Absprachen" : "Echtzeit-Chat für die Community";
   const copy = staffMode
     ? "Neue Nachrichten erscheinen automatisch, ohne dass jemand neu laden muss. 5 Sekunden Cooldown verhindern Spam."
-    : "Mitglieder koennen sich hier direkt im Portal austauschen, ohne auf Discord wechseln zu muessen. 5 Sekunden Cooldown verhindern Spam.";
+    : "Mitglieder können sich hier direkt im Portal austauschen, ohne auf Discord wechseln zu muessen. 5 Sekunden Cooldown verhindern Spam.";
   const placeholder = staffMode
-    ? "z. B. Wer kann heute spaeter uebernehmen?"
+    ? "z. B. Wer kann heute später übernehmen?"
     : "z. B. Wer ist heute Abend beim Event dabei?";
   const emptyTitle = staffMode ? "Noch kein Staff-Chat" : "Noch kein Community-Chat";
   const emptyText = staffMode
-    ? "Die erste Nachricht erscheint sofort fuer alle Staff-Mitglieder online."
-    : "Die erste Nachricht erscheint sofort fuer alle Mitglieder online.";
+    ? "Die erste Nachricht erscheint sofort für alle Staff-Mitglieder online."
+    : "Die erste Nachricht erscheint sofort für alle Mitglieder online.";
   const managerTools = canManagePortal()
     ? `
       <div class="chat-tool-stack">
@@ -13167,7 +13253,7 @@ function renderDirectMessagesPanel() {
         <div class="field">
           <label for="dmRecipient">An</label>
           <select id="dmRecipient" name="recipientId" ${recipients.length ? "required" : "disabled"}>
-            <option value="">${recipients.length ? "Person auswaehlen" : "Noch keine Empfaenger verfuegbar"}</option>
+            <option value="">${recipients.length ? "Person auswählen" : "Noch keine Empfaenger verfuegbar"}</option>
             ${recipients.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(getPrimaryDisplayName(entry))}${entry.discordName ? ` | ${escapeHtml(entry.discordName)}` : ""}</option>`).join("")}
           </select>
         </div>
@@ -13272,7 +13358,7 @@ function getCreatorPresenceMeta(user) {
     tone: status === "live" ? "amber" : status === "new-release" ? "sky" : "neutral",
     summary,
     actionUrl: explicitActionUrl || matchedLink?.url || "",
-    actionLabel: status === "live" ? "Live oeffnen" : status === "new-release" ? "Neuen Upload ansehen" : matchedLink ? "Creator oeffnen" : "",
+    actionLabel: status === "live" ? "Live öffnen" : status === "new-release" ? "Neuen Upload ansehen" : matchedLink ? "Creator öffnen" : "",
     actionPlatform,
     updatedLabel: user?.creatorPresenceUpdatedAt ? `Aktualisiert ${formatDateTime(user.creatorPresenceUpdatedAt)}` : "",
     linkEntries
@@ -13285,14 +13371,14 @@ function getCreatorCommunityMeta(user) {
     String(user?.creatorCommunitySummary || "").trim() ||
     String(user?.creatorBlurb || "").trim() ||
     String(user?.contactNote || "").trim() ||
-    "Ein eigener Bereich fuer Updates, Posts und Themen dieser Creator-Community.";
+    "Ein eigener Bereich für Updates, Posts und Themen dieser Creator-Community.";
   const inviteUrl = String(user?.creatorCommunityInviteUrl || "").trim();
 
   return {
     name: communityName,
     summary,
     inviteUrl,
-    inviteLabel: inviteUrl ? "Community oeffnen" : ""
+    inviteLabel: inviteUrl ? "Community öffnen" : ""
   };
 }
 
@@ -13304,18 +13390,18 @@ function getCreatorApplicationMeta(user) {
   const proofUrl = String(user?.creatorProofUrl || "").trim();
   const applicationNote = String(user?.creatorApplicationNote || "").trim();
   const reviewNote = String(user?.creatorReviewNote || "").trim();
-  const reviewedLabel = user?.creatorReviewedAt ? `Zuletzt geprueft ${formatDateTime(user.creatorReviewedAt)}` : "";
+  const reviewedLabel = user?.creatorReviewedAt ? `Zuletzt geprüft ${formatDateTime(user.creatorReviewedAt)}` : "";
 
   const variants = {
     approved: {
       title: "Creator freigeschaltet",
       tone: "success",
-      summary: "Dein Creator-Hub ist fuer die Community freigegeben und kann jetzt sichtbar wachsen."
+      summary: "Dein Creator-Hub ist für die Community freigegeben und kann jetzt sichtbar wachsen."
     },
     pending: {
-      title: "Creator-Pruefung laeuft",
+      title: "Creator-Prüfung laeuft",
       tone: "amber",
-      summary: "Deine Creator-Bewerbung liegt gerade bei Leitung oder Admin zur Pruefung."
+      summary: "Deine Creator-Bewerbung liegt gerade bei Leitung oder Admin zur Prüfung."
     },
     rejected: {
       title: "Creator-Bewerbung pausiert",
@@ -13325,7 +13411,7 @@ function getCreatorApplicationMeta(user) {
     none: {
       title: "Noch nicht als Creator freigegeben",
       tone: "neutral",
-      summary: `Reiche hier erst deine Creator-Pruefung ein. Aktuell sind mindestens ${CREATOR_MIN_FOLLOWERS} Follower vorgesehen.`
+      summary: `Reiche hier erst deine Creator-Prüfung ein. Aktuell sind mindestens ${CREATOR_MIN_FOLLOWERS} Follower vorgesehen.`
     }
   };
 
@@ -13486,7 +13572,7 @@ function renderCreatorCommunityHub(user) {
                 ? `<a class="creator-action-link" href="${escapeHtml(presence.actionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(presence.actionLabel)}</a>`
                 : ""
             }
-            <a class="creator-action-link" href="${escapeHtml(publicPath)}">Slash-Seite oeffnen</a>
+            <a class="creator-action-link" href="${escapeHtml(publicPath)}">Slash-Seite öffnen</a>
           </div>
           ${renderCreatorLinkList(user, true)}
         </div>
@@ -13554,7 +13640,7 @@ function renderCreatorReviewCard(user, scope = "review") {
       ${application.reviewNote ? `<p class="helper-text"><strong>Review:</strong> ${escapeHtml(application.reviewNote)}</p>` : ""}
       ${
         application.proofUrl
-          ? `<a class="creator-action-link" href="${escapeHtml(application.proofUrl)}" target="_blank" rel="noreferrer">Nachweis oeffnen</a>`
+          ? `<a class="creator-action-link" href="${escapeHtml(application.proofUrl)}" target="_blank" rel="noreferrer">Nachweis öffnen</a>`
           : ""
       }
 
@@ -13563,7 +13649,7 @@ function renderCreatorReviewCard(user, scope = "review") {
           <div class="field">
             <label for="creatorStatus-${escapeHtml(prefix)}">Status</label>
             <select id="creatorStatus-${escapeHtml(prefix)}" name="status">
-              <option value="pending" ${application.pending ? "selected" : ""}>In Pruefung</option>
+              <option value="pending" ${application.pending ? "selected" : ""}>In Prüfung</option>
               <option value="approved" ${application.approved ? "selected" : ""}>Freigeben</option>
               <option value="rejected" ${application.rejected ? "selected" : ""}>Ablehnen</option>
               <option value="none" ${application.status === "none" ? "selected" : ""}>Zuruecksetzen</option>
@@ -13587,7 +13673,7 @@ function renderCreatorReviewCard(user, scope = "review") {
           </div>
           <div class="field span-all">
             <label for="creatorReviewNote-${escapeHtml(prefix)}">Review-Notiz</label>
-            <textarea id="creatorReviewNote-${escapeHtml(prefix)}" name="creatorReviewNote" placeholder="Kurze Rueckmeldung fuer die Creator-Pruefung">${escapeHtml(application.reviewNote || "")}</textarea>
+            <textarea id="creatorReviewNote-${escapeHtml(prefix)}" name="creatorReviewNote" placeholder="Kurze Rückmeldung für die Creator-Prüfung">${escapeHtml(application.reviewNote || "")}</textarea>
           </div>
           <div class="field creator-review-override">
             <label for="creatorOverride-${escapeHtml(prefix)}">Unter ${escapeHtml(String(CREATOR_MIN_FOLLOWERS))} trotzdem freigeben</label>
@@ -13695,7 +13781,7 @@ function renderMemberRequestCard(entry) {
         entry.memberDecision === "pending"
           ? `
             <form class="card-actions" data-form="request-decision" data-request-id="${escapeHtml(entry.id)}">
-              <button type="submit" class="small" value="accepted">Passt fuer mich</button>
+              <button type="submit" class="small" value="accepted">Passt für mich</button>
               <button type="submit" class="ghost small" value="declined">So nicht moeglich</button>
             </form>
           `
@@ -13706,7 +13792,7 @@ function renderMemberRequestCard(entry) {
 }
 
 function renderAdminRequestCard(entry) {
-  const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "in_planung" ? "amber" : "rose";
+  const statusTone = entry.status === "beruecksichtigt" ? "success" : entry.status === "erledigt" ? "success" : entry.status === "in_planung" ? "amber" : entry.status === "abgelehnt" ? "slate" : "rose";
   const decisionTone = entry.memberDecision === "accepted" ? "success" : entry.memberDecision === "declined" ? "rose" : "amber";
 
   return `
@@ -13734,10 +13820,10 @@ function renderAdminRequestCard(entry) {
           </select>
         </div>
         <div class="field">
-          <label for="adminNote-${escapeHtml(entry.id)}">Notiz fuer den Moderator</label>
-          <textarea id="adminNote-${escapeHtml(entry.id)}" name="adminNote" placeholder="Kurze Rueckmeldung oder Bestaetigung">${escapeHtml(entry.adminNote || "")}</textarea>
+          <label for="adminNote-${escapeHtml(entry.id)}">Notiz für den Moderator</label>
+          <textarea id="adminNote-${escapeHtml(entry.id)}" name="adminNote" placeholder="Kurze Rückmeldung oder Bestaetigung">${escapeHtml(entry.adminNote || "")}</textarea>
         </div>
-        <button type="submit" class="ghost small">Rueckmeldung speichern</button>
+        <button type="submit" class="ghost small">Rückmeldung speichern</button>
       </form>
     </article>
   `;
@@ -13755,7 +13841,7 @@ function renderEventsPanel() {
         <div>
           <p class="eyebrow">Eventplan</p>
           <h2>Kommende SONARA-Events</h2>
-          <p class="section-copy">Welten, Hosts und Zeiten bleiben fuer Mitglieder und Staff an einem Ort sichtbar.</p>
+          <p class="section-copy">Welten, Hosts und Zeiten bleiben für Mitglieder und Staff an einem Ort sichtbar.</p>
         </div>
       </div>
 
@@ -13879,7 +13965,7 @@ function renderFeedPanel() {
         <div>
           <p class="eyebrow">Community Feed</p>
           <h2>Bilder, Momente und Reaktionen</h2>
-          <p class="section-copy">Mitglieder koennen hier allgemein posten oder gezielt in die kleinen Creator-Communities hinein schreiben.</p>
+          <p class="section-copy">Mitglieder können hier allgemein posten oder gezielt in die kleinen Creator-Communities hinein schreiben.</p>
         </div>
       </div>
 
@@ -13927,7 +14013,7 @@ function getDashboardTabSections() {
 
   const memberSections = [
     { id: "community", title: "Community", tabs: communityTabs },
-    { id: "account", title: "Mein Bereich", tabs: [{ id: "availability", label: "Verfuegbarkeit" }, { id: "feedback", label: "Tickets" }, { id: "profile", label: "Profil" }] }
+    { id: "account", title: "Mein Bereich", tabs: [{ id: "availability", label: "Verfügbarkeit" }, { id: "feedback", label: "Tickets" }, { id: "profile", label: "Profil" }] }
   ];
 
   if (canManagePortal()) {
@@ -13938,7 +14024,7 @@ function getDashboardTabSections() {
         title: "Mein Bereich",
         tabs: [
           { id: "schedule", label: "Meine Schichten" },
-          { id: "availability", label: "Verfuegbarkeit" },
+          { id: "availability", label: "Verfügbarkeit" },
           { id: "time", label: "Zeiten" },
           { id: "feedback", label: "Tickets" },
           { id: "profile", label: "Profil" }
@@ -13960,11 +14046,8 @@ function getDashboardTabSections() {
         title: "System",
         tabs: [
           { id: "settings", label: "Einstellungen" },
-          { id: "site-admin", label: "Webseite" },
           { id: "roles", label: "Rollen" },
-          { id: "collections", label: "Datenbuilder" },
-          { id: "documents", label: "Dokumente" },
-          ...(canManageLayout() ? [{ id: "layout", label: "Layout" }] : [])
+          { id: "documents", label: "Dokumente" }
         ]
       }
     ];
@@ -13978,7 +14061,7 @@ function getDashboardTabSections() {
         title: "Mein Bereich",
         tabs: [
           { id: "schedule", label: "Meine Schichten" },
-          { id: "availability", label: "Verfuegbarkeit" },
+          { id: "availability", label: "Verfügbarkeit" },
           { id: "time", label: "Zeiten" },
           { id: "feedback", label: "Tickets" },
           { id: "profile", label: "Profil" }
@@ -14005,7 +14088,7 @@ function getDashboardTabSections() {
         title: "Mein Bereich",
         tabs: [
           { id: "schedule", label: "Meine Schichten" },
-          { id: "availability", label: "Verfuegbarkeit" },
+          { id: "availability", label: "Verfügbarkeit" },
           { id: "time", label: "Zeiten" },
           { id: "feedback", label: "Tickets" },
           { id: "profile", label: "Profil" }
@@ -14123,16 +14206,16 @@ function renderMemberActionHubPanel() {
         : "Ein kurzer Text und ein Bild helfen anderen direkt zu sehen, wer du bist.",
       meta: getPrimaryDisplayName(user),
       tab: "profile",
-      action: "Profil oeffnen"
+      action: "Profil öffnen"
     },
     {
       tone: hasAvailability ? "success" : "rose",
       label: hasAvailability ? "Zeiten da" : "Zeiten fehlen",
       title: "Trag ein, wann du oft da bist",
-      body: "So koennen Events, spontane Treffen und Community-Abende besser auf echte Menschen abgestimmt werden.",
+      body: "So können Events, spontane Treffen und Community-Abende besser auf echte Menschen abgestimmt werden.",
       meta: availabilityLabel,
       tab: "availability",
-      action: "Verfuegbarkeit oeffnen"
+      action: "Verfügbarkeit öffnen"
     },
     {
       tone: "sky",
@@ -14141,7 +14224,7 @@ function renderMemberActionHubPanel() {
       body: "Bilder, kurze Updates und kleine Eindruecke landen direkt im Community Feed.",
       meta: `${feedPosts.length} Beitraege sichtbar`,
       tab: "feed",
-      action: "Feed oeffnen"
+      action: "Feed öffnen"
     },
     {
       tone: "teal",
@@ -14150,7 +14233,7 @@ function renderMemberActionHubPanel() {
       body: "Ideen, Hilfe, Creator-Runden und Community-Fragen bleiben im Forum gesammelt an einem Ort.",
       meta: `${threads.length} Threads aktuell`,
       tab: "forum",
-      action: "Forum oeffnen"
+      action: "Forum öffnen"
     },
     {
       tone: "amber",
@@ -14217,17 +14300,17 @@ function renderMemberPulsePanel() {
           <h3>${escapeHtml(nextEvent?.title || "Noch kein Termin geplant")}</h3>
           <p>${escapeHtml(nextEvent ? `${nextEvent.dateLabel || "-"} | ${nextEvent.world || "-"}` : "Sobald etwas geplant ist, taucht es hier direkt auf.")}</p>
           <div class="card-actions">
-            <button type="button" class="ghost small" data-action="set-tab" data-tab="events">Events oeffnen</button>
-            <button type="button" class="ghost small" data-action="set-tab" data-tab="calendar">Kalender oeffnen</button>
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="events">Events öffnen</button>
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="calendar">Kalender öffnen</button>
           </div>
         </article>
 
         <article class="mini-card member-pulse-card">
           <span class="pill sky">Neueste News</span>
           <h3>${escapeHtml(latestNews?.title || "Gerade ruhig")}</h3>
-          <p>${escapeHtml(latestNews?.body || "Wenn etwas wichtig wird, landet es hier direkt fuer alle sichtbar.")}</p>
+          <p>${escapeHtml(latestNews?.body || "Wenn etwas wichtig wird, landet es hier direkt für alle sichtbar.")}</p>
           <div class="card-actions">
-            <button type="button" class="ghost small" data-action="set-tab" data-tab="news">News oeffnen</button>
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="news">News öffnen</button>
           </div>
         </article>
 
@@ -14236,7 +14319,7 @@ function renderMemberPulsePanel() {
           <h3>${escapeHtml(liveCreator ? getPrimaryDisplayName(liveCreator) : "Zurzeit kein Live-Signal")}</h3>
           <p>${escapeHtml(liveMeta?.summary || "Streams, Uploads und Creator-Hubs geben der Community mehr Bewegung.")}</p>
           <div class="card-actions">
-            <button type="button" class="ghost small" data-action="set-tab" data-tab="live">Sonara Live oeffnen</button>
+            <button type="button" class="ghost small" data-action="set-tab" data-tab="live">Sonara Live öffnen</button>
             <button type="button" class="ghost small" data-action="set-tab" data-tab="creators">Creator ansehen</button>
           </div>
         </article>
@@ -14256,10 +14339,10 @@ function renderMemberForumSpotlightPanel() {
       <div class="section-head">
         <div>
           <p class="eyebrow">Forum Spotlight</p>
-          <h2>Worueber gerade gesprochen wird</h2>
+          <h2>Worüber gerade gesprochen wird</h2>
           <p class="section-copy">Damit Mitglieder sofort sehen, welche Fragen, Ideen oder Themen gerade offen sind.</p>
         </div>
-        <button type="button" class="ghost small" data-action="set-tab" data-tab="forum">Ganzes Forum oeffnen</button>
+        <button type="button" class="ghost small" data-action="set-tab" data-tab="forum">Ganzes Forum öffnen</button>
       </div>
 
       <div class="stack-list member-forum-preview-list">
@@ -14346,19 +14429,13 @@ function renderManagerDashboard(activeTab) {
       return renderPortalPanel("profile.workspace", renderProfileWorkspace(true));
     case "settings":
       return renderSettingsPanel();
-    case "site-admin":
-      return renderPortalPanel("site.content", renderSiteContentAdminPanel());
     case "roles":
       return renderPortalPanel("roles.permissions", renderRolePermissionAdminPanel());
-    case "collections":
-      return renderPortalPanel("collections.builder", renderCollectionsAdminPanel());
     case "documents":
       return renderPortalPanelList("documents", [
         { id: "documents.documents", render: renderDocumentsAdminPanel },
         { id: "documents.uploads", render: renderUploadsAdminPanel }
       ]);
-    case "layout":
-      return renderPortalPanel("layout.editor", renderLayoutSettingsAdminPanel(), { span: "span-12", order: 10 });
     case "overview":
     default:
       return renderPortalPanelList("overview", [
@@ -14483,15 +14560,9 @@ function renderMemberDashboard(activeTab) {
     default:
       return renderPortalPanelList("overview", [
         { id: "overview.notifications", render: renderNotificationsPanel },
-        { id: "overview.memberActions", render: renderMemberActionHubPanel },
-        { id: "overview.voice", render: renderVoiceShortcutPanel },
-        { id: "overview.feed", render: renderFeedPanel },
-        { id: "overview.memberPulse", render: renderMemberPulsePanel },
-        { id: "overview.memberForum", render: renderMemberForumSpotlightPanel },
-        { id: "overview.livePreview", render: () => renderLivePreviewPanel(3) },
         { id: "overview.newsSpotlight", render: renderNewsSpotlightPanel },
-        { id: "overview.creators", render: () => renderCreatorsPanel(false) },
-        { id: "overview.communityOverview", render: renderCommunityOverviewPanel }
+        { id: "overview.communityOverview", render: renderCommunityOverviewPanel },
+        { id: "overview.memberActions", render: renderMemberActionHubPanel }
       ]);
   }
 }
@@ -14542,11 +14613,11 @@ function renderEventsPanel() {
                   </select>
                 </div>
                 <div class="field">
-                  <label for="eventDate">${singleEvent ? "Datum fuer einmalige Events" : "Datum ist bei Wochenterminen nicht noetig"}</label>
+                  <label for="eventDate">${singleEvent ? "Datum für einmalige Events" : "Datum ist bei Wochenterminen nicht noetig"}</label>
                   <input id="eventDate" name="eventDate" type="date" value="${escapeHtml(String(eventDraft.eventDate || ""))}" ${singleEvent ? "required" : "disabled"}>
                 </div>
                 <div class="field">
-                  <label for="eventWeekday">${singleEvent ? "Wochentag optional" : "Wochentag fuer Wochentermine"}</label>
+                  <label for="eventWeekday">${singleEvent ? "Wochentag optional" : "Wochentag für Wochentermine"}</label>
                   <select id="eventWeekday" name="weekday" ${singleEvent ? "disabled" : "required"}>
                     ${buildEventWeekdayOptions(String(eventDraft.weekday || ""))}
                   </select>
@@ -14621,7 +14692,7 @@ function renderEventCard(event) {
 
 function buildEventWeekdayOptions(selectedValue = "") {
   return [
-    { value: "", label: "Wochentag waehlen" },
+    { value: "", label: "Wochentag wählen" },
     { value: "1", label: "Montag" },
     { value: "2", label: "Dienstag" },
     { value: "3", label: "Mittwoch" },
@@ -14804,7 +14875,7 @@ function renderShiftReminderBanner() {
       </div>
       <div class="shift-reminder-actions">
         <button type="button" class="small" data-action="${escapeHtml(reminder.action)}" data-shift-id="${escapeHtml(reminder.shiftId)}">${escapeHtml(reminder.actionLabel)}</button>
-        <button type="button" class="ghost small" data-action="set-tab" data-tab="time">Zeiten oeffnen</button>
+        <button type="button" class="ghost small" data-action="set-tab" data-tab="time">Zeiten öffnen</button>
         ${
           browserSupport && state.ui.notificationPermission !== "granted"
             ? '<button type="button" class="ghost small" data-action="enable-browser-notifications">Browser-Popups aktivieren</button>'
@@ -14921,7 +14992,7 @@ function renderDashboard() {
       ${renderSonaraHero({
         eyebrow: leadership ? "Leitung" : isModerationLead() ? "Moderationsleitung" : staff ? "Staff Portal" : "Mitgliederbereich",
         title: `Willkommen ${getPrimaryDisplayName(user)}`,
-        intro: leadership ? "Community, Team und Staff laufen hier zusammen." : isModerationLead() ? "Du hast Planung, Auslastung und Moderationsuebersicht an einem Ort." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
+        intro: leadership ? "Community, Team und Staff laufen hier zusammen." : isModerationLead() ? "Du hast Planung, Auslastung und Moderationsübersicht an einem Ort." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
         chips: [getRoleLabel(user.role), user.vrchatName || "", user.discordName || ""].filter(Boolean)
       })}
       <div class="dashboard-shell">
