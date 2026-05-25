@@ -48,7 +48,7 @@ const COMMUNITY_EVENTS = [
     dateLabel: "Samstag · 21:00 Uhr",
     world: "Event Arena",
     host: "Event Team",
-    summary: "Gemeinsame Weltreise mit Stopps fuer Screenshots, Spiele und kleine Community-Momente."
+    summary: "Gemeinsame Weltreise mit Stopps für Screenshots, Spiele und kleine Community-Momente."
   },
   {
     id: "late-lounge",
@@ -75,7 +75,7 @@ const COMMUNITY_RULES = [
   },
   {
     title: "Events ernst nehmen",
-    body: "Hosts, Moderation und Briefings werden respektiert, damit Events fuer alle sauber laufen."
+    body: "Hosts, Moderation und Briefings werden respektiert, damit Events für alle sauber laufen."
   }
 ];
 
@@ -86,11 +86,11 @@ const COMMUNITY_FAQ = [
   },
   {
     question: "Wo sehe ich wichtige Updates?",
-    answer: "Auf der Startseite, im News-Bereich und spaeter optional ueber Discord-Hinweise."
+    answer: "Auf der Startseite, im News-Bereich und später optional über Discord-Hinweise."
   },
   {
     question: "Wie werde ich Moderator?",
-    answer: "Nutze den Feedback-Bereich fuer Bewerbungen oder kontaktiere die Leitung direkt mit deinem Interesse."
+    answer: "Nutze den Feedback-Bereich für Bewerbungen oder kontaktiere die Leitung direkt mit deinem Interesse."
   }
 ];
 
@@ -134,11 +134,11 @@ const DEFAULT_PERMISSION_CATALOG = [
   { key: "voice_staff", label: "Voice Staff", group: "Voice" },
   { key: "planning_view", label: "Schichten sehen", group: "Moderation" },
   { key: "planning_manage", label: "Schichten bearbeiten", group: "Moderation" },
-  { key: "availability_view", label: "Verfuegbarkeit sehen", group: "Moderation" },
+  { key: "availability_view", label: "Verfügbarkeit sehen", group: "Moderation" },
   { key: "time_view", label: "Zeiten sehen", group: "Moderation" },
   { key: "team_manage", label: "Team verwalten", group: "Team" },
   { key: "cms_edit", label: "CMS Entwurf", group: "Admin" },
-  { key: "cms_publish", label: "CMS veroeffentlichen", group: "Admin" },
+  { key: "cms_publish", label: "CMS veröffentlichen", group: "Admin" },
   { key: "roles_manage", label: "Rollen und Rechte", group: "Admin" },
   { key: "collections_manage", label: "Datenbuilder", group: "Admin" },
   { key: "documents_manage", label: "Dokumente", group: "Admin" },
@@ -721,7 +721,7 @@ async function handleApi(req, res, url) {
     const rawEntries = Array.isArray(body.entries) ? body.entries : [];
 
     if (!rawEntries.length) {
-      sendJson(res, 400, { error: "Bitte mindestens eine Schicht fuer die Sammelplanung uebergeben." });
+      sendJson(res, 400, { error: "Bitte mindestens eine Schicht für die Sammelplanung übergeben." });
       return;
     }
 
@@ -884,7 +884,7 @@ async function handleApi(req, res, url) {
     const request = nextStore.requests.find((entry) => entry.id === requestId);
 
     if (!request) {
-      sendJson(res, 404, { error: "Rueckmeldung nicht gefunden." });
+      sendJson(res, 404, { error: "Rückmeldung nicht gefunden." });
       return;
     }
 
@@ -897,13 +897,13 @@ async function handleApi(req, res, url) {
       request.memberDecisionAt = "";
     } else {
       if (request.userId !== auth.user.id) {
-        sendJson(res, 403, { error: "Du kannst nur auf deine eigenen Rueckmeldungen antworten." });
+        sendJson(res, 403, { error: "Du kannst nur auf deine eigenen Rückmeldungen antworten." });
         return;
       }
 
       const action = String(body.action || "").trim();
       if (!["accepted", "declined"].includes(action)) {
-        sendJson(res, 400, { error: "Ungueltige Rueckmeldung auf die Leitungsantwort." });
+        sendJson(res, 400, { error: "Ungültige Rückmeldung auf die Leitungsantwort." });
         return;
       }
 
@@ -1176,7 +1176,7 @@ async function handleApi(req, res, url) {
     }
 
     if (!canEditCollection(auth.user, auth.store, collection)) {
-      sendJson(res, 403, { error: "Keine Berechtigung fuer diese Collection." });
+      sendJson(res, 403, { error: "Keine Berechtigung für diese Collection." });
       return;
     }
 
@@ -1470,7 +1470,7 @@ async function handleApi(req, res, url) {
       warning.clearedAt = new Date().toISOString();
       warning.clearedBy = auth.user.id;
     } else {
-      sendJson(res, 400, { error: "Ungueltige Verwarnungsaktion." });
+      sendJson(res, 400, { error: "Ungültige Verwarnungsaktion." });
       return;
     }
 
@@ -1548,7 +1548,7 @@ async function handleApi(req, res, url) {
 
     if (decision.status === "genehmigt") {
       if (!swapRequest.candidateIds.includes(decision.candidateId)) {
-        sendJson(res, 400, { error: "Diese Person hat keine Uebernahme angeboten." });
+        sendJson(res, 400, { error: "Diese Person hat keine Übernahme angeboten." });
         return;
       }
 
@@ -1626,7 +1626,7 @@ async function handleApi(req, res, url) {
     }
 
     if (!entry) {
-      sendJson(res, 404, { error: "Kein offener Zeiteintrag fuer diese Schicht gefunden." });
+      sendJson(res, 404, { error: "Kein offener Zeiteintrag für diese Schicht gefunden." });
       return;
     }
 
@@ -1767,13 +1767,13 @@ async function handleApi(req, res, url) {
 
     const mode = String(body.mode || "deduct").trim().toLowerCase();
     if (!["deduct", "credit"].includes(mode)) {
-      sendJson(res, 400, { error: "Ungueltiger Ausgleichsmodus." });
+      sendJson(res, 400, { error: "Ungültiger Ausgleichsmodus." });
       return;
     }
 
     const absoluteHours = Math.abs(normalizeOvertimeAdjustmentHours(body.hours));
     if (!absoluteHours) {
-      sendJson(res, 400, { error: "Bitte eine gueltige Stundenanzahl fuer den Ueberstunden-Ausgleich angeben." });
+      sendJson(res, 400, { error: "Bitte eine gueltige Stundenanzahl für den Ueberstunden-Ausgleich angeben." });
       return;
     }
 
@@ -2148,7 +2148,7 @@ function buildDefaultStore() {
     buildSeedUser("aiko", "Aiko", "moderator", "mod123!", "Aiko", "aiko_vrc", "", "Fokus auf Begruessung und Community-Einstieg."),
     buildSeedUser("mika", "Mika", "moderator", "mod123!", "Mika", "mika_vrc", "", "Hat die Public-Bereiche und Zwischenschichten im Blick."),
     buildSeedUser("ren", "Ren", "moderator", "mod123!", "Ren", "ren_vrc", "", "Betreut gern Events und Briefings."),
-    buildSeedUser("sora", "Sora", "moderator", "mod123!", "Sora", "sora_vrc", "", "Support und Koordination fuer spaete Stunden."),
+    buildSeedUser("sora", "Sora", "moderator", "mod123!", "Sora", "sora_vrc", "", "Support und Koordination für späte Stunden."),
     buildSeedUser("nuri", "Nuri", "member", "member123!", "Nuri", "nuri_vrc", "", "Aktives Community-Mitglied mit Fokus auf Events.")
   ];
 
@@ -2177,7 +2177,7 @@ function buildDefaultStore() {
         userId: userByName.get("Aiko"),
         type: "Wunsch",
         date: addDays(today, 3),
-        content: "Wenn moeglich keine Spaetschicht am Wochenende, ich bin nur bis 22 Uhr sicher online.",
+        content: "Wenn möglich keine Spätschicht am Wochenende, ich bin nur bis 22 Uhr sicher online.",
         status: "in_planung",
         adminNote: "Beim naechsten Update beruecksichtigen.",
         rating: 4,
@@ -2188,7 +2188,7 @@ function buildDefaultStore() {
         userId: userByName.get("Ren"),
         type: "Notiz",
         date: addDays(today, 1),
-        content: "Ich uebernehme Events gerne, brauche aber vorher die Sprecherliste.",
+        content: "Ich übernehme Events gerne, brauche aber vorher die Sprecherliste.",
         status: "offen",
         adminNote: "",
         rating: 5,
@@ -2208,7 +2208,7 @@ function buildDefaultStore() {
       {
         id: crypto.randomUUID(),
         title: "Event-Woche",
-        body: "Fuer Events bitte 10 Minuten vor Schichtbeginn online sein. Ein- und Ausstempeln ist ab sofort Pflicht fuer alle Moderatoren.",
+        body: "Fuer Events bitte 10 Minuten vor Schichtbeginn online sein. Ein- und Ausstempeln ist ab sofort Pflicht für alle Moderatoren.",
         pinned: false,
         authorId: users[0].id,
         imageUrl: "",
@@ -2750,7 +2750,7 @@ function getCurrentWeekStartKey(referenceDate = new Date()) {
 function normalizeDateKeyOrThrow(value) {
   const normalized = String(value || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    const error = new Error("Ungueltige Kalenderwoche.");
+    const error = new Error("Ungültige Kalenderwoche.");
     error.statusCode = 400;
     throw error;
   }
@@ -2759,7 +2759,7 @@ function normalizeDateKeyOrThrow(value) {
   const parsed = new Date(year, (month || 1) - 1, day || 1, 12, 0, 0);
   const reparsed = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
   if (reparsed !== normalized) {
-    const error = new Error("Ungueltige Kalenderwoche.");
+    const error = new Error("Ungültige Kalenderwoche.");
     error.statusCode = 400;
     throw error;
   }
@@ -3268,7 +3268,7 @@ function normalizeRoleDefinitions(entries) {
 
 function validateRoleDefinitionsPayload(entries) {
   if (!Array.isArray(entries) || !entries.length) {
-    const error = new Error("Bitte mindestens eine Rolle uebergeben.");
+    const error = new Error("Bitte mindestens eine Rolle übergeben.");
     error.statusCode = 400;
     throw error;
   }
@@ -3329,12 +3329,12 @@ function normalizeLayoutSettings(input = {}) {
 
 function validateLayoutSettingsPayload(body = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    const error = new Error("Layout-Einstellungen muessen als Objekt uebergeben werden.");
+    const error = new Error("Layout-Einstellungen muessen als Objekt übergeben werden.");
     error.statusCode = 400;
     throw error;
   }
   if (body.panels && (typeof body.panels !== "object" || Array.isArray(body.panels))) {
-    const error = new Error("Layout-Panels muessen als Objekt uebergeben werden.");
+    const error = new Error("Layout-Panels muessen als Objekt übergeben werden.");
     error.statusCode = 400;
     throw error;
   }
@@ -3397,7 +3397,7 @@ function buildDefaultSiteContent() {
   const published = {
     heroKicker: "SONARA Community",
     heroTitle: "Willkommen in SONARA",
-    heroSubtitle: "Ein magischer Treffpunkt fuer Community, Creator, Events und ein Team, das zusammenhaelt.",
+    heroSubtitle: "Ein magischer Treffpunkt für Community, Creator, Events und ein Team, das zusammenhält.",
     primaryButtonLabel: "Einloggen",
     primaryButtonUrl: "/",
     secondaryButtonLabel: "Registrieren",
@@ -3406,7 +3406,7 @@ function buildDefaultSiteContent() {
     videoUrl: "",
     communityTitle: "Mehr als ein Moderationspanel",
     communityBody:
-      "SONARA soll ein Zuhause fuer Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt fuer Schritt selbst pflegen.",
+      "SONARA soll ein Zuhause für Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt für Schritt selbst pflegen.",
     infoCards: [
       {
         title: "Community",
@@ -3416,13 +3416,13 @@ function buildDefaultSiteContent() {
       },
       {
         title: "Creator",
-        body: "Creator koennen ihre Bereiche aufbauen und ihre Community sichtbarer machen.",
+        body: "Creator können ihre Bereiche aufbauen und ihre Community sichtbarer machen.",
         linkLabel: "Creator entdecken",
         linkUrl: "/"
       },
       {
         title: "Team",
-        body: "Schichten, Zeiten und Verfuegbarkeit bleiben fuer die Moderation geordnet.",
+        body: "Schichten, Zeiten und Verfügbarkeit bleiben für die Moderation geordnet.",
         linkLabel: "Portal oeffnen",
         linkUrl: "/"
       }
@@ -3589,12 +3589,12 @@ function validateCollectionPayload(body, store) {
     .filter(Boolean);
 
   if (!title) {
-    const error = new Error("Bitte einen Namen fuer die Collection angeben.");
+    const error = new Error("Bitte einen Namen für die Collection angeben.");
     error.statusCode = 400;
     throw error;
   }
   if (!fields.length) {
-    const error = new Error("Bitte mindestens ein Feld fuer die Collection anlegen.");
+    const error = new Error("Bitte mindestens ein Feld für die Collection anlegen.");
     error.statusCode = 400;
     throw error;
   }
@@ -3623,7 +3623,7 @@ function validateCollectionUpdatePayload(body, existingCollection, store) {
   const seenFieldKeys = new Set();
 
   if (!title) {
-    const error = new Error("Bitte einen Namen fuer die Collection angeben.");
+    const error = new Error("Bitte einen Namen für die Collection angeben.");
     error.statusCode = 400;
     throw error;
   }
@@ -3773,7 +3773,7 @@ function validateDocumentPayload(body, user) {
   const published = normalizeBooleanInput(body.published) || body.status === "published";
 
   if (!title || !bodyText) {
-    const error = new Error("Bitte Titel und Inhalt fuer das Dokument angeben.");
+    const error = new Error("Bitte Titel und Inhalt für das Dokument angeben.");
     error.statusCode = 400;
     throw error;
   }
@@ -3834,7 +3834,7 @@ function saveNoCodeUpload(body, user) {
   const originalName = String(body?.fileName || body?.name || "upload").trim().slice(0, 160);
   const match = String(body?.dataUrl || "").match(/^data:([^;,]+);base64,(.+)$/);
   if (!match) {
-    const error = new Error("Upload muss als Data-URL uebergeben werden.");
+    const error = new Error("Upload muss als Data-URL übergeben werden.");
     error.statusCode = 400;
     throw error;
   }
@@ -3842,7 +3842,7 @@ function saveNoCodeUpload(body, user) {
   const mimeType = match[1].toLowerCase();
   const extension = getUploadExtension(mimeType, originalName);
   if (!extension) {
-    const error = new Error("Dieser Dateityp ist fuer Uploads nicht erlaubt.");
+    const error = new Error("Dieser Dateityp ist für Uploads nicht erlaubt.");
     error.statusCode = 400;
     throw error;
   }
@@ -4858,7 +4858,7 @@ function buildDefaultEvents() {
       title: "World Tour",
       world: "Event Arena",
       host: "Event Team",
-      summary: "Gemeinsame Weltreise mit Stopps fuer Screenshots, Spiele und kleine Community-Momente.",
+      summary: "Gemeinsame Weltreise mit Stopps für Screenshots, Spiele und kleine Community-Momente.",
       scheduleType: "weekly",
       weekday: 6,
       eventTime: "21:00",
@@ -5149,12 +5149,12 @@ function validateEventPayload(body, user) {
 
   if (scheduleType === "weekly") {
     if (weekday < 0 || !eventTime) {
-      const error = new Error("Bitte fuer woechentliche Events Wochentag und Uhrzeit angeben.");
+      const error = new Error("Bitte für woechentliche Events Wochentag und Uhrzeit angeben.");
       error.statusCode = 400;
       throw error;
     }
   } else if (!eventDate || !eventTime) {
-    const error = new Error("Bitte fuer einmalige Events Datum und Uhrzeit angeben.");
+    const error = new Error("Bitte für einmalige Events Datum und Uhrzeit angeben.");
     error.statusCode = 400;
     throw error;
   }
@@ -5180,7 +5180,7 @@ function validateFeedPostPayload(body, store) {
   const creatorCommunityId = normalizeCreatorCommunityId(body.creatorCommunityId, store, { throwIfInvalid: true });
 
   if (!content && !imageUrl) {
-    const error = new Error("Bitte Text oder Bild fuer den Feed-Beitrag angeben.");
+    const error = new Error("Bitte Text oder Bild für den Feed-Beitrag angeben.");
     error.statusCode = 400;
     throw error;
   }
@@ -5197,7 +5197,7 @@ function validateFeedPostPayload(body, store) {
 function validateFeedReaction(value) {
   const emoji = String(value || "").trim();
   if (!["like", "heart", "fire", "star", "laugh"].includes(emoji)) {
-    const error = new Error("Ungueltige Reaktion.");
+    const error = new Error("Ungültige Reaktion.");
     error.statusCode = 400;
     throw error;
   }
@@ -5401,7 +5401,7 @@ function hasRecentDuplicateFeedPost(store, userId, payload) {
 function validateTrimCount(value) {
   const count = Number(value || 0);
   if (!CHAT_TRIM_COUNTS.has(count)) {
-    const error = new Error("Es koennen nur 20, 30, 40 oder 50 Nachrichten entfernt werden.");
+    const error = new Error("Es können nur 20, 30, 40 oder 50 Nachrichten entfernt werden.");
     error.statusCode = 400;
     throw error;
   }
@@ -5411,7 +5411,7 @@ function validateTrimCount(value) {
 function validateChatTrimChannel(value) {
   const channel = String(value || "").trim();
   if (!["community", "staff"].includes(channel)) {
-    const error = new Error("Ungueltiger Chat-Kanal.");
+    const error = new Error("Ungültiger Chat-Kanal.");
     error.statusCode = 400;
     throw error;
   }
@@ -6010,14 +6010,14 @@ function getLiveKitRoomsForUser(user) {
       id: "community",
       label: "Community Voice",
       roomName: LIVEKIT_COMMUNITY_ROOM || "sonara-community",
-      description: "Offener SONARA-Sprachraum fuer alle eingeloggten Mitglieder.",
+      description: "Offener SONARA-Sprachraum für alle eingeloggten Mitglieder.",
       allowed: Boolean(user)
     },
     {
       id: "staff",
       label: "Staff Voice",
       roomName: LIVEKIT_STAFF_ROOM || "sonara-staff",
-      description: "Interner Sprachraum fuer Moderation, Moderationsleitung, Planung und Admin.",
+      description: "Interner Sprachraum für Moderation, Moderationsleitung, Planung und Admin.",
       allowed: Boolean(staffAllowed)
     }
   ];
@@ -6365,7 +6365,7 @@ function normalizeCreatorCommunityId(value, store, options = {}) {
   if (creator) return creator.id;
 
   if (options.throwIfInvalid) {
-    const error = new Error("Die ausgewaehlte Creator-Community ist nicht gueltig.");
+    const error = new Error("Die ausgewählte Creator-Community ist nicht gueltig.");
     error.statusCode = 400;
     throw error;
   }
@@ -6496,7 +6496,7 @@ function validateCreatorApplicationPayload(body) {
   const creatorApplicationNote = normalizeCreatorApplicationNote(body.creatorApplicationNote);
 
   if (!creatorPrimaryPlatform || !creatorProofUrl) {
-    const error = new Error("Bitte Plattform und Nachweis fuer die Creator-Pruefung angeben.");
+    const error = new Error("Bitte Plattform und Nachweis für die Creator-Pruefung angeben.");
     error.statusCode = 400;
     throw error;
   }
@@ -6546,7 +6546,7 @@ function validateShiftPayload(body, store) {
   }
 
   if (!store.users.some((entry) => entry.id === memberId)) {
-    const error = new Error("Der ausgewaehlte Benutzer existiert nicht.");
+    const error = new Error("Der ausgewählte Benutzer existiert nicht.");
     error.statusCode = 400;
     throw error;
   }
@@ -6561,7 +6561,7 @@ function validateRequestPayload(body) {
   const rating = normalizeRating(body.rating);
 
   if (!content) {
-    const error = new Error("Bitte eine Rueckmeldung eintragen.");
+    const error = new Error("Bitte eine Rückmeldung eintragen.");
     error.statusCode = 400;
     throw error;
   }
@@ -6664,7 +6664,7 @@ function validateCreatorPresenceWebhookPayload(body, target) {
   const source = normalizeCreatorAutomationSource(body?.source || body?.platform || body?.provider || body?.service || "Automation");
 
   if (rawUrl !== undefined && rawUrl && !creatorPresenceUrl) {
-    const error = new Error("Der uebergebene Live- oder Upload-Link ist nicht gueltig.");
+    const error = new Error("Der übergebene Live- oder Upload-Link ist nicht gueltig.");
     error.statusCode = 400;
     throw error;
   }
@@ -6689,14 +6689,14 @@ function validateChatPayload(body, user, store) {
 
   if (relatedShiftId) {
     if (user.role === "member") {
-      const error = new Error("Community-Mitglieder koennen keine Schichten im Chat referenzieren.");
+      const error = new Error("Community-Mitglieder können keine Schichten im Chat referenzieren.");
       error.statusCode = 403;
       throw error;
     }
 
     const shift = store.shifts.find((entry) => entry.id === relatedShiftId);
     if (!shift) {
-      const error = new Error("Die ausgewaehlte Schicht existiert nicht.");
+      const error = new Error("Die ausgewählte Schicht existiert nicht.");
       error.statusCode = 400;
       throw error;
     }
@@ -6712,7 +6712,7 @@ function validateChatPayload(body, user, store) {
 
 function validateSwapRequestPayload(body, user, store) {
   if (user.role === "member") {
-    const error = new Error("Nur Moderatoren koennen Tauschwuesche fuer Schichten erstellen.");
+    const error = new Error("Nur Moderatoren können Tauschwuesche für Schichten erstellen.");
     error.statusCode = 403;
     throw error;
   }
@@ -6722,13 +6722,13 @@ function validateSwapRequestPayload(body, user, store) {
   const shift = store.shifts.find((entry) => entry.id === shiftId);
 
   if (!shift) {
-    const error = new Error("Die ausgewaehlte Schicht existiert nicht.");
+    const error = new Error("Die ausgewählte Schicht existiert nicht.");
     error.statusCode = 400;
     throw error;
   }
 
   if (user.role === "moderator" && shift.memberId !== user.id) {
-    const error = new Error("Du kannst nur fuer deine eigene Schicht einen Tauschwunsch senden.");
+    const error = new Error("Du kannst nur für deine eigene Schicht einen Tauschwunsch senden.");
     error.statusCode = 403;
     throw error;
   }
@@ -6741,13 +6741,13 @@ function validateSwapRequestPayload(body, user, store) {
 
   return {
     shiftId,
-    message: message || "Ich suche eine Uebernahme fuer diese Schicht."
+    message: message || "Ich suche eine Übernahme für diese Schicht."
   };
 }
 
 function validateSwapOffer(swapRequest, user, store) {
   if (user.role === "member") {
-    const error = new Error("Nur Moderatoren koennen Schichten uebernehmen.");
+    const error = new Error("Nur Moderatoren können Schichten übernehmen.");
     error.statusCode = 403;
     throw error;
   }
@@ -6766,13 +6766,13 @@ function validateSwapOffer(swapRequest, user, store) {
   }
 
   if (shift.memberId === user.id || swapRequest.requesterId === user.id) {
-    const error = new Error("Du kannst deine eigene Schicht nicht selbst uebernehmen.");
+    const error = new Error("Du kannst deine eigene Schicht nicht selbst übernehmen.");
     error.statusCode = 400;
     throw error;
   }
 
   if (swapRequest.candidateIds.includes(user.id)) {
-    const error = new Error("Du hast die Uebernahme bereits angeboten.");
+    const error = new Error("Du hast die Übernahme bereits angeboten.");
     error.statusCode = 409;
     throw error;
   }
@@ -6783,13 +6783,13 @@ function validateSwapDecision(body) {
   const candidateId = String(body.candidateId || "").trim();
 
   if (!["genehmigt", "abgelehnt"].includes(status)) {
-    const error = new Error("Ungueltige Entscheidung fuer den Tauschwunsch.");
+    const error = new Error("Ungültige Entscheidung für den Tauschwunsch.");
     error.statusCode = 400;
     throw error;
   }
 
   if (status === "genehmigt" && !candidateId) {
-    const error = new Error("Bitte waehle einen Moderator fuer die Uebernahme.");
+    const error = new Error("Bitte wähle einen Moderator für die Übernahme.");
     error.statusCode = 400;
     throw error;
   }
@@ -6799,7 +6799,7 @@ function validateSwapDecision(body) {
 
 function validateRole(role) {
   if (!["member", "moderator", "moderation_lead", "planner", "admin"].includes(role)) {
-    const error = new Error("Ungueltige Rolle.");
+    const error = new Error("Ungültige Rolle.");
     error.statusCode = 400;
     throw error;
   }
@@ -6817,7 +6817,7 @@ function validatePassword(password) {
 
 function validateSettingsKey(key) {
   if (!["shiftTypes", "worlds", "tasks"].includes(key)) {
-    const error = new Error("Ungueltige Einstellungs-Liste.");
+    const error = new Error("Ungültige Einstellungs-Liste.");
     error.statusCode = 400;
     throw error;
   }
@@ -7057,7 +7057,7 @@ function suggestLegacyShiftStart(shiftType) {
   if (normalized === "frueh") return "12:00";
   if (normalized === "prime time") return "16:00";
   if (normalized === "event") return "20:00";
-  if (normalized === "spaet") return "00:00";
+  if (normalized === "spät") return "00:00";
   return "12:00";
 }
 
@@ -7290,7 +7290,7 @@ function buildShiftDiscordMessage(action, shift, store, previousShift = null) {
   };
 
   const descriptionMap = {
-    created: `${memberName} wurde fuer eine Schicht eingeplant.`,
+    created: `${memberName} wurde für eine Schicht eingeplant.`,
     updated: `${memberName} hat eine aktualisierte Schicht.`,
     deleted: `Eine Schicht von ${memberName} wurde entfernt.`
   };
@@ -8147,13 +8147,13 @@ function validateChatPayload(body, user, store) {
   }
 
   if (channel === "staff" && user.role === "member") {
-    const error = new Error("Community-Mitglieder koennen nicht in den Staff-Chat posten.");
+    const error = new Error("Community-Mitglieder können nicht in den Staff-Chat posten.");
     error.statusCode = 403;
     throw error;
   }
 
   if (channel === "community" && relatedShiftId) {
-    const error = new Error("Im allgemeinen Chat koennen keine Schichten referenziert werden.");
+    const error = new Error("Im allgemeinen Chat können keine Schichten referenziert werden.");
     error.statusCode = 400;
     throw error;
   }
@@ -8161,7 +8161,7 @@ function validateChatPayload(body, user, store) {
   if (relatedShiftId) {
     const shift = store.shifts.find((entry) => entry.id === relatedShiftId);
     if (!shift) {
-      const error = new Error("Die ausgewaehlte Schicht existiert nicht.");
+      const error = new Error("Die ausgewählte Schicht existiert nicht.");
       error.statusCode = 400;
       throw error;
     }
@@ -9089,7 +9089,7 @@ function validateDirectMessagePayload(body, user, store) {
   }
 
   if (!store.users.some((entry) => entry.id === recipientId)) {
-    const error = new Error("Der ausgewaehlte Empfaenger existiert nicht.");
+    const error = new Error("Der ausgewählte Empfaenger existiert nicht.");
     error.statusCode = 400;
     throw error;
   }
@@ -9133,7 +9133,7 @@ function validateWarningPayload(body, store) {
   }
 
   if (!store.users.some((entry) => entry.id === userId)) {
-    const error = new Error("Der ausgewaehlte Benutzer existiert nicht.");
+    const error = new Error("Der ausgewählte Benutzer existiert nicht.");
     error.statusCode = 400;
     throw error;
   }
@@ -9452,13 +9452,13 @@ function validateChatPayload(body, user, store) {
   }
 
   if (channel === "staff" && user.role === "member") {
-    const error = new Error("Community-Mitglieder koennen nicht in den Staff-Chat posten.");
+    const error = new Error("Community-Mitglieder können nicht in den Staff-Chat posten.");
     error.statusCode = 403;
     throw error;
   }
 
   if (channel === "community" && relatedShiftId) {
-    const error = new Error("Im Community-Chat koennen keine Schichten referenziert werden.");
+    const error = new Error("Im Community-Chat können keine Schichten referenziert werden.");
     error.statusCode = 400;
     throw error;
   }
@@ -9466,7 +9466,7 @@ function validateChatPayload(body, user, store) {
   if (relatedShiftId) {
     const shift = store.shifts.find((entry) => entry.id === relatedShiftId);
     if (!shift) {
-      const error = new Error("Die ausgewaehlte Schicht existiert nicht.");
+      const error = new Error("Die ausgewählte Schicht existiert nicht.");
       error.statusCode = 400;
       throw error;
     }
