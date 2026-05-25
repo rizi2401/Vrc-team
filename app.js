@@ -12438,7 +12438,7 @@ function renderCreatorBuilderPanel() {
   if (!user) return "";
   const creatorApplication = getCreatorApplicationMeta(user);
   const shouldShowWorkspace = Boolean(
-    canManagePortal() || creatorApplication.status !== "none" || user.creatorSlug || user.creatorCommunityName || user.creatorVisible
+    canManagePortal() || creatorApplication.approved
   );
   if (!shouldShowWorkspace) return "";
 
@@ -12573,7 +12573,7 @@ function renderCreatorPublishingPanel() {
 
   const creatorApplication = getCreatorApplicationMeta(user);
   const shouldShowWorkspace = Boolean(
-    canManagePortal() || creatorApplication.status !== "none" || user.creatorSlug || user.creatorCommunityName || user.creatorVisible
+    canManagePortal() || creatorApplication.approved
   );
   if (!shouldShowWorkspace) return "";
 
