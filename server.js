@@ -1953,6 +1953,173 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/community/welcome-content") {
+    requireModerationCoordinator(auth.user);
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+
+    if (!nextStore.community_welcome_page) {
+      nextStore.community_welcome_page = {
+        about_us: "",
+        what_we_do: "",
+        featured_events: [],
+        cooperations: []
+      };
+    }
+
+    if (body.about_us !== undefined) {
+      nextStore.community_welcome_page.about_us = String(body.about_us || "").trim();
+    }
+    if (body.what_we_do !== undefined) {
+      nextStore.community_welcome_page.what_we_do = String(body.what_we_do || "").trim();
+    }
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "community-welcome-updated" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/community/cooperation") {
+    requireModerationCoordinator(auth.user);
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+
+    if (!nextStore.community_welcome_page) {
+      nextStore.community_welcome_page = {
+        about_us: "",
+        what_we_do: "",
+        featured_events: [],
+        cooperations: []
+      };
+    }
+
+    const cooperation = {
+      id: crypto.randomUUID(),
+      title: String(body.title || "").trim(),
+      description: String(body.description || "").trim(),
+      image_path: String(body.image_path || "").trim(),
+      url: String(body.url || "").trim(),
+      createdAt: new Date().toISOString()
+    };
+
+    if (!cooperation.title || !cooperation.url) {
+      sendJson(res, 400, { error: "Titel und URL sind erforderlich." });
+      return;
+    }
+
+    nextStore.community_welcome_page.cooperations.push(cooperation);
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "cooperation-created" });
+    sendPortalData(res, 201, auth.user, savedStore);
+    return;
+  }
+
+  const cooperationMatch = url.pathname.match(/^\/api\/community\/cooperation\/([^/]+)$/);
+  if (cooperationMatch && req.method === "PUT") {
+    requireModerationCoordinator(auth.user);
+    const cooperationId = decodeURIComponent(cooperationMatch[1]);
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+
+    if (!nextStore.community_welcome_page) {
+      sendJson(res, 404, { error: "Community-Seite nicht gefunden." });
+      return;
+    }
+
+    const cooperation = nextStore.community_welcome_page.cooperations.find((entry) => entry.id === cooperationId);
+    if (!cooperation) {
+      sendJson(res, 404, { error: "Kooperation nicht gefunden." });
+      return;
+    }
+
+    if (body.title !== undefined) {
+      cooperation.title = String(body.title || "").trim();
+    }
+    if (body.description !== undefined) {
+      cooperation.description = String(body.description || "").trim();
+    }
+    if (body.image_path !== undefined) {
+      cooperation.image_path = String(body.image_path || "").trim();
+    }
+    if (body.url !== undefined) {
+      cooperation.url = String(body.url || "").trim();
+    }
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "cooperation-updated" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (cooperationMatch && req.method === "DELETE") {
+    requireModerationCoordinator(auth.user);
+    const cooperationId = decodeURIComponent(cooperationMatch[1]);
+    const nextStore = structuredClone(auth.store);
+
+    if (!nextStore.community_welcome_page) {
+      sendJson(res, 404, { error: "Community-Seite nicht gefunden." });
+      return;
+    }
+
+    const index = nextStore.community_welcome_page.cooperations.findIndex((entry) => entry.id === cooperationId);
+    if (index === -1) {
+      sendJson(res, 404, { error: "Kooperation nicht gefunden." });
+      return;
+    }
+
+    nextStore.community_welcome_page.cooperations.splice(index, 1);
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "cooperation-deleted" });
+    sendPortalData(res, 200, auth.user, savedStore);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/community/upload-cooperation-image") {
+    requireModerationCoordinator(auth.user);
+
+    const cooperationsDir = path.join(UPLOADS_DIR, "cooperations");
+    if (!fs.existsSync(cooperationsDir)) {
+      fs.mkdirSync(cooperationsDir, { recursive: true });
+    }
+
+    const contentType = req.headers["content-type"] || "";
+    const isValidImage = contentType.startsWith("image/");
+
+    if (!isValidImage) {
+      sendJson(res, 400, { error: "Nur Bilder sind erlaubt." });
+      return;
+    }
+
+    const filename = `cooperation-${crypto.randomUUID()}-${Date.now()}.img`;
+    const filepath = path.join(cooperationsDir, filename);
+    const publicPath = `${UPLOAD_PUBLIC_PREFIX}cooperations/${filename}`;
+
+    let uploadedBytes = 0;
+    const writeStream = fs.createWriteStream(filepath);
+
+    writeStream.on("error", (err) => {
+      console.error("Upload write error:", err);
+      sendJson(res, 500, { error: "Upload fehlgeschlagen." });
+    });
+
+    req.on("data", (chunk) => {
+      uploadedBytes += chunk.length;
+      if (uploadedBytes > UPLOAD_MAX_BYTES) {
+        req.destroy();
+        writeStream.destroy();
+        fs.unlink(filepath, () => {});
+        sendJson(res, 413, { error: `Datei zu groß. Max: ${UPLOAD_MAX_BYTES} bytes.` });
+      }
+    });
+
+    req.pipe(writeStream);
+    writeStream.on("finish", () => {
+      sendJson(res, 200, { path: publicPath });
+    });
+    return;
+  }
+
   sendJson(res, 404, { error: "API-Route nicht gefunden." });
 }
 

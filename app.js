@@ -74,6 +74,7 @@ const PORTAL_LAYOUT_PANEL_CATALOG = [
   { id: "overview.communityOverview", tab: "overview", tabLabel: "Dashboard", label: "Community Übersicht", defaultSpan: "span-12", defaultOrder: 130 },
   { id: "overview.mySchedule", tab: "overview", tabLabel: "Dashboard", label: "Meine Schichten", defaultSpan: "span-12", defaultOrder: 140 },
   { id: "feed.main", tab: "feed", tabLabel: "Feed", label: "Feed", defaultSpan: "span-12", defaultOrder: 10 },
+  { id: "community.welcome", tab: "community", tabLabel: "Community", label: "Willkommen", defaultSpan: "span-12", defaultOrder: 5 },
   { id: "community.memberActions", tab: "community", tabLabel: "Community", label: "Mitmachen", defaultSpan: "span-12", defaultOrder: 10 },
   { id: "community.memberPulse", tab: "community", tabLabel: "Community", label: "Community Puls", defaultSpan: "span-5", defaultOrder: 20 },
   { id: "community.overview", tab: "community", tabLabel: "Community", label: "Community Übersicht", defaultSpan: "span-12", defaultOrder: 30 },
@@ -240,6 +241,11 @@ function getPersistentFormDraftStore() {
   return state.ui.formDrafts;
 }
 
+function getPersistentUiState(key) {
+  if (!state.ui.uiStates) state.ui.uiStates = {};
+  return state.ui.uiStates[key];
+}
+
 function buildPersistentFormDraftKey(formName, metadata = {}) {
   const parts = [["form", formName], ...Object.entries(metadata).filter(([, value]) => value !== undefined && value !== null && value !== "")];
   return parts
@@ -289,6 +295,13 @@ function clearPersistentFormDraft(sourceOrKey, metadata = {}) {
   }
 }
 
+function setPersistentFormDraft(formName, data = {}, metadata = {}) {
+  const key = buildPersistentFormDraftKey(formName, metadata);
+  if (!key) return;
+  markFormEditingWindow();
+  getPersistentFormDraftStore()[key] = data;
+}
+
 function shouldClearFormDraftAfterSuccess(formName) {
   return [
     "login",
@@ -312,7 +325,9 @@ function shouldClearFormDraftAfterSuccess(formName) {
     "profile-update",
     "creator-hub-update",
     "availability-update",
-    "promo-video"
+    "promo-video",
+    "community-welcome-content",
+    "cooperation-create"
   ].includes(String(formName || ""));
 }
 
@@ -5126,8 +5141,128 @@ function renderSettingsPanel() {
       </form>
     </section>
 
+    ${renderCommunityWelcomeAdminPanel()}
+
     ${renderDiscordPanel()}
-  `, ["settings.catalogs", "settings.notice", "settings.promo", "settings.discord"]);
+  `, ["settings.catalogs", "settings.notice", "settings.promo", "settings.community-welcome", "settings.discord"]);
+}
+
+function renderCommunityWelcomeAdminPanel() {
+  const store = state.data;
+  const welcomeData = store?.community_welcome_page || {
+    about_us: "",
+    what_we_do: "",
+    featured_events: [],
+    cooperations: []
+  };
+  const community = getCommunityData();
+  const events = community.events || [];
+  const cooperations = welcomeData.cooperations || [];
+  const cooperationDraft = getPersistentFormDraft("cooperation-create") || {};
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Community Willkommen</p>
+          <h2>Inhalte und Kooperationen</h2>
+          <p class="section-copy">Verwalte die Willkommen-Sektion mit Infotexten, Featured Events und Kooperationen.</p>
+        </div>
+      </div>
+
+      <form class="stack-form" data-form="community-welcome-content">
+        <div class="form-grid">
+          <div class="field span-all">
+            <label for="aboutUs">Wer wir sind</label>
+            <textarea id="aboutUs" name="about_us" placeholder="Schreibe hier auf, wer die SONARA Community ist...">${escapeHtml(welcomeData.about_us || "")}</textarea>
+          </div>
+          <div class="field span-all">
+            <label for="whatWeDo">Was wir machen</label>
+            <textarea id="whatWeDo" name="what_we_do" placeholder="Beschreibe hier die Aktivitaeten und Ziele...">${escapeHtml(welcomeData.what_we_do || "")}</textarea>
+          </div>
+        </div>
+
+        <div class="card-actions">
+          <button type="submit">Willkommen-Texte speichern</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Kooperationen</p>
+          <h2>Partner und Links</h2>
+          <p class="section-copy">Verwalte externe Kooperationen mit Titeln, Beschreibungen und Links.</p>
+        </div>
+        <span class="pill neutral">${cooperations.length} Kooperationen</span>
+      </div>
+
+      ${
+        cooperations.length
+          ? `
+        <div class="cooperations-table">
+          ${cooperations
+            .map(
+              (coop, idx) => `
+            <div class="cooperation-row">
+              <div class="cooperation-info">
+                <div class="cooperation-header">
+                  <h4>${escapeHtml(coop.title)}</h4>
+                  <a href="${escapeHtml(coop.url)}" target="_blank" rel="noopener noreferrer" class="timeline-meta">${escapeHtml(coop.url)}</a>
+                </div>
+                ${coop.description ? `<p class="timeline-meta">${escapeHtml(coop.description)}</p>` : ""}
+              </div>
+              <div class="cooperation-actions">
+                <button type="button" class="small ghost" data-action="edit-cooperation" data-id="${escapeHtml(coop.id)}">Bearbeiten</button>
+                <button type="button" class="small ghost danger" data-action="delete-cooperation" data-id="${escapeHtml(coop.id)}">Loeschen</button>
+              </div>
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+      `
+          : '<p class="timeline-meta">Noch keine Kooperationen hinzugefuegt.</p>'
+      }
+
+      <div class="card-actions">
+        <button type="button" data-action="show-cooperation-form">Neue Kooperation hinzufuegen</button>
+      </div>
+
+      ${
+        getPersistentUiState("show-cooperation-form")
+          ? `
+        <form class="stack-form" data-form="cooperation-create" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line);">
+          <div class="form-grid">
+            <div class="field">
+              <label for="coopTitle">Titel</label>
+              <input id="coopTitle" name="title" type="text" value="${escapeHtml(cooperationDraft.title || "")}" placeholder="z. B. Partner-Community">
+            </div>
+            <div class="field">
+              <label for="coopUrl">URL</label>
+              <input id="coopUrl" name="url" type="url" value="${escapeHtml(cooperationDraft.url || "")}" placeholder="https://example.com">
+            </div>
+            <div class="field span-all">
+              <label for="coopDescription">Beschreibung (optional)</label>
+              <textarea id="coopDescription" name="description" placeholder="Kurzbeschreibung der Kooperation...">${escapeHtml(cooperationDraft.description || "")}</textarea>
+            </div>
+            <div class="field span-all">
+              <label for="coopImagePath">Bild-URL (optional)</label>
+              <input id="coopImagePath" name="image_path" type="url" value="${escapeHtml(cooperationDraft.image_path || "")}" placeholder="https://example.com/image.png">
+            </div>
+          </div>
+
+          <div class="card-actions">
+            <button type="submit">Kooperation speichern</button>
+            <button type="button" class="ghost small" data-action="hide-cooperation-form">Abbrechen</button>
+          </div>
+        </form>
+      `
+          : ""
+      }
+    </section>
+  `;
 }
 
 function renderDiscordPanel() {
@@ -6280,6 +6415,51 @@ async function handleClick(event) {
             method: "DELETE"
           }),
         "Benutzer wurde geloescht.",
+        "warning"
+      );
+      break;
+
+    case "show-cooperation-form":
+      state.ui.uiStates = state.ui.uiStates || {};
+      state.ui.uiStates["show-cooperation-form"] = true;
+      render();
+      break;
+
+    case "hide-cooperation-form":
+      state.ui.uiStates = state.ui.uiStates || {};
+      delete state.ui.uiStates["show-cooperation-form"];
+      clearPersistentFormDraft("cooperation-create");
+      render();
+      break;
+
+    case "edit-cooperation": {
+      const coopId = actionElement.dataset.id || "";
+      const cooperation = (state.data?.community_welcome_page?.cooperations || []).find((c) => c.id === coopId);
+      if (!cooperation) return;
+      const form = document.querySelector('[data-form="cooperation-create"]');
+      if (form) {
+        form.dataset.coopId = coopId;
+      }
+      state.ui.uiStates = state.ui.uiStates || {};
+      state.ui.uiStates["show-cooperation-form"] = true;
+      setPersistentFormDraft("cooperation-create", {
+        title: cooperation.title,
+        description: cooperation.description,
+        image_path: cooperation.image_path,
+        url: cooperation.url
+      });
+      render();
+      break;
+    }
+
+    case "delete-cooperation":
+      if (!window.confirm("Diese Kooperation wirklich entfernen?")) return;
+      await performAction(
+        () =>
+          api(`/api/community/cooperation/${encodeURIComponent(actionElement.dataset.id)}`, {
+            method: "DELETE"
+          }),
+        "Kooperation wurde entfernt.",
         "warning"
       );
       break;
@@ -8364,6 +8544,45 @@ async function handleSubmit(event) {
       break;
     }
 
+    case "community-welcome-content": {
+      const formData = new FormData(form);
+      await performAction(
+        () =>
+          api("/api/community/welcome-content", {
+            method: "POST",
+            body: JSON.stringify({
+              about_us: formData.get("about_us"),
+              what_we_do: formData.get("what_we_do")
+            })
+          }),
+        "Willkommen-Inhalte wurden gespeichert."
+      );
+      break;
+    }
+
+    case "cooperation-create": {
+      const formData = new FormData(form);
+      const coopId = form.dataset.coopId;
+      await performAction(
+        () =>
+          api(coopId ? `/api/community/cooperation/${encodeURIComponent(coopId)}` : "/api/community/cooperation", {
+            method: coopId ? "PUT" : "POST",
+            body: JSON.stringify({
+              title: formData.get("title"),
+              description: formData.get("description"),
+              image_path: formData.get("image_path"),
+              url: formData.get("url")
+            })
+          }),
+        coopId ? "Kooperation wurde aktualisiert." : "Kooperation wurde hinzugefuegt."
+      );
+      clearPersistentFormDraft(form);
+      state.ui.uiStates = state.ui.uiStates || {};
+      delete state.ui.uiStates["show-cooperation-form"];
+      render();
+      break;
+    }
+
     case "site-content-draft": {
       const payload = collectSiteContentPayload(form);
       await performAction(
@@ -9929,6 +10148,91 @@ function renderCommunityOverviewPanel() {
           }
         </div>
       </div>
+    </section>
+  `;
+}
+
+function renderCommunityWelcomePanel() {
+  const store = state.data;
+  const welcomeData = store?.community_welcome_page || {};
+  const community = getCommunityData();
+  const events = community.events || [];
+  const cooperations = welcomeData.cooperations || [];
+  const featuredEventIds = welcomeData.featured_events || [];
+  const featuredEvents = featuredEventIds
+    .map((eventId) => events.find((e) => e.id === eventId))
+    .filter(Boolean);
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Willkommen</p>
+          <h2>SONARA Community</h2>
+          <p class="section-copy">Hier ist dein Zuhause für Events, Creator und Zusammenarbeit.</p>
+        </div>
+      </div>
+
+      ${
+        welcomeData.about_us
+          ? `
+        <div class="welcome-section">
+          <h3>Wer wir sind</h3>
+          <p>${escapeHtml(welcomeData.about_us)}</p>
+        </div>
+      `
+          : ""
+      }
+
+      ${
+        welcomeData.what_we_do
+          ? `
+        <div class="welcome-section">
+          <h3>Was wir machen</h3>
+          <p>${escapeHtml(welcomeData.what_we_do)}</p>
+        </div>
+      `
+          : ""
+      }
+
+      ${
+        featuredEvents.length
+          ? `
+        <div class="welcome-section">
+          <h3>Kommende Events</h3>
+          <div class="welcome-events-grid">
+            ${featuredEvents.map((event) => renderEventCard(event)).join("")}
+          </div>
+        </div>
+      `
+          : ""
+      }
+
+      ${
+        cooperations.length
+          ? `
+        <div class="welcome-section">
+          <h3>Kooperationen</h3>
+          <div class="cooperation-grid">
+            ${cooperations
+              .map((coop) => {
+                const imageSrc = coop.image_path || "/sonara-crest.png";
+                return `
+              <a href="${escapeHtml(coop.url)}" target="_blank" rel="noopener noreferrer" class="cooperation-card">
+                ${coop.image_path ? `<img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(coop.title)}" class="cooperation-image">` : ""}
+                <div class="cooperation-content">
+                  <h4>${escapeHtml(coop.title)}</h4>
+                  ${coop.description ? `<p>${escapeHtml(coop.description)}</p>` : ""}
+                </div>
+              </a>
+            `;
+              })
+              .join("")}
+          </div>
+        </div>
+      `
+          : ""
+      }
     </section>
   `;
 }
@@ -14379,6 +14683,7 @@ function renderManagerDashboard(activeTab) {
       return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
       return renderPortalPanelList("community", [
+        { id: "community.welcome", render: renderCommunityWelcomePanel },
         { id: "community.overview", render: renderCommunityOverviewPanel },
         { id: "community.rules", render: renderCommunityRulesPanel },
         { id: "community.team", render: renderCommunityTeamPanel }
@@ -14458,6 +14763,7 @@ function renderModeratorDashboard(activeTab) {
       return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
       return renderPortalPanelList("community", [
+        { id: "community.welcome", render: renderCommunityWelcomePanel },
         { id: "community.overview", render: renderCommunityOverviewPanel },
         { id: "community.rules", render: renderCommunityRulesPanel },
         { id: "community.team", render: renderCommunityTeamPanel }
@@ -14527,6 +14833,7 @@ function renderMemberDashboard(activeTab) {
       return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
       return renderPortalPanelList("community", [
+        { id: "community.welcome", render: renderCommunityWelcomePanel },
         { id: "community.memberActions", render: renderMemberActionHubPanel },
         { id: "community.memberPulse", render: renderMemberPulsePanel },
         { id: "community.overview", render: renderCommunityOverviewPanel },
