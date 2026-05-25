@@ -572,7 +572,7 @@ async function handleApi(req, res, url) {
     }
 
     if (status === "approved" && !overrideMinimum && !hasMinimumCreatorFollowers(creatorFollowerCount)) {
-      sendJson(res, 400, { error: `Fuer die Freigabe braucht dieses Profil mindestens ${CREATOR_MIN_FOLLOWERS} Follower oder eine bewusste Ueberschreibung.` });
+      sendJson(res, 400, { error: `Fuer die Freigabe braucht dieses Profil mindestens ${CREATOR_MIN_FOLLOWERS} Follower oder eine bewusste Überschreibung.` });
       return;
     }
 
@@ -1650,7 +1650,7 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     const value = String(body.value || "").trim();
     if (!value) {
-      sendJson(res, 400, { error: "Bitte einen gueltigen Wert eingeben." });
+      sendJson(res, 400, { error: "Bitte einen gültigen Wert eingeben." });
       return;
     }
 
@@ -1773,7 +1773,7 @@ async function handleApi(req, res, url) {
 
     const absoluteHours = Math.abs(normalizeOvertimeAdjustmentHours(body.hours));
     if (!absoluteHours) {
-      sendJson(res, 400, { error: "Bitte eine gueltige Stundenanzahl für den Ueberstunden-Ausgleich angeben." });
+      sendJson(res, 400, { error: "Bitte eine gültige Stundenanzahl für den Überstunden-Ausgleich angeben." });
       return;
     }
 
@@ -2158,7 +2158,7 @@ function buildDefaultStore() {
   return {
     users,
     settings: {
-      shiftTypes: ["Kernschicht", "Zwischenschicht", "Abloese", "Uebergang", "Event"],
+      shiftTypes: ["Kernschicht", "Zwischenschicht", "Ablöse", "Übergang", "Event"],
       worlds: ["Community Hub", "Sunset Lounge", "Event Arena", "Support Room"],
       tasks: ["Begruessung", "Patrouille", "Support", "Event-Leitung", "Koordination"]
     },
@@ -2169,7 +2169,7 @@ function buildDefaultStore() {
       buildShift(addDays(today, 0), "14:00", "18:00", "Zwischenschicht", "Sunset Lounge", "Patrouille", userByName.get("Mika"), "Fokus auf Stoerungen in Public Bereichen."),
       buildShift(addDays(today, 1), "20:00", "00:00", "Event", "Event Arena", "Event-Leitung", userByName.get("Ren"), "Team 15 Minuten frueher briefen.", true),
       buildShift(addDays(today, 2), "16:00", "20:00", "Kernschicht", "Support Room", "Support", userByName.get("Sora"), "Meldungen sammeln und weiterreichen."),
-      buildShift(addDays(today, 3), "18:00", "22:00", "Uebergang", "Community Hub", "Koordination", userByName.get("Aiko"), "Kurzes Debriefing im Anschluss.", true)
+      buildShift(addDays(today, 3), "18:00", "22:00", "Übergang", "Community Hub", "Koordination", userByName.get("Aiko"), "Kurzes Debriefing im Anschluss.", true)
     ],
     requests: [
       {
@@ -6624,13 +6624,13 @@ function validatePromoVideoPayload(body) {
   const url = normalizeExternalLink(body.url);
 
   if (body.url && !url) {
-    const error = new Error("Bitte eine gueltige Video-URL angeben.");
+    const error = new Error("Bitte eine gültige Video-URL angeben.");
     error.statusCode = 400;
     throw error;
   }
 
   if (enabled && !url) {
-    const error = new Error("Zum sichtbaren Promo-Video wird eine gueltige URL gebraucht.");
+    const error = new Error("Zum sichtbaren Promo-Video wird eine gültige URL gebraucht.");
     error.statusCode = 400;
     throw error;
   }
@@ -7941,7 +7941,7 @@ function validateRegistrationPayload(body, store) {
   }
 
   if (body.avatarUrl && !avatarUrl) {
-    const error = new Error("Das Profilbild muss ein gueltiges Bild sein.");
+    const error = new Error("Das Profilbild muss ein gültiges Bild sein.");
     error.statusCode = 400;
     throw error;
   }
@@ -7981,7 +7981,7 @@ function applyUserIdentityUpdates(users, target, body, allowEmptyBio = true) {
   }
 
   if (body.avatarUrl !== undefined && body.avatarUrl && !nextAvatarUrl) {
-    const error = new Error("Das Profilbild muss ein gueltiges Bild sein.");
+    const error = new Error("Das Profilbild muss ein gültiges Bild sein.");
     error.statusCode = 400;
     throw error;
   }
@@ -8770,7 +8770,7 @@ function validateRegistrationPayload(body, store) {
   }
 
   if (body.avatarUrl && !avatarUrl) {
-    const error = new Error("Das Profilbild muss eine gueltige Bild-URL oder ein gueltiges Bild sein.");
+    const error = new Error("Das Profilbild muss eine gültige Bild-URL oder ein gültiges Bild sein.");
     error.statusCode = 400;
     throw error;
   }

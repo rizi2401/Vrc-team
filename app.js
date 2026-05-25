@@ -1839,7 +1839,7 @@ function renderPlannerPanel() {
                     </div>
                     <div class="field">
                       <label for="shiftType">Schichttyp</label>
-                      <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Abloese" required>
+                      <input id="shiftType" name="shiftType" list="shiftTypeOptions" value="${escapeHtml(plannerFormValues.shiftType || state.data.settings.shiftTypes?.[0] || "")}" placeholder="z. B. Kernschicht oder Ablöse" required>
                     </div>
                     <div class="field">
                       <label for="shiftWorld">Welt</label>
@@ -7144,7 +7144,7 @@ function renderProfilePanel(managerView) {
             <p class="timeline-meta">VRChat: ${escapeHtml(user.vrchatName || "-")} | Discord: ${escapeHtml(user.discordName || "-")}</p>
             ${
               user.vrchatLinkedAt
-                ? `<p class="helper-text">VRChat-Link aktiv seit ${escapeHtml(formatDateTime(user.vrchatLinkedAt))}${user.vrchatLinkSource ? ` ueber ${escapeHtml(formatVrchatLinkSourceLabel(user.vrchatLinkSource))}` : ""}.</p>`
+                ? `<p class="helper-text">VRChat-Link aktiv seit ${escapeHtml(formatDateTime(user.vrchatLinkedAt))}${user.vrchatLinkSource ? ` über ${escapeHtml(formatVrchatLinkSourceLabel(user.vrchatLinkSource))}` : ""}.</p>`
                 : ""
             }
             ${user.bio ? `<p class="helper-text">${escapeHtml(user.bio)}</p>` : ""}
@@ -9792,7 +9792,7 @@ function getLegalDocument(page) {
       {
         title: "1. Verantwortlicher Kontakt",
         body:
-          "Verantwortlich ist das SONARA-Team. Bis ein offizieller Kontakt hinterlegt ist, werden Datenschutz- und Account-Anfragen direkt ueber die bekannte SONARA-Leitung oder den Community-Kontakt bearbeitet."
+          "Verantwortlich ist das SONARA-Team. Bis ein offizieller Kontakt hinterlegt ist, werden Datenschutz- und Account-Anfragen direkt über die bekannte SONARA-Leitung oder den Community-Kontakt bearbeitet."
       },
       {
         title: "2. Welche Daten gespeichert werden",
@@ -12786,7 +12786,7 @@ function renderCreatorsPanel(managerView) {
       ${renderCreatorPublishingPanel()}
       ${
         managerView
-          ? `<p class="helper-text">Creator pflegen ihre Hub-Daten weiterhin im Profil. Freigaben selbst laufen jetzt getrennt ueber die Creator-Prüfung, damit niemand sich den Bereich einfach selbst zuschalten kann.</p>`
+          ? `<p class="helper-text">Creator pflegen ihre Hub-Daten weiterhin im Profil. Freigaben selbst laufen jetzt getrennt über die Creator-Prüfung, damit niemand sich den Bereich einfach selbst zuschalten kann.</p>`
           : ""
       }
       ${
@@ -14992,7 +14992,7 @@ function renderDashboard() {
       ${renderSonaraHero({
         eyebrow: leadership ? "Leitung" : isModerationLead() ? "Moderationsleitung" : staff ? "Staff Portal" : "Mitgliederbereich",
         title: `Willkommen ${getPrimaryDisplayName(user)}`,
-        intro: leadership ? "Community, Team und Staff laufen hier zusammen." : isModerationLead() ? "Du hast Planung, Auslastung und Moderationsuebersicht an einem Ort." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
+        intro: leadership ? "Community, Team und Staff laufen hier zusammen." : isModerationLead() ? "Du hast Planung, Auslastung und Moderationsübersicht an einem Ort." : staff ? "Schichten, Chat und Community kompakt an einem Ort." : "News, Forum, Creator und Community auf einen Blick.",
         chips: [getRoleLabel(user.role), user.vrchatName || "", user.discordName || ""].filter(Boolean)
       })}
       <div class="dashboard-shell">
