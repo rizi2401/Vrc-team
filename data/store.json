@@ -485,5 +485,14 @@
   "discordReminderLog": [],
   "forumThreads": [],
   "warnings": [],
-  "feedPosts": []
+  "feedPosts": [],
+  "community_welcome_page": {
+    "about_us": "Willkommen bei SONARA! Wir sind eine lebendige Community von Creators und Enthusiasten, die sich regelmäßig in virtuellen Welten treffen.",
+    "what_we_do": "Wir veranstalten regelmäßige Events, bieten Support für Creator, und schaffen einen sicheren Raum für Austausch und Vernetzung.",
+    "featured_events": [
+      "welcome-night",
+      "world-tour"
+    ],
+    "cooperations": []
+  }
 }
