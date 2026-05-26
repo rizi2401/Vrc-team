@@ -79,6 +79,7 @@ const PORTAL_LAYOUT_PANEL_CATALOG = [
   { id: "community.memberPulse", tab: "community", tabLabel: "Community", label: "Community Puls", defaultSpan: "span-5", defaultOrder: 20 },
   { id: "community.overview", tab: "community", tabLabel: "Community", label: "Community Übersicht", defaultSpan: "span-12", defaultOrder: 30 },
   { id: "community.memberForum", tab: "community", tabLabel: "Community", label: "Forum Spotlight", defaultSpan: "span-7", defaultOrder: 40 },
+  { id: "community.partnerships", tab: "community", tabLabel: "Community", label: "Partnerschaften", defaultSpan: "span-12", defaultOrder: 45 },
   { id: "community.rules", tab: "community", tabLabel: "Community", label: "Regeln", defaultSpan: "span-12", defaultOrder: 50 },
   { id: "community.team", tab: "community", tabLabel: "Community", label: "Team", defaultSpan: "span-12", defaultOrder: 60 },
   { id: "calendar.main", tab: "calendar", tabLabel: "Kalender", label: "Kalender", defaultSpan: "span-12", defaultOrder: 10 },
@@ -10346,6 +10347,43 @@ function renderCommunityTeamPanel() {
   `;
 }
 
+function renderCommunityPartnershipsPanel() {
+  const partnerships = getCommunityData().cooperations || [];
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Partnerschaften</p>
+          <h2>Unsere Kooperationen</h2>
+          <p class="section-copy">Die Community wird durch verschiedene Partner unterstützt, die uns helfen, SONARA zu einem besseren Ort zu machen.</p>
+        </div>
+      </div>
+
+      <div class="cooperation-grid">
+        ${
+          partnerships.length
+            ? partnerships
+              .map((partnership) => {
+                const imageSrc = partnership.image_path || "/sonara-crest.png";
+                return `
+              <a href="${escapeHtml(partnership.url)}" target="_blank" rel="noopener noreferrer" class="cooperation-card">
+                ${partnership.image_path ? `<img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(partnership.title)}" class="cooperation-image">` : ""}
+                <div class="cooperation-content">
+                  <h4>${escapeHtml(partnership.title)}</h4>
+                  ${partnership.description ? `<p>${escapeHtml(partnership.description)}</p>` : ""}
+                </div>
+              </a>
+              `;
+              })
+              .join("")
+            : renderEmptyState("Noch keine Partnerschaften", "Neue Kooperationen werden hier angezeigt.")
+        }
+      </div>
+    </section>
+  `;
+}
+
 function renderEventsPanel() {
   const events = getCommunityData().events || [];
   const eventDraft = getPersistentFormDraft("event-create") || {};
@@ -14995,6 +15033,7 @@ function renderMemberDashboard(activeTab) {
         { id: "community.memberPulse", render: renderMemberPulsePanel },
         { id: "community.overview", render: renderCommunityOverviewPanel },
         { id: "community.memberForum", render: renderMemberForumSpotlightPanel },
+        { id: "community.partnerships", render: renderCommunityPartnershipsPanel },
         { id: "community.rules", render: renderCommunityRulesPanel },
         { id: "community.team", render: renderCommunityTeamPanel }
       ]);
