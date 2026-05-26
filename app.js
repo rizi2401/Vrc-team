@@ -10925,32 +10925,7 @@ function renderPublicPortal() {
   const aboutUsBody = siteContent.aboutUsBody || "SONARA soll ein Zuhause für Menschen, Creator und Events sein.";
   const cooperationsBody = siteContent.cooperationsBody || "Unsere Partner helfen uns, SONARA zu einem besseren Ort zu machen.";
   const cooperationsList = Array.isArray(siteContent.cooperationsList) ? siteContent.cooperationsList : [];
-  const landingPanelHtml = page === "landing"
-    ? `
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Über uns</p>
-              <h2>${escapeHtml(siteContent.aboutUsTitle || "Wer wir sind")}</h2>
-              <p class="section-copy">${aboutUsBody.split('\n').map(line => escapeHtml(line)).join('<br>')}</p>
-            </div>
-          </div>
-          <div class="feature-grid">
-            ${siteCards
-              .map(
-                (card) => `
-                  <article class="feature-card">
-                    <h3>${escapeHtml(card.title || "SONARA")}</h3>
-                    <p>${escapeHtml(card.body || "")}</p>
-                    ${card.linkUrl ? `<a class="creator-action-link" href="${escapeHtml(card.linkUrl)}">${escapeHtml(card.linkLabel || "Oeffnen")}</a>` : ""}
-                  </article>
-                `
-              )
-              .join("")}
-          </div>
-        </section>
-      `
-    : "";
+  const landingPanelHtml = "";
   const landingBottomHtml = page === "landing"
     ? ""
     : page === "partner-hub"
