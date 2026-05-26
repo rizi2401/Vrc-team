@@ -10941,35 +10941,6 @@ function renderPublicPortal() {
               .join("")}
           </div>
         </section>
-
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Partner</p>
-              <h2>${escapeHtml(siteContent.cooperationsTitle || "Welche Kooperationen wir haben")}</h2>
-              <p class="section-copy">${escapeHtml(cooperationsBody)}</p>
-            </div>
-          </div>
-          ${
-            cooperationsList.length > 0
-              ? `
-                <div class="cooperations-list">
-                  ${cooperationsList
-                    .map(
-                      (coop) => `
-                        <div class="cooperation-item">
-                          <p>${escapeHtml(coop)}</p>
-                        </div>
-                      `
-                    )
-                    .join("")}
-                </div>
-              `
-              : `<p class="helper-text">Kooperationen werden in Kürze bekannt gegeben.</p>`
-          }
-
-          ${renderLivePreviewPanel(4)}
-        </section>
       `
     : `
         <section class="panel">
@@ -10998,6 +10969,33 @@ function renderPublicPortal() {
   const landingBottomHtml = page === "landing"
     ? `
       <div class="dashboard-grid community-home-grid">
+        <section class="panel span-12">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Partner</p>
+              <h2>${escapeHtml(siteContent.cooperationsTitle || "Welche Kooperationen wir haben")}</h2>
+              <p class="section-copy">${escapeHtml(cooperationsBody)}</p>
+            </div>
+          </div>
+          ${
+            cooperationsList.length > 0
+              ? `
+                <div class="cooperations-list">
+                  ${cooperationsList
+                    .map(
+                      (coop) => `
+                        <div class="cooperation-item">
+                          <p>${escapeHtml(coop)}</p>
+                        </div>
+                      `
+                    )
+                    .join("")}
+                </div>
+              `
+              : `<p class="helper-text">Kooperationen werden in Kürze bekannt gegeben.</p>`
+          }
+        </section>
+
         ${renderPublicStarterPanel()}
         ${renderPublicCommunityOverview()}
         ${renderPublicEventsPanel()}
