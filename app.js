@@ -5652,7 +5652,7 @@ async function handleSubmit(event) {
     case "login": {
       const formData = new FormData(form);
       const vrchatLink = getVrchatLinkFlowMeta();
-      await performAction(
+      const succeeded = await performAction(
         () =>
           api("/api/login", {
             method: "POST",
@@ -8320,7 +8320,7 @@ async function handleSubmit(event) {
     case "login": {
       const formData = new FormData(form);
       const vrchatLink = getVrchatLinkFlowMeta();
-      await performAction(
+      const succeeded = await performAction(
         () =>
           api("/api/login", {
             method: "POST",
