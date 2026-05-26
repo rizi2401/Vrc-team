@@ -10925,7 +10925,21 @@ function renderPublicPortal() {
   const aboutUsBody = siteContent.aboutUsBody || "SONARA soll ein Zuhause für Menschen, Creator und Events sein.";
   const cooperationsBody = siteContent.cooperationsBody || "Unsere Partner helfen uns, SONARA zu einem besseren Ort zu machen.";
   const cooperationsList = Array.isArray(siteContent.cooperationsList) ? siteContent.cooperationsList : [];
-  const landingPanelHtml = "";
+  const landingPanelHtml = page === "landing"
+    ? `
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Das sind wir</p>
+              <h2>Der Hain der Sonara</h2>
+            </div>
+          </div>
+          <div class="section-copy" style="white-space: pre-wrap; line-height: 1.6;">
+${aboutUsBody}
+          </div>
+        </section>
+      `
+    : "";
   const landingBottomHtml = page === "landing"
     ? ""
     : page === "partner-hub"
