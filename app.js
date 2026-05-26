@@ -1317,6 +1317,7 @@ function renderDashboard() {
 
           <div class="toolbar-actions">
             ${canManageUsers() ? '<button type="button" class="ghost small" data-action="reset-demo">Demo wiederherstellen</button>' : ""}
+            <button type="button" class="ghost small" data-action="go-to-landing">Zur Startseite</button>
             <button type="button" class="ghost small" data-action="logout">Abmelden</button>
           </div>
         </section>
@@ -1337,7 +1338,7 @@ function renderDashboardTabs(activeTab) {
 
   if (canManagePortal()) {
     tabs = [
-      { id: "overview", label: "Home" },
+      { id: "welcome", label: "Willkommen" },
       { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
@@ -1351,7 +1352,7 @@ function renderDashboardTabs(activeTab) {
     ];
   } else if (canAccessStaffArea()) {
     tabs = [
-      { id: "overview", label: "Home" },
+      { id: "welcome", label: "Willkommen" },
       { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
@@ -1363,7 +1364,7 @@ function renderDashboardTabs(activeTab) {
     ];
   } else {
     tabs = [
-      { id: "overview", label: "Home" },
+      { id: "welcome", label: "Willkommen" },
       { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
@@ -5652,7 +5653,7 @@ async function handleSubmit(event) {
     case "login": {
       const formData = new FormData(form);
       const vrchatLink = getVrchatLinkFlowMeta();
-      await performAction(
+      const succeeded = await performAction(
         () =>
           api("/api/login", {
             method: "POST",
@@ -6119,6 +6120,11 @@ async function handleClick(event) {
       setFlash("Die VRChat-Datei-Anbindung wurde entfernt.", "info");
       state.vrchatOverview = null;
       state.vrchatLoading = false;
+      render();
+      break;
+
+    case "go-to-landing":
+      state.ui.publicPage = "landing";
       render();
       break;
 
@@ -6716,9 +6722,64 @@ function renderCreatorsPanel(managerView) {
 }
 
 function renderChatWorkspace(mode) {
-  const panels = [renderChatPanel("community"), renderDirectMessagesPanel()];
-  if (mode !== "member") panels.push(renderChatPanel("staff", true));
-  return panels.join("");
+  const panels = [
+    renderChatPanel("community"),
+    renderDirectMessagesPanel(),
+    mode !== "member" ? renderChatPanel("staff", true) : "",
+    mode !== "member" ? renderVoiceChatPanel() : ""
+  ].filter(Boolean);
+  return renderChatCategory(panels);
+}
+
+function renderChatCategory(panels) {
+  return `
+    <div class="chat-category">
+      <div class="chat-category-header">
+        <h2>Chat & Kommunikation</h2>
+      </div>
+      <div class="chat-category-panels">
+        ${panels.join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderVoiceChatPanel() {
+  const voiceStatus = state.voice?.room ? "Verbunden" : "Nicht verbunden";
+  const participants = state.voice?.participants || [];
+  const voiceConfig = state.voice?.config;
+
+  return `
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Voice Chat</p>
+          <h2>Voice Verbindung</h2>
+          <p class="section-copy">Live Voice-Kanal für Staff-Absprachen in Echtzeit.</p>
+        </div>
+        <span class="pill ${state.voice?.room ? "success" : "amber"}">${voiceStatus}</span>
+      </div>
+
+      <div class="voice-status-stack">
+        ${state.voice?.error ? `<div class="alert-box danger"><p>${escapeHtml(state.voice.error)}</p></div>` : ""}
+
+        <div class="voice-info">
+          <p><strong>Raum:</strong> ${voiceConfig ? escapeHtml(voiceConfig.room || "Nicht verbunden") : "Wird geladen..."}</p>
+          <p><strong>Status:</strong> ${escapeHtml(state.voice?.clientStatus || "Initialisierung...")}</p>
+          ${state.voice?.muted ? '<p class="subtle">🔇 Mikrofon ist stummgeschaltet</p>' : ""}
+        </div>
+
+        ${participants.length ? `
+          <div class="participants-list">
+            <p><strong>Teilnehmer (${participants.length}):</strong></p>
+            <ul>
+              ${participants.map((p) => `<li>${escapeHtml(p.name || "Unbekannt")}</li>`).join("")}
+            </ul>
+          </div>
+        ` : ""}
+      </div>
+    </section>
+  `;
 }
 
 function renderChatPanel(mode = "community", compact = false) {
@@ -8320,7 +8381,7 @@ async function handleSubmit(event) {
     case "login": {
       const formData = new FormData(form);
       const vrchatLink = getVrchatLinkFlowMeta();
-      await performAction(
+      const succeeded = await performAction(
         () =>
           api("/api/login", {
             method: "POST",
@@ -10835,6 +10896,14 @@ function renderPublicPortal() {
   const showRegister = page === "landing" || page === "register";
   const pageButtons = [
     { id: "landing", label: "Start" },
+    { id: "partner-hub", label: "Partner Hub" },
+    { id: "event", label: "Event" },
+    { id: "community", label: "Community" },
+    { id: "mitmachen", label: "Mitmachen" },
+    { id: "regeln", label: "Regeln" },
+    { id: "faq", label: "FAQ" },
+    { id: "team", label: "Team" },
+    { id: "rechtliches", label: "Rechtliches" },
     { id: "login", label: "Login" },
     { id: "register", label: "Registrieren" }
   ];
@@ -10853,99 +10922,94 @@ function renderPublicPortal() {
     { title: "Bewerbungen", body: "Creator- und Team-Anfragen werden hier sichtbar und bearbeitet" },
     { title: "Mitgliederbereich", body: "Profil, Tickets, Feedback und direkte Kommunikation" }
   ];
-  const landingDescription = siteContent.communityBody || "SONARA verbindet Community, Creator, Events und Team an einem Ort.";
+  const aboutUsBody = siteContent.aboutUsBody || "";
+  const cooperationsBody = siteContent.cooperationsBody || "Unsere Partner helfen uns, SONARA zu einem besseren Ort zu machen.";
+  const cooperationsList = Array.isArray(siteContent.cooperationsList) ? siteContent.cooperationsList : [];
   const landingPanelHtml = page === "landing"
     ? `
         <section class="panel">
           <div class="section-head">
             <div>
-              <p class="eyebrow">Portal</p>
-              <h2>${escapeHtml(siteContent.communityTitle || "Das Wichtigste zuerst")}</h2>
-              <p class="section-copy">${escapeHtml(landingDescription)}</p>
+              <p class="eyebrow">Das sind wir</p>
+              <h2>Der Hain der Sonara</h2>
             </div>
           </div>
-          <div class="feature-grid">
-            ${siteCards
-              .map(
-                (card) => `
-                  <article class="feature-card">
-                    <h3>${escapeHtml(card.title || "SONARA")}</h3>
-                    <p>${escapeHtml(card.body || "")}</p>
-                    ${card.linkUrl ? `<a class="creator-action-link" href="${escapeHtml(card.linkUrl)}">${escapeHtml(card.linkLabel || "Oeffnen")}</a>` : ""}
-                  </article>
-                `
-              )
-              .join("")}
+          <div class="section-copy" style="white-space: pre-wrap; line-height: 1.6;">
+${aboutUsBody}
           </div>
-
-          ${
-            vrchatLink
-              ? `
-                <article class="mini-card">
-                  <div class="section-head compact-section-head">
-                    <div>
-                      <p class="eyebrow">VRChat Flow</p>
-                      <h3>So laeuft die Verknuepfung</h3>
-                    </div>
-                    <span class="pill amber">${escapeHtml(vrchatLink.sourceLabel)}</span>
-                  </div>
-                  <p class="helper-text">1. Die Welt oder der Chat oeffnet diesen Link. 2. Du meldest dich hier an oder registrierst dich. 3. Danach landest du automatisch in deinem SONARA-Profil.</p>
-                  <p class="helper-text">Die eigentliche Welt kann später einfach genau diese URL öffnen: <strong>/vrchat-link</strong> oder <strong>/vrchat-link?source=world</strong>.</p>
-                </article>
-              `
-              : ""
-          }
-
-          ${
-            creators.length
-              ? `
-                <div class="stack-list compact-stack">
-                  <h3>Creator im Fokus</h3>
-                  <div class="team-grid">
-                    ${creators.map((entry) => renderCreatorCard(entry)).join("")}
-                  </div>
-                </div>
-              `
-              : ""
-          }
-
-          ${renderLivePreviewPanel(4)}
         </section>
       `
-    : `
-        <section class="panel">
+    : "";
+  const landingBottomHtml = page === "landing"
+    ? ""
+    : page === "partner-hub"
+    ? `
+      <div class="dashboard-grid community-home-grid">
+        <section class="panel span-12">
           <div class="section-head">
             <div>
-              <p class="eyebrow">Portal</p>
-              <h2>${page === "login" ? "Einloggen" : "Registrieren"}</h2>
-              <p class="section-copy">${escapeHtml(landingDescription)}</p>
+              <p class="eyebrow">Partner</p>
+              <h2>${escapeHtml(siteContent.cooperationsTitle || "Welche Kooperationen wir haben")}</h2>
+              <p class="section-copy">${escapeHtml(cooperationsBody)}</p>
             </div>
           </div>
-          <div class="feature-grid">
-            ${siteCards
-              .slice(0, 3)
-              .map(
-                (card) => `
-                  <article class="feature-card">
-                    <h3>${escapeHtml(card.title || "SONARA")}</h3>
-                    <p>${escapeHtml(card.body || "")}</p>
-                  </article>
-                `
-              )
-              .join("")}
-          </div>
+          ${
+            cooperationsList.length > 0
+              ? `
+                <div class="cooperations-list">
+                  ${cooperationsList
+                    .map(
+                      (coop) => `
+                        <div class="cooperation-item">
+                          <p>${escapeHtml(coop)}</p>
+                        </div>
+                      `
+                    )
+                    .join("")}
+                </div>
+              `
+              : `<p class="helper-text">Kooperationen werden in Kürze bekannt gegeben.</p>`
+          }
         </section>
-      `;
-  const landingBottomHtml = page === "landing"
+      </div>
+    `
+    : page === "event"
+    ? `
+      <div class="dashboard-grid community-home-grid">
+        ${renderPublicEventsPanel()}
+      </div>
+    `
+    : page === "community"
+    ? `
+      <div class="dashboard-grid community-home-grid">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; grid-column: 1 / -1;">
+          ${renderCommunityPulsePanel()}
+          ${renderCommunityParticipationPanel()}
+        </div>
+        ${renderPublicCommunityOverview()}
+      </div>
+    `
+    : page === "mitmachen"
     ? `
       <div class="dashboard-grid community-home-grid">
         ${renderPublicStarterPanel()}
-        ${renderPublicCommunityOverview()}
-        ${renderPublicEventsPanel()}
-        ${renderCommunityPulsePanel()}
-        ${renderCommunityParticipationPanel()}
+      </div>
+    `
+    : page === "regeln"
+    ? `
+      <div class="dashboard-grid community-home-grid">
         ${renderPublicRulesPanel()}
+      </div>
+    `
+    : page === "team"
+    ? `
+      <div class="dashboard-grid community-home-grid">
         ${renderPublicTeamPanel()}
+      </div>
+    `
+    : page === "rechtliches"
+    ? `
+      <div class="dashboard-grid community-home-grid">
         ${renderPublicLegalPanel()}
       </div>
     `
@@ -10969,18 +11033,6 @@ function renderPublicPortal() {
         ${landingPanelHtml}
 
         <div class="auth-stack public-auth-stack">
-          <section class="panel auth-card public-auth-cta">
-            <div>
-              <p class="eyebrow">SONARA Portal</p>
-              <h3>${page === "landing" ? "Login oder Registrierung" : page === "login" ? "Login" : "Registrieren"}</h3>
-              <p class="helper-text">${page === "landing" ? "Starte hier ins Portal. Wer moechte, kann später weitere Verknuepfungen wie Discord ergaenzen." : page === "login" ? "Mit E-Mail oder Benutzername einloggen." : "Erstelle dir einen SONARA-Account für Community, Creator und Team."}</p>
-            </div>
-            <div class="public-auth-cta-actions">
-              <button type="button" class="creator-action-link ${page === "login" ? "active" : ""}" data-action="set-public-page" data-page="login">Login</button>
-              <button type="button" class="creator-action-link ${page === "register" ? "active" : ""}" data-action="set-public-page" data-page="register">Registrieren</button>
-            </div>
-          </section>
-
           ${showLogin ? `
           <form class="panel auth-card password-fallback-card" data-form="login" id="portal-login">
             <div>
@@ -11080,6 +11132,7 @@ function renderDashboard() {
           </div>
           <div class="toolbar-actions">
             ${canManageUsers() ? '<button type="button" class="ghost small" data-action="reset-demo">Demo wiederherstellen</button>' : ""}
+            <button type="button" class="ghost small" data-action="go-to-landing">Zur Startseite</button>
             <button type="button" class="ghost small" data-action="logout">Abmelden</button>
           </div>
         </section>
@@ -11143,6 +11196,12 @@ function collectSiteContentPayload(form) {
     }))
     .filter((entry) => String(entry.title || entry.body || "").trim());
 
+  const cooperationsListText = formData.get("cooperationsList") || "";
+  const cooperationsList = cooperationsListText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
   return {
     heroKicker: formData.get("heroKicker"),
     heroTitle: formData.get("heroTitle"),
@@ -11153,8 +11212,11 @@ function collectSiteContentPayload(form) {
     secondaryButtonUrl: formData.get("secondaryButtonUrl"),
     imageUrl: formData.get("imageUrl"),
     videoUrl: formData.get("videoUrl"),
-    communityTitle: formData.get("communityTitle"),
-    communityBody: formData.get("communityBody"),
+    aboutUsTitle: formData.get("aboutUsTitle"),
+    aboutUsBody: formData.get("aboutUsBody"),
+    cooperationsTitle: formData.get("cooperationsTitle"),
+    cooperationsBody: formData.get("cooperationsBody"),
+    cooperationsList,
     infoCards
   };
 }
@@ -11431,12 +11493,24 @@ function renderSiteContentAdminPanel() {
             <input id="cmsVideoUrl" name="videoUrl" type="text" value="${escapeHtml(draft.videoUrl || "")}">
           </div>
           <div class="field">
-            <label for="cmsCommunityTitle">Community-Titel</label>
-            <input id="cmsCommunityTitle" name="communityTitle" type="text" value="${escapeHtml(draft.communityTitle || "")}">
+            <label for="cmsAboutUsTitle">Wer wir sind - Titel</label>
+            <input id="cmsAboutUsTitle" name="aboutUsTitle" type="text" value="${escapeHtml(draft.aboutUsTitle || "")}">
           </div>
           <div class="field span-all">
-            <label for="cmsCommunityBody">Community-Text</label>
-            <textarea id="cmsCommunityBody" name="communityBody">${escapeHtml(draft.communityBody || "")}</textarea>
+            <label for="cmsAboutUsBody">Wer wir sind - Text</label>
+            <textarea id="cmsAboutUsBody" name="aboutUsBody">${escapeHtml(draft.aboutUsBody || "")}</textarea>
+          </div>
+          <div class="field">
+            <label for="cmsCooperationsTitle">Kooperationen - Titel</label>
+            <input id="cmsCooperationsTitle" name="cooperationsTitle" type="text" value="${escapeHtml(draft.cooperationsTitle || "")}">
+          </div>
+          <div class="field span-all">
+            <label for="cmsCooperationsBody">Kooperationen - Text</label>
+            <textarea id="cmsCooperationsBody" name="cooperationsBody">${escapeHtml(draft.cooperationsBody || "")}</textarea>
+          </div>
+          <div class="field span-all">
+            <label for="cmsCooperationsList">Kooperationen - Liste (eine pro Zeile)</label>
+            <textarea id="cmsCooperationsList" name="cooperationsList" placeholder="Partner 1&#10;Partner 2&#10;Partner 3">${(draft.cooperationsList || []).join("\n")}</textarea>
           </div>
         </div>
 
@@ -12040,7 +12114,6 @@ function renderUploadsAdminPanel() {
 
 function renderDashboardTabs(activeTab) {
   const common = [
-    { id: "overview", label: "Dashboard" },
     { id: "community", label: "Community" },
     { id: "events", label: "Events" },
     { id: "news", label: "News" },
@@ -13438,9 +13511,64 @@ function renderVoicePanel() {
 }
 
 function renderChatWorkspace(mode) {
-  const panels = [renderChatPanel("community"), renderDirectMessagesPanel()];
-  if (mode !== "member") panels.push(renderChatPanel("staff", true));
-  return panels.join("");
+  const panels = [
+    renderChatPanel("community"),
+    renderDirectMessagesPanel(),
+    mode !== "member" ? renderChatPanel("staff", true) : "",
+    mode !== "member" ? renderVoiceChatPanel() : ""
+  ].filter(Boolean);
+  return renderChatCategory(panels);
+}
+
+function renderChatCategory(panels) {
+  return `
+    <div class="chat-category">
+      <div class="chat-category-header">
+        <h2>Chat & Kommunikation</h2>
+      </div>
+      <div class="chat-category-panels">
+        ${panels.join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderVoiceChatPanel() {
+  const voiceStatus = state.voice?.room ? "Verbunden" : "Nicht verbunden";
+  const participants = state.voice?.participants || [];
+  const voiceConfig = state.voice?.config;
+
+  return `
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Voice Chat</p>
+          <h2>Voice Verbindung</h2>
+          <p class="section-copy">Live Voice-Kanal für Staff-Absprachen in Echtzeit.</p>
+        </div>
+        <span class="pill ${state.voice?.room ? "success" : "amber"}">${voiceStatus}</span>
+      </div>
+
+      <div class="voice-status-stack">
+        ${state.voice?.error ? `<div class="alert-box danger"><p>${escapeHtml(state.voice.error)}</p></div>` : ""}
+
+        <div class="voice-info">
+          <p><strong>Raum:</strong> ${voiceConfig ? escapeHtml(voiceConfig.room || "Nicht verbunden") : "Wird geladen..."}</p>
+          <p><strong>Status:</strong> ${escapeHtml(state.voice?.clientStatus || "Initialisierung...")}</p>
+          ${state.voice?.muted ? '<p class="subtle">🔇 Mikrofon ist stummgeschaltet</p>' : ""}
+        </div>
+
+        ${participants.length ? `
+          <div class="participants-list">
+            <p><strong>Teilnehmer (${participants.length}):</strong></p>
+            <ul>
+              ${participants.map((p) => `<li>${escapeHtml(p.name || "Unbekannt")}</li>`).join("")}
+            </ul>
+          </div>
+        ` : ""}
+      </div>
+    </section>
+  `;
 }
 
 function renderChatPanel(mode = "community", compact = false) {
@@ -14302,7 +14430,7 @@ function renderFeedPanel() {
 
 function getDashboardTabSections() {
   const communityTabs = [
-    { id: "overview", label: "Home" },
+    { id: "welcome", label: "Willkommen" },
     { id: "feed", label: "Feed" },
     { id: "community", label: "Community" },
     { id: "calendar", label: "Kalender" },
@@ -15313,6 +15441,7 @@ function renderDashboard() {
           </div>
           <div class="toolbar-actions">
             ${canManageUsers() ? '<button type="button" class="ghost small" data-action="reset-demo">Demo wiederherstellen</button>' : ""}
+            <button type="button" class="ghost small" data-action="go-to-landing">Zur Startseite</button>
             <button type="button" class="ghost small" data-action="logout">Abmelden</button>
           </div>
         </section>
