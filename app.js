@@ -514,7 +514,23 @@ async function boot() {
   syncNotificationPermission();
   await refreshBootstrap();
   if (!state.session) {
-    await refreshPublicData();
+    // Auto-login as admin for development
+    try {
+      await performAction(
+        () =>
+          api("/api/login", {
+            method: "POST",
+            body: JSON.stringify({
+              identifier: "kael",
+              password: "12345"
+            })
+          }),
+        ""
+      );
+    } catch (error) {
+      // Fallback to public data if auto-login fails
+      await refreshPublicData();
+    }
   }
   render();
 }
@@ -1317,6 +1333,7 @@ function renderDashboard() {
 
           <div class="toolbar-actions">
             ${canManageUsers() ? '<button type="button" class="ghost small" data-action="reset-demo">Demo wiederherstellen</button>' : ""}
+            <button type="button" class="ghost small" data-action="go-to-landing">Zur Startseite</button>
             <button type="button" class="ghost small" data-action="logout">Abmelden</button>
           </div>
         </section>
@@ -6119,6 +6136,11 @@ async function handleClick(event) {
       setFlash("Die VRChat-Datei-Anbindung wurde entfernt.", "info");
       state.vrchatOverview = null;
       state.vrchatLoading = false;
+      render();
+      break;
+
+    case "go-to-landing":
+      state.ui.publicPage = "landing";
       render();
       break;
 
@@ -11135,6 +11157,7 @@ function renderDashboard() {
           </div>
           <div class="toolbar-actions">
             ${canManageUsers() ? '<button type="button" class="ghost small" data-action="reset-demo">Demo wiederherstellen</button>' : ""}
+            <button type="button" class="ghost small" data-action="go-to-landing">Zur Startseite</button>
             <button type="button" class="ghost small" data-action="logout">Abmelden</button>
           </div>
         </section>
@@ -15422,6 +15445,7 @@ function renderDashboard() {
           </div>
           <div class="toolbar-actions">
             ${canManageUsers() ? '<button type="button" class="ghost small" data-action="reset-demo">Demo wiederherstellen</button>' : ""}
+            <button type="button" class="ghost small" data-action="go-to-landing">Zur Startseite</button>
             <button type="button" class="ghost small" data-action="logout">Abmelden</button>
           </div>
         </section>
