@@ -10896,6 +10896,14 @@ function renderPublicPortal() {
   const showRegister = page === "landing" || page === "register";
   const pageButtons = [
     { id: "landing", label: "Start" },
+    { id: "partner-hub", label: "Partner Hub" },
+    { id: "event", label: "Event" },
+    { id: "community", label: "Community" },
+    { id: "mitmachen", label: "Mitmachen" },
+    { id: "regeln", label: "Regeln" },
+    { id: "faq", label: "FAQ" },
+    { id: "team", label: "Team" },
+    { id: "rechtliches", label: "Rechtliches" },
     { id: "login", label: "Login" },
     { id: "register", label: "Registrieren" }
   ];
