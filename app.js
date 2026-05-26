@@ -10932,7 +10932,7 @@ function renderPublicPortal() {
             <div>
               <p class="eyebrow">Über uns</p>
               <h2>${escapeHtml(siteContent.aboutUsTitle || "Wer wir sind")}</h2>
-              <p class="section-copy">${escapeHtml(aboutUsBody)}</p>
+              <p class="section-copy">${aboutUsBody.split('\n').map(line => escapeHtml(line)).join('<br>')}</p>
             </div>
           </div>
           <div class="feature-grid">
