@@ -10952,12 +10952,7 @@ function renderPublicPortal() {
       `
     : "";
   const landingBottomHtml = page === "landing"
-    ? `
-      <div class="dashboard-grid community-home-grid">
-        ${renderPublicStarterPanel()}
-        ${renderPublicCommunityOverview()}
-      </div>
-    `
+    ? ""
     : page === "partner-hub"
     ? `
       <div class="dashboard-grid community-home-grid">
