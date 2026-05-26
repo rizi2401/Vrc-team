@@ -6716,9 +6716,64 @@ function renderCreatorsPanel(managerView) {
 }
 
 function renderChatWorkspace(mode) {
-  const panels = [renderChatPanel("community"), renderDirectMessagesPanel()];
-  if (mode !== "member") panels.push(renderChatPanel("staff", true));
-  return panels.join("");
+  const panels = [
+    renderChatPanel("community"),
+    renderDirectMessagesPanel(),
+    mode !== "member" ? renderChatPanel("staff", true) : "",
+    mode !== "member" ? renderVoiceChatPanel() : ""
+  ].filter(Boolean);
+  return renderChatCategory(panels);
+}
+
+function renderChatCategory(panels) {
+  return `
+    <div class="chat-category">
+      <div class="chat-category-header">
+        <h2>Chat & Kommunikation</h2>
+      </div>
+      <div class="chat-category-panels">
+        ${panels.join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderVoiceChatPanel() {
+  const voiceStatus = state.voice?.room ? "Verbunden" : "Nicht verbunden";
+  const participants = state.voice?.participants || [];
+  const voiceConfig = state.voice?.config;
+
+  return `
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Voice Chat</p>
+          <h2>Voice Verbindung</h2>
+          <p class="section-copy">Live Voice-Kanal für Staff-Absprachen in Echtzeit.</p>
+        </div>
+        <span class="pill ${state.voice?.room ? "success" : "amber"}">${voiceStatus}</span>
+      </div>
+
+      <div class="voice-status-stack">
+        ${state.voice?.error ? `<div class="alert-box danger"><p>${escapeHtml(state.voice.error)}</p></div>` : ""}
+
+        <div class="voice-info">
+          <p><strong>Raum:</strong> ${voiceConfig ? escapeHtml(voiceConfig.room || "Nicht verbunden") : "Wird geladen..."}</p>
+          <p><strong>Status:</strong> ${escapeHtml(state.voice?.clientStatus || "Initialisierung...")}</p>
+          ${state.voice?.muted ? '<p class="subtle">🔇 Mikrofon ist stummgeschaltet</p>' : ""}
+        </div>
+
+        ${participants.length ? `
+          <div class="participants-list">
+            <p><strong>Teilnehmer (${participants.length}):</strong></p>
+            <ul>
+              ${participants.map((p) => `<li>${escapeHtml(p.name || "Unbekannt")}</li>`).join("")}
+            </ul>
+          </div>
+        ` : ""}
+      </div>
+    </section>
+  `;
 }
 
 function renderChatPanel(mode = "community", compact = false) {
@@ -13437,9 +13492,64 @@ function renderVoicePanel() {
 }
 
 function renderChatWorkspace(mode) {
-  const panels = [renderChatPanel("community"), renderDirectMessagesPanel()];
-  if (mode !== "member") panels.push(renderChatPanel("staff", true));
-  return panels.join("");
+  const panels = [
+    renderChatPanel("community"),
+    renderDirectMessagesPanel(),
+    mode !== "member" ? renderChatPanel("staff", true) : "",
+    mode !== "member" ? renderVoiceChatPanel() : ""
+  ].filter(Boolean);
+  return renderChatCategory(panels);
+}
+
+function renderChatCategory(panels) {
+  return `
+    <div class="chat-category">
+      <div class="chat-category-header">
+        <h2>Chat & Kommunikation</h2>
+      </div>
+      <div class="chat-category-panels">
+        ${panels.join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderVoiceChatPanel() {
+  const voiceStatus = state.voice?.room ? "Verbunden" : "Nicht verbunden";
+  const participants = state.voice?.participants || [];
+  const voiceConfig = state.voice?.config;
+
+  return `
+    <section class="panel span-5">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Voice Chat</p>
+          <h2>Voice Verbindung</h2>
+          <p class="section-copy">Live Voice-Kanal für Staff-Absprachen in Echtzeit.</p>
+        </div>
+        <span class="pill ${state.voice?.room ? "success" : "amber"}">${voiceStatus}</span>
+      </div>
+
+      <div class="voice-status-stack">
+        ${state.voice?.error ? `<div class="alert-box danger"><p>${escapeHtml(state.voice.error)}</p></div>` : ""}
+
+        <div class="voice-info">
+          <p><strong>Raum:</strong> ${voiceConfig ? escapeHtml(voiceConfig.room || "Nicht verbunden") : "Wird geladen..."}</p>
+          <p><strong>Status:</strong> ${escapeHtml(state.voice?.clientStatus || "Initialisierung...")}</p>
+          ${state.voice?.muted ? '<p class="subtle">🔇 Mikrofon ist stummgeschaltet</p>' : ""}
+        </div>
+
+        ${participants.length ? `
+          <div class="participants-list">
+            <p><strong>Teilnehmer (${participants.length}):</strong></p>
+            <ul>
+              ${participants.map((p) => `<li>${escapeHtml(p.name || "Unbekannt")}</li>`).join("")}
+            </ul>
+          </div>
+        ` : ""}
+      </div>
+    </section>
+  `;
 }
 
 function renderChatPanel(mode = "community", compact = false) {
