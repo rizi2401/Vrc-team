@@ -1337,7 +1337,6 @@ function renderDashboardTabs(activeTab) {
 
   if (canManagePortal()) {
     tabs = [
-      { id: "overview", label: "Home" },
       { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
@@ -1351,7 +1350,6 @@ function renderDashboardTabs(activeTab) {
     ];
   } else if (canAccessStaffArea()) {
     tabs = [
-      { id: "overview", label: "Home" },
       { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
@@ -1363,7 +1361,6 @@ function renderDashboardTabs(activeTab) {
     ];
   } else {
     tabs = [
-      { id: "overview", label: "Home" },
       { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
