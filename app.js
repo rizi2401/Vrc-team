@@ -514,30 +514,7 @@ async function boot() {
   syncNotificationPermission();
   await refreshBootstrap();
   if (!state.session) {
-    // Auto-login as admin for development
-    try {
-      const response = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-              identifier: "admin",
-              password: "12345"
-            })
-      });
-      if (response.ok) {
-        const payload = await response.json();
-        if (payload?.session) {
-          state.session = payload.session;
-          state.data = payload.data;
-        }
-      } else {
-        await refreshPublicData();
-      }
-    } catch (error) {
-      // Fallback to public data if auto-login fails
-      await refreshPublicData();
-    }
+    await refreshPublicData();
   }
   render();
 }
