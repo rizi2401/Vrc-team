@@ -2,9 +2,9 @@
   "slots": [],
   "users": [
     {
-      "id": "admin-001",
+      "id": "79d4d417-c38b-4479-afdf-5f3093523d65",
       "username": "admin",
-      "displayName": "Admin",
+      "displayName": "System Admin",
       "role": "admin",
       "vrchatName": "admin",
       "discordName": "admin",
@@ -20,7 +20,7 @@
       "creatorBlurb": "",
       "creatorLinks": [],
       "creatorVisible": false,
-      "creatorSlug": "admin",
+      "creatorSlug": "system-admin",
       "creatorApplicationStatus": "none",
       "creatorFollowerCount": 0,
       "creatorPrimaryPlatform": "",
@@ -99,13 +99,14 @@
       ],
       "availabilityUpdatedAt": "",
       "lastLoginAt": "",
-      "lastSeenAt": "",
+      "lastSeenAt": "2026-05-25T22:04:12.650Z",
       "isBlocked": false,
       "blockReason": "",
       "blockedAt": "",
       "blockedBy": "",
-      "passwordHash": "17a279084bf0799e5d9849aeb1258164:6db3c49be2d68e62d50853d1ecb2dd19d8bed0c935261eb8c50262c54bd0c3260a34bff5822ef25a75f7dc5a0206a2600bb2c0794b093dbfbe8e9f8753713f2b"
-    }
+      "passwordHash": "ee0e53f6ceb47dcef6f9fe5cb345261d:4eac92098e4ac33a67ec191e90c62f9b657c3cf112caa4d95c37e8cd5248f98c786af4cd9b756930f7653bcdacf17195310c23e798a5585d776d1119a2ce9594"
+    },
+  ],
   ],
   "settings": {
     "shiftTypes": [
@@ -309,9 +310,11 @@
       ]
     }
   ],
+  "customCollections": [],
+  "customRecords": [],
+  "documents": [],
+  "uploads": [],
   "shifts": [],
-  "timeEntries": [],
-  "requests": [],
   "events": [
     {
       "id": "welcome-night",
@@ -362,12 +365,20 @@
       "createdBy": ""
     }
   ],
-  "news": [],
+  "requests": [],
+  "announcements": [],
   "chatMessages": [],
-  "staffChatMessages": [],
-  "communityChatMessages": [],
+  "timeEntries": [],
+  "swapRequests": [],
+  "discordStatus": {
+    "lastAttemptAt": "",
+    "lastSuccessAt": "",
+    "lastError": "",
+    "lastStatusCode": 0
+  },
+  "vrchatAnalytics": {},
   "directMessages": [],
-  "forumPosts": [],
+  "discordReminderLog": [],
   "forumThreads": [],
   "warnings": [],
   "feedPosts": []
