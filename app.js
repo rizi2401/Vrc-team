@@ -10977,6 +10977,13 @@ function renderPublicPortal() {
   const landingBottomHtml = page === "landing"
     ? `
       <div class="dashboard-grid community-home-grid">
+        ${renderPublicStarterPanel()}
+        ${renderPublicCommunityOverview()}
+      </div>
+    `
+    : page === "partner-hub"
+    ? `
+      <div class="dashboard-grid community-home-grid">
         <section class="panel span-12">
           <div class="section-head">
             <div>
@@ -11003,14 +11010,43 @@ function renderPublicPortal() {
               : `<p class="helper-text">Kooperationen werden in Kürze bekannt gegeben.</p>`
           }
         </section>
-
-        ${renderPublicStarterPanel()}
-        ${renderPublicCommunityOverview()}
+      </div>
+    `
+    : page === "event"
+    ? `
+      <div class="dashboard-grid community-home-grid">
         ${renderPublicEventsPanel()}
+      </div>
+    `
+    : page === "community"
+    ? `
+      <div class="dashboard-grid community-home-grid">
+        ${renderPublicCommunityOverview()}
         ${renderCommunityPulsePanel()}
         ${renderCommunityParticipationPanel()}
+      </div>
+    `
+    : page === "mitmachen"
+    ? `
+      <div class="dashboard-grid community-home-grid">
+        ${renderPublicStarterPanel()}
+      </div>
+    `
+    : page === "regeln"
+    ? `
+      <div class="dashboard-grid community-home-grid">
         ${renderPublicRulesPanel()}
+      </div>
+    `
+    : page === "team"
+    ? `
+      <div class="dashboard-grid community-home-grid">
         ${renderPublicTeamPanel()}
+      </div>
+    `
+    : page === "rechtliches"
+    ? `
+      <div class="dashboard-grid community-home-grid">
         ${renderPublicLegalPanel()}
       </div>
     `
