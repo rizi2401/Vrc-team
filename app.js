@@ -521,9 +521,9 @@ async function boot() {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
-          identifier: "kael",
-          password: "12345"
-        })
+              identifier: "admin",
+              password: "12345"
+            })
       });
       if (response.ok) {
         const payload = await response.json();
