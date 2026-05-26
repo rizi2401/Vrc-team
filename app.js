@@ -11028,18 +11028,6 @@ function renderPublicPortal() {
         ${landingPanelHtml}
 
         <div class="auth-stack public-auth-stack">
-          <section class="panel auth-card public-auth-cta">
-            <div>
-              <p class="eyebrow">SONARA Portal</p>
-              <h3>${page === "landing" ? "Login oder Registrierung" : page === "login" ? "Login" : "Registrieren"}</h3>
-              <p class="helper-text">${page === "landing" ? "Starte hier ins Portal. Wer moechte, kann später weitere Verknuepfungen wie Discord ergaenzen." : page === "login" ? "Mit E-Mail oder Benutzername einloggen." : "Erstelle dir einen SONARA-Account für Community, Creator und Team."}</p>
-            </div>
-            <div class="public-auth-cta-actions">
-              <button type="button" class="creator-action-link ${page === "login" ? "active" : ""}" data-action="set-public-page" data-page="login">Login</button>
-              <button type="button" class="creator-action-link ${page === "register" ? "active" : ""}" data-action="set-public-page" data-page="register">Registrieren</button>
-            </div>
-          </section>
-
           ${showLogin ? `
           <form class="panel auth-card password-fallback-card" data-form="login" id="portal-login">
             <div>
