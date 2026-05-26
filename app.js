@@ -10950,30 +10950,7 @@ function renderPublicPortal() {
           </div>
         </section>
       `
-    : `
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Portal</p>
-              <h2>${page === "login" ? "Einloggen" : "Registrieren"}</h2>
-              <p class="section-copy">${escapeHtml(aboutUsBody)}</p>
-            </div>
-          </div>
-          <div class="feature-grid">
-            ${siteCards
-              .slice(0, 3)
-              .map(
-                (card) => `
-                  <article class="feature-card">
-                    <h3>${escapeHtml(card.title || "SONARA")}</h3>
-                    <p>${escapeHtml(card.body || "")}</p>
-                  </article>
-                `
-              )
-              .join("")}
-          </div>
-        </section>
-      `;
+    : "";
   const landingBottomHtml = page === "landing"
     ? `
       <div class="dashboard-grid community-home-grid">
@@ -11021,9 +10998,11 @@ function renderPublicPortal() {
     : page === "community"
     ? `
       <div class="dashboard-grid community-home-grid">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; grid-column: 1 / -1;">
+          ${renderCommunityPulsePanel()}
+          ${renderCommunityParticipationPanel()}
+        </div>
         ${renderPublicCommunityOverview()}
-        ${renderCommunityPulsePanel()}
-        ${renderCommunityParticipationPanel()}
       </div>
     `
     : page === "mitmachen"
