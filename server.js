@@ -3571,9 +3571,12 @@ function buildDefaultSiteContent() {
     secondaryButtonUrl: "/",
     imageUrl: "",
     videoUrl: "",
-    communityTitle: "Mehr als ein Moderationspanel",
-    communityBody:
+    aboutUsTitle: "Wer wir sind",
+    aboutUsBody:
       "SONARA soll ein Zuhause für Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt für Schritt selbst pflegen.",
+    cooperationsTitle: "Welche Kooperationen wir haben",
+    cooperationsBody: "Unsere Partner helfen uns, SONARA zu einem besseren Ort zu machen.",
+    cooperationsList: [],
     infoCards: [
       {
         title: "Community",

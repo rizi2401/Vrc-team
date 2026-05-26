@@ -10914,15 +10914,17 @@ function renderPublicPortal() {
     { title: "Bewerbungen", body: "Creator- und Team-Anfragen werden hier sichtbar und bearbeitet" },
     { title: "Mitgliederbereich", body: "Profil, Tickets, Feedback und direkte Kommunikation" }
   ];
-  const landingDescription = siteContent.communityBody || "SONARA verbindet Community, Creator, Events und Team an einem Ort.";
+  const aboutUsBody = siteContent.aboutUsBody || "SONARA soll ein Zuhause für Menschen, Creator und Events sein.";
+  const cooperationsBody = siteContent.cooperationsBody || "Unsere Partner helfen uns, SONARA zu einem besseren Ort zu machen.";
+  const cooperationsList = Array.isArray(siteContent.cooperationsList) ? siteContent.cooperationsList : [];
   const landingPanelHtml = page === "landing"
     ? `
         <section class="panel">
           <div class="section-head">
             <div>
-              <p class="eyebrow">Portal</p>
-              <h2>${escapeHtml(siteContent.communityTitle || "Das Wichtigste zuerst")}</h2>
-              <p class="section-copy">${escapeHtml(landingDescription)}</p>
+              <p class="eyebrow">Über uns</p>
+              <h2>${escapeHtml(siteContent.aboutUsTitle || "Wer wir sind")}</h2>
+              <p class="section-copy">${escapeHtml(aboutUsBody)}</p>
             </div>
           </div>
           <div class="feature-grid">
@@ -10938,36 +10940,32 @@ function renderPublicPortal() {
               )
               .join("")}
           </div>
+        </section>
 
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Partner</p>
+              <h2>${escapeHtml(siteContent.cooperationsTitle || "Welche Kooperationen wir haben")}</h2>
+              <p class="section-copy">${escapeHtml(cooperationsBody)}</p>
+            </div>
+          </div>
           ${
-            vrchatLink
+            cooperationsList.length > 0
               ? `
-                <article class="mini-card">
-                  <div class="section-head compact-section-head">
-                    <div>
-                      <p class="eyebrow">VRChat Flow</p>
-                      <h3>So laeuft die Verknuepfung</h3>
-                    </div>
-                    <span class="pill amber">${escapeHtml(vrchatLink.sourceLabel)}</span>
-                  </div>
-                  <p class="helper-text">1. Die Welt oder der Chat oeffnet diesen Link. 2. Du meldest dich hier an oder registrierst dich. 3. Danach landest du automatisch in deinem SONARA-Profil.</p>
-                  <p class="helper-text">Die eigentliche Welt kann später einfach genau diese URL öffnen: <strong>/vrchat-link</strong> oder <strong>/vrchat-link?source=world</strong>.</p>
-                </article>
-              `
-              : ""
-          }
-
-          ${
-            creators.length
-              ? `
-                <div class="stack-list compact-stack">
-                  <h3>Creator im Fokus</h3>
-                  <div class="team-grid">
-                    ${creators.map((entry) => renderCreatorCard(entry)).join("")}
-                  </div>
+                <div class="cooperations-list">
+                  ${cooperationsList
+                    .map(
+                      (coop) => `
+                        <div class="cooperation-item">
+                          <p>${escapeHtml(coop)}</p>
+                        </div>
+                      `
+                    )
+                    .join("")}
                 </div>
               `
-              : ""
+              : `<p class="helper-text">Kooperationen werden in Kürze bekannt gegeben.</p>`
           }
 
           ${renderLivePreviewPanel(4)}
@@ -10979,7 +10977,7 @@ function renderPublicPortal() {
             <div>
               <p class="eyebrow">Portal</p>
               <h2>${page === "login" ? "Einloggen" : "Registrieren"}</h2>
-              <p class="section-copy">${escapeHtml(landingDescription)}</p>
+              <p class="section-copy">${escapeHtml(aboutUsBody)}</p>
             </div>
           </div>
           <div class="feature-grid">
@@ -11205,6 +11203,12 @@ function collectSiteContentPayload(form) {
     }))
     .filter((entry) => String(entry.title || entry.body || "").trim());
 
+  const cooperationsListText = formData.get("cooperationsList") || "";
+  const cooperationsList = cooperationsListText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
   return {
     heroKicker: formData.get("heroKicker"),
     heroTitle: formData.get("heroTitle"),
@@ -11215,8 +11219,11 @@ function collectSiteContentPayload(form) {
     secondaryButtonUrl: formData.get("secondaryButtonUrl"),
     imageUrl: formData.get("imageUrl"),
     videoUrl: formData.get("videoUrl"),
-    communityTitle: formData.get("communityTitle"),
-    communityBody: formData.get("communityBody"),
+    aboutUsTitle: formData.get("aboutUsTitle"),
+    aboutUsBody: formData.get("aboutUsBody"),
+    cooperationsTitle: formData.get("cooperationsTitle"),
+    cooperationsBody: formData.get("cooperationsBody"),
+    cooperationsList,
     infoCards
   };
 }
@@ -11493,12 +11500,24 @@ function renderSiteContentAdminPanel() {
             <input id="cmsVideoUrl" name="videoUrl" type="text" value="${escapeHtml(draft.videoUrl || "")}">
           </div>
           <div class="field">
-            <label for="cmsCommunityTitle">Community-Titel</label>
-            <input id="cmsCommunityTitle" name="communityTitle" type="text" value="${escapeHtml(draft.communityTitle || "")}">
+            <label for="cmsAboutUsTitle">Wer wir sind - Titel</label>
+            <input id="cmsAboutUsTitle" name="aboutUsTitle" type="text" value="${escapeHtml(draft.aboutUsTitle || "")}">
           </div>
           <div class="field span-all">
-            <label for="cmsCommunityBody">Community-Text</label>
-            <textarea id="cmsCommunityBody" name="communityBody">${escapeHtml(draft.communityBody || "")}</textarea>
+            <label for="cmsAboutUsBody">Wer wir sind - Text</label>
+            <textarea id="cmsAboutUsBody" name="aboutUsBody">${escapeHtml(draft.aboutUsBody || "")}</textarea>
+          </div>
+          <div class="field">
+            <label for="cmsCooperationsTitle">Kooperationen - Titel</label>
+            <input id="cmsCooperationsTitle" name="cooperationsTitle" type="text" value="${escapeHtml(draft.cooperationsTitle || "")}">
+          </div>
+          <div class="field span-all">
+            <label for="cmsCooperationsBody">Kooperationen - Text</label>
+            <textarea id="cmsCooperationsBody" name="cooperationsBody">${escapeHtml(draft.cooperationsBody || "")}</textarea>
+          </div>
+          <div class="field span-all">
+            <label for="cmsCooperationsList">Kooperationen - Liste (eine pro Zeile)</label>
+            <textarea id="cmsCooperationsList" name="cooperationsList" placeholder="Partner 1&#10;Partner 2&#10;Partner 3">${(draft.cooperationsList || []).join("\n")}</textarea>
           </div>
         </div>
 
