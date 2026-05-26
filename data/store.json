@@ -308,8 +308,8 @@
         }
       ],
       "availabilityUpdatedAt": "",
-      "lastLoginAt": "2026-05-26T09:05:06.746Z",
-      "lastSeenAt": "2026-05-26T09:05:06.746Z",
+      "lastLoginAt": "2026-05-26T09:10:05.864Z",
+      "lastSeenAt": "2026-05-26T09:10:05.864Z",
       "isBlocked": false,
       "blockReason": "",
       "blockedAt": "",
@@ -317,12 +317,12 @@
       "passwordHash": "0ddfd45bdc23fe98d2dc6a97fbd9a4f3:8d2f15b82a4170cebf22587118c70e156f795d380fc340cce50808d445ea365e1246886a0038157a333fcecbe81853399262fd7add6bb06509d802f6288bf883"
     },
     {
-      "id": "neuer-admin-sonara",
-      "username": "admin",
-      "displayName": "Admin",
+      "id": "9c6fd766-2373-4b09-a437-f3f5435610bc",
+      "username": "sona",
+      "displayName": "sona",
       "role": "admin",
-      "vrchatName": "Admin",
-      "discordName": "",
+      "vrchatName": "sona",
+      "discordName": "so",
       "discordUserId": "",
       "discordLinkedAt": "",
       "discordAvatarUrl": "",
@@ -335,7 +335,7 @@
       "creatorBlurb": "",
       "creatorLinks": [],
       "creatorVisible": false,
-      "creatorSlug": "admin-new",
+      "creatorSlug": "sona",
       "creatorApplicationStatus": "none",
       "creatorFollowerCount": 0,
       "creatorPrimaryPlatform": "",
@@ -351,7 +351,7 @@
       "creatorPresenceText": "",
       "creatorPresenceUrl": "",
       "creatorPresenceUpdatedAt": "",
-      "creatorWebhookToken": "neueradmintoken1234567890",
+      "creatorWebhookToken": "f446d5ec2d77af5f768f0bcbcd8b35b7ed29fb941512e65f",
       "creatorAutomationLastAt": "",
       "creatorAutomationLastSource": "",
       "vrchatLinkedAt": "",
@@ -362,22 +362,64 @@
       "overtimeAdjustments": [],
       "availabilitySchedule": "",
       "availabilitySlots": [
-        {"day": "mo", "enabled": false, "startTime": "", "endTime": "", "note": ""},
-        {"day": "di", "enabled": false, "startTime": "", "endTime": "", "note": ""},
-        {"day": "mi", "enabled": false, "startTime": "", "endTime": "", "note": ""},
-        {"day": "do", "enabled": false, "startTime": "", "endTime": "", "note": ""},
-        {"day": "fr", "enabled": false, "startTime": "", "endTime": "", "note": ""},
-        {"day": "sa", "enabled": false, "startTime": "", "endTime": "", "note": ""},
-        {"day": "so", "enabled": false, "startTime": "", "endTime": "", "note": ""}
+        {
+          "day": "mo",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "di",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "mi",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "do",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "fr",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "sa",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        },
+        {
+          "day": "so",
+          "enabled": false,
+          "startTime": "",
+          "endTime": "",
+          "note": ""
+        }
       ],
       "availabilityUpdatedAt": "",
-      "lastLoginAt": "",
-      "lastSeenAt": "",
+      "lastLoginAt": "2026-05-26T09:10:59.624Z",
+      "lastSeenAt": "2026-05-26T09:10:59.624Z",
       "isBlocked": false,
       "blockReason": "",
       "blockedAt": "",
       "blockedBy": "",
-      "passwordHash": "7f6a3a3a7d3a3a3a:7f6a3a3a7d3a3a3a7f6a3a3a7d3a3a3a7f6a3a3a7d3a3a3a7f6a3a3a7d3a3a3a7f6a3a3a7d3a3a3a7f6a3a3a7d3a3a3a"
+      "passwordHash": "146ceeb00e1685cec6980018fdd627ab:24011a547fc36f5a897f3e07157ee5509f746b0ef30bd37e129876cc336e01246b655b5b2f1bd5810818285016fbb5d22b625986e6f465180e28be4be50f8dcf"
     }
   ],
   "settings": {
