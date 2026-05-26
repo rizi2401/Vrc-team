@@ -10934,9 +10934,6 @@ function renderPublicPortal() {
               <h2>Der Hain der Sonara</h2>
             </div>
           </div>
-          <div class="section-copy" style="white-space: pre-wrap; line-height: 1.6;">
-${aboutUsBody}
-          </div>
         </section>
       `
     : "";
