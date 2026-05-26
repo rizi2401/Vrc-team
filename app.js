@@ -12037,7 +12037,6 @@ function renderUploadsAdminPanel() {
 
 function renderDashboardTabs(activeTab) {
   const common = [
-    { id: "overview", label: "Dashboard" },
     { id: "community", label: "Community" },
     { id: "events", label: "Events" },
     { id: "news", label: "News" },
@@ -14299,7 +14298,6 @@ function renderFeedPanel() {
 
 function getDashboardTabSections() {
   const communityTabs = [
-    { id: "overview", label: "Home" },
     { id: "feed", label: "Feed" },
     { id: "community", label: "Community" },
     { id: "calendar", label: "Kalender" },
