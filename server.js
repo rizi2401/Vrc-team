@@ -3573,7 +3573,7 @@ function buildDefaultSiteContent() {
     videoUrl: "",
     aboutUsTitle: "Wer wir sind",
     aboutUsBody:
-      "SONARA soll ein Zuhause für Menschen, Creator und Events sein. Inhalte, Regeln, Handbuch und Listen kannst du hier Schritt für Schritt selbst pflegen.",
+      "🌌🐾 Willkommen im Hain der Sonara 🐾🌌\n\nDies ist kein gewöhnlicher Ort.\nDer Hain der Sonara steht für Licht, Verbindung und Gemeinschaft.\n\nHier treffen sich Menschen, die zusammen lachen, spielen, erschaffen\nund einfach sie selbst sein wollen.\nEin Ort, an dem Herzen zusammenfinden – egal woher du kommst\noder wer du bist.\n\nIm Hain darf alles sein:\n✨ Furrys, die ein Zuhause finden\n✨ Gamer, die gemeinsam Abenteuer erleben\n✨ Kreative, die ihre Ideen zum Leben bringen\n✨ Menschen, die einfach dazugehören wollen\n\nDie Sonara stehen für Offenheit, Zusammenhalt und Wärme.\nFür Freundschaft statt Urteil.\nFür ein Miteinander, das stärker ist als Unterschiede.\n\nOb laut oder leise, ob mit Fell oder ohne,\nob im Spiel, im Gespräch oder im gemeinsamen Moment –\nhier zählt nur eines: Respekt und Herz.\n\n🎮 Gaming • 🐾 Furry • 🌲 Natur • 🎨 Kreativität • 💬 Gemeinschaft\n\nDer Hain ist kein Ort zum Konsumieren.\nEr ist ein Ort zum Ankommen, Wachsen und Verbinden.\n\n💫 Tritt ein – und werde Teil des Lichts der Sonara.",
     cooperationsTitle: "Welche Kooperationen wir haben",
     cooperationsBody: "Unsere Partner helfen uns, SONARA zu einem besseren Ort zu machen.",
     cooperationsList: [],
