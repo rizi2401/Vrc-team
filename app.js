@@ -10922,7 +10922,7 @@ function renderPublicPortal() {
     { title: "Bewerbungen", body: "Creator- und Team-Anfragen werden hier sichtbar und bearbeitet" },
     { title: "Mitgliederbereich", body: "Profil, Tickets, Feedback und direkte Kommunikation" }
   ];
-  const aboutUsBody = siteContent.aboutUsBody || "SONARA soll ein Zuhause für Menschen, Creator und Events sein.";
+  const aboutUsBody = siteContent.aboutUsBody || "";
   const cooperationsBody = siteContent.cooperationsBody || "Unsere Partner helfen uns, SONARA zu einem besseren Ort zu machen.";
   const cooperationsList = Array.isArray(siteContent.cooperationsList) ? siteContent.cooperationsList : [];
   const landingPanelHtml = page === "landing"
