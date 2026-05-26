@@ -10934,6 +10934,38 @@ function renderPublicPortal() {
               <h2>Der Hain der Sonara</h2>
             </div>
           </div>
+          <div class="section-copy" style="white-space: pre-wrap; line-height: 1.6;">
+🌌🐾 Willkommen im Hain der Sonara 🐾🌌
+
+Dies ist kein gewöhnlicher Ort.
+Der Hain der Sonara steht für Licht, Verbindung und Gemeinschaft.
+
+Hier treffen sich Menschen, die zusammen lachen, spielen, erschaffen
+und einfach sie selbst sein wollen.
+Ein Ort, an dem Herzen zusammenfinden – egal woher du kommst
+oder wer du bist.
+
+Im Hain darf alles sein:
+✨ Furrys, die ein Zuhause finden
+✨ Gamer, die gemeinsam Abenteuer erleben
+✨ Kreative, die ihre Ideen zum Leben bringen
+✨ Menschen, die einfach dazugehören wollen
+
+Die Sonara stehen für Offenheit, Zusammenhalt und Wärme.
+Für Freundschaft statt Urteil.
+Für ein Miteinander, das stärker ist als Unterschiede.
+
+Ob laut oder leise, ob mit Fell oder ohne,
+ob im Spiel, im Gespräch oder im gemeinsamen Moment –
+hier zählt nur eines: Respekt und Herz.
+
+🎮 Gaming • 🐾 Furry • 🌲 Natur • 🎨 Kreativität • 💬 Gemeinschaft
+
+Der Hain ist kein Ort zum Konsumieren.
+Er ist ein Ort zum Ankommen, Wachsen und Verbinden.
+
+💫 Tritt ein – und werde Teil des Lichts der Sonara.
+          </div>
         </section>
       `
     : "";
