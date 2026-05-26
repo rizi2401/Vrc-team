@@ -516,17 +516,16 @@ async function boot() {
   if (!state.session) {
     // Auto-login as admin for development
     try {
-      await performAction(
-        () =>
-          api("/api/login", {
-            method: "POST",
-            body: JSON.stringify({
-              identifier: "kael",
-              password: "12345"
-            })
-          }),
-        ""
-      );
+      const payload = await api("/api/login", {
+        method: "POST",
+        body: JSON.stringify({
+          identifier: "kael",
+          password: "12345"
+        })
+      });
+      if (payload) {
+        applyPayload(payload);
+      }
     } catch (error) {
       // Fallback to public data if auto-login fails
       await refreshPublicData();
