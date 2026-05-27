@@ -597,6 +597,102 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/applications") {
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+
+    const applicationType = String(body.type || "").trim();
+    const applicationMessage = String(body.message || "").trim();
+
+    if (!applicationType || !applicationMessage) {
+      sendJson(res, 400, { error: "Typ und Nachricht sind erforderlich." });
+      return;
+    }
+
+    const newApplication = {
+      id: require("crypto").randomUUID(),
+      userId: auth.user.id,
+      type: applicationType,
+      message: applicationMessage,
+      status: "pending",
+      adminNote: "",
+      createdAt: new Date().toISOString(),
+      reviewedAt: "",
+      reviewedBy: ""
+    };
+
+    if (!nextStore.applications) nextStore.applications = [];
+    nextStore.applications.push(newApplication);
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "application-submitted" });
+    sendPortalData(res, 201, newApplication, savedStore);
+    return;
+  }
+
+  const applicationChatMatch = url.pathname.match(/^\/api\/applications\/([^/]+)\/chat$/);
+  if (applicationChatMatch && req.method === "POST") {
+    const body = await readJson(req);
+    const applicationId = decodeURIComponent(applicationChatMatch[1]);
+    const nextStore = structuredClone(auth.store);
+
+    const application = (nextStore.applications || []).find(a => a.id === applicationId);
+    if (!application) {
+      sendJson(res, 404, { error: "Bewerbung nicht gefunden." });
+      return;
+    }
+
+    const chatMessage = String(body.message || "").trim();
+    if (!chatMessage) {
+      sendJson(res, 400, { error: "Nachricht erforderlich." });
+      return;
+    }
+
+    if (!nextStore.applicationChats) nextStore.applicationChats = [];
+    nextStore.applicationChats.push({
+      id: require("crypto").randomUUID(),
+      applicationId: applicationId,
+      userId: auth.user.id,
+      message: chatMessage,
+      createdAt: new Date().toISOString()
+    });
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "application-chat-message" });
+    sendPortalData(res, 201, { ok: true }, savedStore);
+    return;
+  }
+
+  const applicationMatch = url.pathname.match(/^\/api\/applications\/([^/]+)$/);
+  if (applicationMatch && req.method === "PATCH") {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const applicationId = decodeURIComponent(applicationMatch[1]);
+    const nextStore = structuredClone(auth.store);
+
+    const application = (nextStore.applications || []).find(a => a.id === applicationId);
+    if (!application) {
+      sendJson(res, 404, { error: "Bewerbung nicht gefunden." });
+      return;
+    }
+
+    const status = String(body.status || "").trim();
+    if (!["pending", "approved", "rejected"].includes(status)) {
+      sendJson(res, 400, { error: "Ungültiger Status." });
+      return;
+    }
+
+    application.status = status;
+    application.adminNote = String(body.adminNote || "").trim();
+    application.reviewedAt = new Date().toISOString();
+    application.reviewedBy = auth.user.id;
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "application-reviewed" });
+    sendPortalData(res, 200, application, savedStore);
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/admin/vrchat/overview") {
     requireRole(auth.user, "planner");
     sendJson(res, 410, { error: "Die VRChat-Datei-Anbindung wurde entfernt." });

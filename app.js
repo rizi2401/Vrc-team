@@ -14487,6 +14487,115 @@ function getDashboardTabSections() {
   return memberSections;
 }
 
+function renderApplicationsListPanel() {
+  const store = state.data;
+  const allApplications = store.applications || [];
+
+  const pendingApps = allApplications.filter(app => app.status === 'pending');
+  const reviewedApps = allApplications.filter(app => ['approved', 'rejected'].includes(app.status));
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Bewerbungssystem</p>
+          <h2>Alle Bewerbungen</h2>
+          <p class="section-copy">Verwalte Bewerbungen für Creator, Moderator, Kooperation und Event-Host.</p>
+        </div>
+      </div>
+
+      ${pendingApps.length ? `
+        <div class="applications-section">
+          <h3>Offene Bewerbungen (${pendingApps.length})</h3>
+          <div class="applications-grid">
+            ${pendingApps.map(app => renderApplicationCard(app)).join('')}
+          </div>
+        </div>
+      ` : renderEmptyState('Keine offenen Bewerbungen', 'Zurzeit liegen keine neuen Bewerbungen vor.')}
+
+      ${reviewedApps.length ? `
+        <div class="applications-section">
+          <h3>Bearbeitete Bewerbungen</h3>
+          <div class="applications-grid">
+            ${reviewedApps.map(app => renderApplicationCard(app)).join('')}
+          </div>
+        </div>
+      ` : ''}
+    </section>
+  `;
+}
+
+function renderSubmittedApplicationsPanel() {
+  const store = state.data;
+  const user = state.session;
+  const userApplications = (store.applications || []).filter(app => app.userId === user.id);
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Meine Bewerbungen</p>
+          <h2>Bewerbungsstatus</h2>
+        </div>
+      </div>
+
+      ${userApplications.length ? `
+        <div class="user-applications-list">
+          ${userApplications.map(app => renderUserApplicationCard(app)).join('')}
+        </div>
+      ` : `
+        <div class="empty-state">
+          <p>Du hast noch keine Bewerbung eingereicht.</p>
+          <a href="#" class="button primary small">Bewerbung starten</a>
+        </div>
+      `}
+    </section>
+  `;
+}
+
+function renderApplicationCard(app) {
+  const store = state.data;
+  const user = store.users.find(u => u.id === app.userId);
+  const statusClass = app.status === 'pending' ? 'status-pending' : app.status === 'approved' ? 'status-approved' : 'status-rejected';
+  const statusLabel = { 'pending': 'Offen', 'approved': 'Genehmigt', 'rejected': 'Abgelehnt', 'none': 'Entwurf' }[app.status] || 'Unbekannt';
+
+  return `
+    <div class="application-card ${statusClass}" data-application-id="${escapeHtml(app.id)}">
+      <div class="app-header">
+        <div>
+          <h4>${escapeHtml(user?.displayName || 'Unbekannter User')}</h4>
+          <p class="app-type">${escapeHtml(app.type)}</p>
+        </div>
+        <span class="status-badge ${statusClass}">${escapeHtml(statusLabel)}</span>
+      </div>
+      <p class="app-date">Eingereicht: ${new Date(app.createdAt).toLocaleDateString('de-DE')}</p>
+      <p class="app-message">${escapeHtml(app.message?.substring(0, 100) || '')}</p>
+      <button type="button" class="button secondary small" data-action="view-application" data-app-id="${escapeHtml(app.id)}">
+        Details & Chat
+      </button>
+    </div>
+  `;
+}
+
+function renderUserApplicationCard(app) {
+  const statusLabel = { 'pending': 'Offen', 'approved': 'Genehmigt', 'rejected': 'Abgelehnt', 'none': 'Entwurf' }[app.status] || 'Unbekannt';
+  const statusClass = app.status === 'pending' ? 'status-pending' : app.status === 'approved' ? 'status-approved' : 'status-rejected';
+
+  return `
+    <div class="user-application-card">
+      <div class="app-info">
+        <h4>${escapeHtml(app.type)}</h4>
+        <p class="app-message">${escapeHtml(app.message?.substring(0, 150) || 'Keine Beschreibung')}</p>
+        <p class="app-meta">Eingereicht: ${new Date(app.createdAt).toLocaleDateString('de-DE')} | Status: <span class="status-badge ${statusClass}">${escapeHtml(statusLabel)}</span></p>
+        ${app.adminNote ? `<p class="admin-note"><strong>Admin-Notiz:</strong> ${escapeHtml(app.adminNote)}</p>` : ''}
+      </div>
+      <button type="button" class="button secondary small" data-action="view-application" data-app-id="${escapeHtml(app.id)}">
+        Chat ansehen
+      </button>
+    </div>
+  `;
+}
+
 function renderCreatorApplicationsPanel() {
   const pendingApplications = canManagePortal() ? getCreatorReviewEntries(["pending"]) : [];
   const recentReviews = canManagePortal() ? getCreatorReviewEntries(["approved", "rejected"]) : [];
@@ -14804,6 +14913,11 @@ function renderManagerDashboard(activeTab) {
       ]);
     case "capacity":
       return renderPortalPanel("capacity.main", renderCapacityPanel());
+    case "applications":
+      return renderPortalPanelList("applications", [
+        { id: "applications.list", render: renderApplicationsListPanel },
+        { id: "applications.submitted", render: renderSubmittedApplicationsPanel }
+      ]);
     case "activity":
       return renderPortalPanel("activity.main", renderPortalActivityPanel());
     case "team":
