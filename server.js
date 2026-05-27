@@ -2057,7 +2057,7 @@ async function handleApi(req, res, url) {
     if (!nextStore.community_welcome_page) {
       nextStore.community_welcome_page = {
         about_us: "",
-        what_we_do: "",
+        rules: "",
         featured_events: [],
         cooperations: []
       };
@@ -2066,8 +2066,8 @@ async function handleApi(req, res, url) {
     if (body.about_us !== undefined) {
       nextStore.community_welcome_page.about_us = String(body.about_us || "").trim();
     }
-    if (body.what_we_do !== undefined) {
-      nextStore.community_welcome_page.what_we_do = String(body.what_we_do || "").trim();
+    if (body.rules !== undefined) {
+      nextStore.community_welcome_page.rules = String(body.rules || "").trim();
     }
 
     const savedStore = writeStore(nextStore);
@@ -2084,7 +2084,7 @@ async function handleApi(req, res, url) {
     if (!nextStore.community_welcome_page) {
       nextStore.community_welcome_page = {
         about_us: "",
-        what_we_do: "",
+        rules: "",
         featured_events: [],
         cooperations: []
       };
@@ -2557,7 +2557,7 @@ function normalizeStore(store) {
     timeEntries: Array.isArray(store.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : [],
     community_welcome_page: store.community_welcome_page || {
       about_us: "",
-      what_we_do: "",
+      rules: "",
       cooperations: []
     }
   };
@@ -3312,7 +3312,7 @@ function buildPublicPortalData(store) {
 
   return {
     community: buildCommunityPayload(store),
-    community_welcome_page: store.community_welcome_page || { about_us: "", cooperations: [] },
+    community_welcome_page: store.community_welcome_page || { about_us: "", rules: "", cooperations: [] },
     feedPosts: publicFeedPosts,
     forumThreads: publicForumThreads,
     systemNotice: decorateSystemNotice(store.systemNotice, store),
@@ -9952,7 +9952,7 @@ function buildPublicPortalData(store) {
 
   return {
     community: buildCommunityPayload(store),
-    community_welcome_page: store.community_welcome_page || { about_us: "", cooperations: [] },
+    community_welcome_page: store.community_welcome_page || { about_us: "", rules: "", cooperations: [] },
     feedPosts: publicFeedPosts,
     forumThreads: publicForumThreads,
     systemNotice: decorateSystemNotice(store.systemNotice, store),

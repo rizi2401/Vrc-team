@@ -1345,7 +1345,6 @@ function renderDashboardTabs(activeTab) {
   if (canManagePortal()) {
     tabs = [
       { id: "welcome", label: "Willkommen" },
-      { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
       { id: "feedback", label: "Feedback" },
@@ -1359,7 +1358,6 @@ function renderDashboardTabs(activeTab) {
   } else if (canAccessStaffArea()) {
     tabs = [
       { id: "welcome", label: "Willkommen" },
-      { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
       { id: "schedule", label: "Meine Schichten" },
@@ -1371,7 +1369,6 @@ function renderDashboardTabs(activeTab) {
   } else {
     tabs = [
       { id: "welcome", label: "Willkommen" },
-      { id: "community", label: "Community" },
       { id: "events", label: "Events" },
       { id: "news", label: "News" },
       { id: "feedback", label: "Feedback" },
@@ -5093,7 +5090,7 @@ function renderCommunityWelcomeAdminPanel() {
   const store = state.data;
   const welcomeData = store?.community_welcome_page || {
     about_us: "",
-    what_we_do: "",
+    rules: "",
     featured_events: [],
     cooperations: []
   };
@@ -5108,15 +5105,19 @@ function renderCommunityWelcomeAdminPanel() {
         <div>
           <p class="eyebrow">Community Willkommen</p>
           <h2>Inhalte und Kooperationen</h2>
-          <p class="section-copy">Verwalte die Willkommen-Sektion mit Infotexten, Featured Events und Kooperationen.</p>
+          <p class="section-copy">Verwalte die Willkommen-Sektion mit Infotexten und Kooperationen.</p>
         </div>
       </div>
 
       <form class="stack-form" data-form="community-welcome-content">
         <div class="form-grid">
           <div class="field span-all">
-            <label for="aboutUs">Über uns</label>
+            <label for="aboutUs">Wer sind wir</label>
             <textarea id="aboutUs" name="about_us" placeholder="Schreibe hier auf, wer die SONARA Community ist...">${escapeHtml(welcomeData.about_us || "")}</textarea>
+          </div>
+          <div class="field span-all">
+            <label for="rules">Regeln</label>
+            <textarea id="rules" name="rules" placeholder="Beschreibe hier die Regeln der Community...">${escapeHtml(welcomeData.rules || "")}</textarea>
           </div>
         </div>
 
@@ -9243,10 +9244,10 @@ function canAccessStaffArea() {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "community", "events", "news", "feedback", "planning", "team", "chat", "time", "profile", "settings"]
+    ? ["overview", "events", "news", "feedback", "planning", "team", "chat", "time", "profile", "settings"]
     : canAccessStaffArea()
-      ? ["overview", "community", "events", "news", "schedule", "feedback", "chat", "time", "profile"]
-      : ["overview", "community", "events", "news", "feedback", "chat", "profile"];
+      ? ["overview", "events", "news", "schedule", "feedback", "chat", "time", "profile"]
+      : ["overview", "events", "news", "feedback", "chat", "profile"];
 
   return allowed.includes(tab) ? tab : "overview";
 }
@@ -10206,7 +10207,7 @@ function renderCommunityWelcomePanel() {
   const store = state.data;
   const welcomeData = store?.community_welcome_page || {};
   const cooperations = welcomeData.cooperations || [];
-  const hasContent = welcomeData.about_us || cooperations.length > 0;
+  const hasContent = welcomeData.about_us || welcomeData.rules || cooperations.length > 0;
 
   return `
     <section class="panel span-12">
@@ -10221,8 +10222,19 @@ function renderCommunityWelcomePanel() {
         welcomeData.about_us
           ? `
         <div class="welcome-section">
-          <h3>Über uns</h3>
+          <h3>Wer sind wir</h3>
           <p>${escapeHtml(welcomeData.about_us)}</p>
+        </div>
+      `
+          : ""
+      }
+
+      ${
+        welcomeData.rules
+          ? `
+        <div class="welcome-section">
+          <h3>Regeln</h3>
+          <p>${escapeHtml(welcomeData.rules)}</p>
         </div>
       `
           : ""
@@ -10232,7 +10244,7 @@ function renderCommunityWelcomePanel() {
         cooperations.length
           ? `
         <div class="welcome-section">
-          <h3>Unsere Kooperationen</h3>
+          <h3>Kooperationen</h3>
           <div class="cooperation-grid">
             ${cooperations
               .map(
@@ -12269,10 +12281,10 @@ function renderMemberDashboard(activeTab) {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "community", "events", "news", "creators", "forum", "feedback", "planning", "team", "chat", "time", "profile", "settings"]
+    ? ["overview", "events", "news", "creators", "forum", "feedback", "planning", "team", "chat", "time", "profile", "settings"]
     : canAccessStaffArea()
-      ? ["overview", "community", "events", "news", "creators", "forum", "schedule", "feedback", "chat", "time", "profile"]
-      : ["overview", "community", "events", "news", "creators", "forum", "feedback", "chat", "profile"];
+      ? ["overview", "events", "news", "creators", "forum", "schedule", "feedback", "chat", "time", "profile"]
+      : ["overview", "events", "news", "creators", "forum", "feedback", "chat", "profile"];
 
   return allowed.includes(tab) ? tab : "overview";
 }
@@ -15060,13 +15072,6 @@ function renderManagerDashboard(activeTab) {
       return renderPortalPanel("welcome.main", renderCommunityWelcomePanel());
     case "feed":
       return renderPortalPanel("feed.main", renderFeedPanel());
-    case "community":
-      return renderPortalPanelList("community", [
-        { id: "community.welcome", render: renderCommunityWelcomePanel },
-        { id: "community.overview", render: renderCommunityOverviewPanel },
-        { id: "community.rules", render: renderCommunityRulesPanel },
-        { id: "community.team", render: renderCommunityTeamPanel }
-      ]);
     case "calendar":
       return renderPortalPanel("calendar.main", renderShiftCalendarPanel());
     case "events":
@@ -15147,13 +15152,6 @@ function renderModeratorDashboard(activeTab) {
       return renderPortalPanel("welcome.main", renderCommunityWelcomePanel());
     case "feed":
       return renderPortalPanel("feed.main", renderFeedPanel());
-    case "community":
-      return renderPortalPanelList("community", [
-        { id: "community.welcome", render: renderCommunityWelcomePanel },
-        { id: "community.overview", render: renderCommunityOverviewPanel },
-        { id: "community.rules", render: renderCommunityRulesPanel },
-        { id: "community.team", render: renderCommunityTeamPanel }
-      ]);
     case "calendar":
       return renderPortalPanel("calendar.main", renderShiftCalendarPanel());
     case "events":
@@ -15219,17 +15217,6 @@ function renderMemberDashboard(activeTab) {
       return renderPortalPanel("welcome.main", renderCommunityWelcomePanel());
     case "feed":
       return renderPortalPanel("feed.main", renderFeedPanel());
-    case "community":
-      return renderPortalPanelList("community", [
-        { id: "community.welcome", render: renderCommunityWelcomePanel },
-        { id: "community.memberActions", render: renderMemberActionHubPanel },
-        { id: "community.memberPulse", render: renderMemberPulsePanel },
-        { id: "community.overview", render: renderCommunityOverviewPanel },
-        { id: "community.memberForum", render: renderMemberForumSpotlightPanel },
-        { id: "community.partnerships", render: renderCommunityPartnershipsPanel },
-        { id: "community.rules", render: renderCommunityRulesPanel },
-        { id: "community.team", render: renderCommunityTeamPanel }
-      ]);
     case "calendar":
       return renderPortalPanel("calendar.main", renderShiftCalendarPanel());
     case "events":
@@ -15267,12 +15254,12 @@ function renderMemberDashboard(activeTab) {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "applications", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents", "apply"]
+    ? ["welcome", "overview", "feed", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "applications", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents", "apply"]
     : canCoordinateStaff()
-      ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile", "apply"]
+      ? ["welcome", "overview", "feed", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile", "apply"]
       : canAccessStaffArea()
-        ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile", "apply"]
-        : ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile", "applications", "apply"];
+        ? ["welcome", "overview", "feed", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile", "apply"]
+        : ["welcome", "overview", "feed", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile", "applications", "apply"];
 
   const allowedTabs = canManageLayout() ? [...allowed, "layout"] : allowed;
   return allowedTabs.includes(tab) ? tab : "welcome";
