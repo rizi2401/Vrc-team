@@ -236,6 +236,7 @@ function handleWsMessage(message) {
         state.publicData.community_welcome_page.about_us = data.about_us;
         state.publicData.community_welcome_page.rules = data.rules;
       }
+      syncWelcomeToSiteContent(data);
       render();
       break;
 
@@ -246,11 +247,13 @@ function handleWsMessage(message) {
       if (state.publicData?.community_welcome_page?.cooperations) {
         state.publicData.community_welcome_page.cooperations.push(data);
       }
+      syncCooperationsToSiteContent();
       render();
       break;
 
     case "cooperation-updated":
       updateCooperationInState(data);
+      syncCooperationsToSiteContent();
       render();
       break;
 
@@ -263,6 +266,7 @@ function handleWsMessage(message) {
         state.publicData.community_welcome_page.cooperations =
           state.publicData.community_welcome_page.cooperations.filter(c => c.id !== data.id);
       }
+      syncCooperationsToSiteContent();
       render();
       break;
 
@@ -293,6 +297,37 @@ function updateCooperationInState(updatedCooperation) {
     if (idx >= 0) {
       state.publicData.community_welcome_page.cooperations[idx] = updatedCooperation;
     }
+  }
+}
+
+function syncWelcomeToSiteContent(data) {
+  if (state.data?.siteContent && data.about_us !== undefined) {
+    state.data.siteContent.draft.aboutUsBody = data.about_us;
+    state.data.siteContent.published.aboutUsBody = data.about_us;
+  }
+  if (state.publicData?.siteContent && data.about_us !== undefined) {
+    state.publicData.siteContent.draft.aboutUsBody = data.about_us;
+    state.publicData.siteContent.published.aboutUsBody = data.about_us;
+  }
+  if (state.publicData?.noCode?.siteContent && data.about_us !== undefined) {
+    state.publicData.noCode.siteContent.draft.aboutUsBody = data.about_us;
+    state.publicData.noCode.siteContent.published.aboutUsBody = data.about_us;
+  }
+}
+
+function syncCooperationsToSiteContent() {
+  const cooperations = state.data?.community_welcome_page?.cooperations || [];
+  if (state.data?.siteContent) {
+    state.data.siteContent.draft.cooperationsList = structuredClone(cooperations);
+    state.data.siteContent.published.cooperationsList = structuredClone(cooperations);
+  }
+  if (state.publicData?.siteContent) {
+    state.publicData.siteContent.draft.cooperationsList = structuredClone(cooperations);
+    state.publicData.siteContent.published.cooperationsList = structuredClone(cooperations);
+  }
+  if (state.publicData?.noCode?.siteContent) {
+    state.publicData.noCode.siteContent.draft.cooperationsList = structuredClone(cooperations);
+    state.publicData.noCode.siteContent.published.cooperationsList = structuredClone(cooperations);
   }
 }
 
@@ -8723,7 +8758,7 @@ async function handleSubmit(event) {
             method: "POST",
             body: JSON.stringify({
               about_us: formData.get("about_us"),
-              what_we_do: formData.get("what_we_do")
+              rules: formData.get("rules")
             })
           }),
         "Willkommen-Inhalte wurden gespeichert."
@@ -11117,7 +11152,7 @@ function renderPublicPortal() {
             </div>
           </div>
           <div class="section-copy" style="white-space: pre-wrap; line-height: 1.6;">
-🌌🐾 Willkommen im Hain der Sonara 🐾🌌
+${escapeHtml(siteContent.aboutUsBody || `🌌🐾 Willkommen im Hain der Sonara 🐾🌌
 
 Dies ist kein gewöhnlicher Ort.
 Der Hain der Sonara steht für Licht, Verbindung und Gemeinschaft.
@@ -11146,7 +11181,7 @@ hier zählt nur eines: Respekt und Herz.
 Der Hain ist kein Ort zum Konsumieren.
 Er ist ein Ort zum Ankommen, Wachsen und Verbinden.
 
-💫 Tritt ein – und werde Teil des Lichts der Sonara.
+💫 Tritt ein – und werde Teil des Lichts der Sonara.`)}
           </div>
         </section>
       `
@@ -11167,12 +11202,14 @@ Er ist ein Ort zum Ankommen, Wachsen und Verbinden.
           ${
             cooperationsList.length > 0
               ? `
-                <div class="cooperations-list">
+                <div class="cooperations-grid">
                   ${cooperationsList
                     .map(
                       (coop) => `
-                        <div class="cooperation-item">
-                          <p>${escapeHtml(coop)}</p>
+                        <div class="cooperation-card">
+                          ${coop.logo_url ? `<img src="${escapeHtml(coop.logo_url)}" alt="${escapeHtml(coop.name)}" class="cooperation-card-logo">` : ""}
+                          <h4>${escapeHtml(coop.name)}</h4>
+                          ${coop.discord_link ? `<a href="${escapeHtml(coop.discord_link)}" target="_blank" rel="noopener noreferrer" class="cooperation-link">Zum Discord</a>` : ""}
                         </div>
                       `
                     )
