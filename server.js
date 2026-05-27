@@ -2316,8 +2316,8 @@ async function initializePortalStore() {
   const db = getPortalStorePool();
 
   if (!db) {
+    console.log("Datenbank nicht verfügbar (lokale Entwicklung) - nutze JSON-Fallback");
     const normalized = normalizeStore(readFileStore());
-    fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
     portalStoreCache = normalized;
     return;
   }
@@ -2338,24 +2338,27 @@ async function initializePortalStore() {
 
     if (existing.rows[0]?.data) {
       portalStoreCache = normalizeStore(existing.rows[0].data);
+      console.log("✓ Portal-Daten von Datenbank geladen (Render)");
       return;
     }
 
-    const fallback = normalizeStore(readFileStore());
+    const defaultStore = buildDefaultStore();
     await db.query(
       `
         INSERT INTO portal_state_store (store_key, data, updated_at)
         VALUES ($1, $2::jsonb, NOW())
         ON CONFLICT (store_key) DO NOTHING
       `,
-      [PORTAL_STORE_KEY, JSON.stringify(fallback)]
+      [PORTAL_STORE_KEY, JSON.stringify(defaultStore)]
     );
-    portalStoreCache = fallback;
+    portalStoreCache = normalizeStore(defaultStore);
+    console.log("✓ Standard-Daten in Datenbank initialisiert (Render)");
   } catch (error) {
+    console.error(`Fehler beim Laden der Datenbank: ${error.message}`);
     disablePortalStoreDb(error);
     const normalized = normalizeStore(readFileStore());
-    fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
     portalStoreCache = normalized;
+    console.log("⚠ Fallback auf JSON-Datei");
   }
 
   await initializeSchedulingStoreFromDb();
