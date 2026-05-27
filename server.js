@@ -2372,8 +2372,9 @@ async function ensurePortalStoreReady() {
 function persistPortalStore(normalized) {
   const db = getPortalStorePool();
 
+  fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
+
   if (!db) {
-    fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
     return;
   }
 
@@ -2395,7 +2396,6 @@ function persistPortalStore(normalized) {
     })
     .catch((error) => {
       disablePortalStoreDb(error);
-      fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
     });
 }
 
