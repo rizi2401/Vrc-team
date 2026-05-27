@@ -1560,72 +1560,7 @@ function renderMemberDashboard(activeTab) {
 }
 
 function renderWelcomeHeroPanel() {
-  return `
-    <section class="panel span-12 welcome-hero">
-      <div class="hero-content">
-        <div class="hero-text">
-          <p class="eyebrow">Willkommen</p>
-          <h1>SONARA Community</h1>
-          <p class="hero-description">
-            SONARA ist eine vibrierende deutschsprachige Gaming- und Kreativ-Community, die sich in virtuellen Welten trifft,
-            gemeinsam Events erlebt und sich gegenseitig unterstützt. Wir legen Wert auf Respekt,
-            Zusammenhalt und faire Umgangston.
-          </p>
-          <div class="hero-stats">
-            <div class="stat">
-              <span class="stat-number">500+</span>
-              <span class="stat-label">Community-Mitglieder</span>
-            </div>
-            <div class="stat">
-              <span class="stat-number">12</span>
-              <span class="stat-label">Events pro Monat</span>
-            </div>
-            <div class="stat">
-              <span class="stat-number">7</span>
-              <span class="stat-label">Kreative Communities</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="hero-section">
-        <h2>Unsere Werte</h2>
-        <div class="values-grid">
-          <div class="value-card">
-            <h3>Respekt</h3>
-            <p>Wir behandeln einander fair, freundlich und ohne persönliche Angriffe.</p>
-          </div>
-          <div class="value-card">
-            <h3>Zusammenhalt</h3>
-            <p>Als Team unterstützen wir uns gegenseitig und feiern Erfolge gemeinsam.</p>
-          </div>
-          <div class="value-card">
-            <h3>Transparenz</h3>
-            <p>Offene Kommunikation und ehrliches Feedback prägen unsere Kultur.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="hero-section">
-        <h2>Kooperationen</h2>
-        <p class="section-copy">SONARA arbeitet mit ausgewählten Creator-Communities und Streaming-Netzwerken zusammen.</p>
-        <div class="coop-list">
-          <div class="coop-item">
-            <span class="coop-name">VRChat Community Hub</span>
-            <span class="coop-desc">Gemeinsame Events und World-Hosting</span>
-          </div>
-          <div class="coop-item">
-            <span class="coop-name">Creator Network Deutsch</span>
-            <span class="coop-desc">Cross-Promotion und Collab-Möglichkeiten</span>
-          </div>
-          <div class="coop-item">
-            <span class="coop-name">Gaming Creators Alliance</span>
-            <span class="coop-desc">Knowledge-Sharing und Joint Events</span>
-          </div>
-        </div>
-      </div>
-    </section>
-  `;
+  return ``;
 }
 
 function renderDashboardGuidePanel(mode) {
@@ -10215,88 +10150,7 @@ function renderCommunityOverviewPanel() {
 }
 
 function renderCommunityWelcomePanel() {
-  const store = state.data;
-  const welcomeData = store?.community_welcome_page || {};
-  const community = getCommunityData();
-  const events = community.events || [];
-  const cooperations = welcomeData.cooperations || [];
-  const featuredEventIds = welcomeData.featured_events || [];
-  const featuredEvents = featuredEventIds
-    .map((eventId) => events.find((e) => e.id === eventId))
-    .filter(Boolean);
-
-  return `
-    <section class="panel span-12">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">Willkommen</p>
-          <h2>SONARA Community</h2>
-          <p class="section-copy">Hier ist dein Zuhause für Events, Creator und Zusammenarbeit.</p>
-        </div>
-      </div>
-
-      ${
-        welcomeData.about_us
-          ? `
-        <div class="welcome-section">
-          <h3>Wer wir sind</h3>
-          <p>${escapeHtml(welcomeData.about_us)}</p>
-        </div>
-      `
-          : ""
-      }
-
-      ${
-        welcomeData.what_we_do
-          ? `
-        <div class="welcome-section">
-          <h3>Was wir machen</h3>
-          <p>${escapeHtml(welcomeData.what_we_do)}</p>
-        </div>
-      `
-          : ""
-      }
-
-      ${
-        featuredEvents.length
-          ? `
-        <div class="welcome-section">
-          <h3>Kommende Events</h3>
-          <div class="welcome-events-grid">
-            ${featuredEvents.map((event) => renderEventCard(event)).join("")}
-          </div>
-        </div>
-      `
-          : ""
-      }
-
-      ${
-        cooperations.length
-          ? `
-        <div class="welcome-section">
-          <h3>Kooperationen</h3>
-          <div class="cooperation-grid">
-            ${cooperations
-              .map((coop) => {
-                const imageSrc = coop.image_path || "/sonara-crest.png";
-                return `
-              <a href="${escapeHtml(coop.url)}" target="_blank" rel="noopener noreferrer" class="cooperation-card">
-                ${coop.image_path ? `<img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(coop.title)}" class="cooperation-image">` : ""}
-                <div class="cooperation-content">
-                  <h4>${escapeHtml(coop.title)}</h4>
-                  ${coop.description ? `<p>${escapeHtml(coop.description)}</p>` : ""}
-                </div>
-              </a>
-            `;
-              })
-              .join("")}
-          </div>
-        </div>
-      `
-          : ""
-      }
-    </section>
-  `;
+  return ``;
 }
 
 function renderCommunityRulesPanel() {
@@ -14497,7 +14351,6 @@ function renderFeedPanel() {
 
 function getDashboardTabSections() {
   const communityTabs = [
-    { id: "welcome", label: "Willkommen" },
     { id: "feed", label: "Feed" },
     { id: "community", label: "Community" },
     { id: "calendar", label: "Kalender" },
