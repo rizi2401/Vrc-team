@@ -2372,9 +2372,8 @@ async function ensurePortalStoreReady() {
 function persistPortalStore(normalized) {
   const db = getPortalStorePool();
 
-  fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
-
   if (!db) {
+    console.error("Datenbank nicht verfügbar! Speicherung fehlgeschlagen. Bitte Datenbankverbindung überprüfen.");
     return;
   }
 
@@ -2395,6 +2394,7 @@ function persistPortalStore(normalized) {
       await syncSchedulingDomainToDb(db, normalized);
     })
     .catch((error) => {
+      console.error("Datenspeicherung fehlgeschlagen:", error);
       disablePortalStoreDb(error);
     });
 }
