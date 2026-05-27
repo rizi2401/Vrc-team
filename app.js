@@ -10150,7 +10150,41 @@ function renderCommunityOverviewPanel() {
 }
 
 function renderCommunityWelcomePanel() {
-  return ``;
+  const store = state.data;
+  const welcomeData = store?.community_welcome_page || {};
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Willkommen</p>
+          <h2>SONARA Community</h2>
+        </div>
+      </div>
+
+      ${
+        welcomeData.about_us
+          ? `
+        <div class="welcome-section">
+          <h3>Wer wir sind</h3>
+          <p>${escapeHtml(welcomeData.about_us)}</p>
+        </div>
+      `
+          : ""
+      }
+
+      ${
+        welcomeData.what_we_do
+          ? `
+        <div class="welcome-section">
+          <h3>Was wir machen</h3>
+          <p>${escapeHtml(welcomeData.what_we_do)}</p>
+        </div>
+      `
+          : ""
+      }
+    </section>
+  `;
 }
 
 function renderCommunityRulesPanel() {
