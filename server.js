@@ -597,6 +597,102 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/applications") {
+    const body = await readJson(req);
+    const nextStore = structuredClone(auth.store);
+
+    const applicationType = String(body.type || "").trim();
+    const applicationMessage = String(body.message || "").trim();
+
+    if (!applicationType || !applicationMessage) {
+      sendJson(res, 400, { error: "Typ und Nachricht sind erforderlich." });
+      return;
+    }
+
+    const newApplication = {
+      id: require("crypto").randomUUID(),
+      userId: auth.user.id,
+      type: applicationType,
+      message: applicationMessage,
+      status: "pending",
+      adminNote: "",
+      createdAt: new Date().toISOString(),
+      reviewedAt: "",
+      reviewedBy: ""
+    };
+
+    if (!nextStore.applications) nextStore.applications = [];
+    nextStore.applications.push(newApplication);
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "application-submitted" });
+    sendPortalData(res, 201, newApplication, savedStore);
+    return;
+  }
+
+  const applicationChatMatch = url.pathname.match(/^\/api\/applications\/([^/]+)\/chat$/);
+  if (applicationChatMatch && req.method === "POST") {
+    const body = await readJson(req);
+    const applicationId = decodeURIComponent(applicationChatMatch[1]);
+    const nextStore = structuredClone(auth.store);
+
+    const application = (nextStore.applications || []).find(a => a.id === applicationId);
+    if (!application) {
+      sendJson(res, 404, { error: "Bewerbung nicht gefunden." });
+      return;
+    }
+
+    const chatMessage = String(body.message || "").trim();
+    if (!chatMessage) {
+      sendJson(res, 400, { error: "Nachricht erforderlich." });
+      return;
+    }
+
+    if (!nextStore.applicationChats) nextStore.applicationChats = [];
+    nextStore.applicationChats.push({
+      id: require("crypto").randomUUID(),
+      applicationId: applicationId,
+      userId: auth.user.id,
+      message: chatMessage,
+      createdAt: new Date().toISOString()
+    });
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "application-chat-message" });
+    sendPortalData(res, 201, { ok: true }, savedStore);
+    return;
+  }
+
+  const applicationMatch = url.pathname.match(/^\/api\/applications\/([^/]+)$/);
+  if (applicationMatch && req.method === "PATCH") {
+    requireRole(auth.user, "planner");
+    const body = await readJson(req);
+    const applicationId = decodeURIComponent(applicationMatch[1]);
+    const nextStore = structuredClone(auth.store);
+
+    const application = (nextStore.applications || []).find(a => a.id === applicationId);
+    if (!application) {
+      sendJson(res, 404, { error: "Bewerbung nicht gefunden." });
+      return;
+    }
+
+    const status = String(body.status || "").trim();
+    if (!["pending", "approved", "rejected"].includes(status)) {
+      sendJson(res, 400, { error: "Ungültiger Status." });
+      return;
+    }
+
+    application.status = status;
+    application.adminNote = String(body.adminNote || "").trim();
+    application.reviewedAt = new Date().toISOString();
+    application.reviewedBy = auth.user.id;
+
+    const savedStore = writeStore(nextStore);
+    broadcastEvent("portal", { type: "application-reviewed" });
+    sendPortalData(res, 200, application, savedStore);
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/admin/vrchat/overview") {
     requireRole(auth.user, "planner");
     sendJson(res, 410, { error: "Die VRChat-Datei-Anbindung wurde entfernt." });
@@ -1996,15 +2092,14 @@ async function handleApi(req, res, url) {
 
     const cooperation = {
       id: crypto.randomUUID(),
-      title: String(body.title || "").trim(),
-      description: String(body.description || "").trim(),
-      image_path: String(body.image_path || "").trim(),
-      url: String(body.url || "").trim(),
-      createdAt: new Date().toISOString()
+      name: String(body.name || "").trim(),
+      discord_link: String(body.discord_link || "").trim(),
+      logo_url: String(body.logo_url || "").trim(),
+      created_at: new Date().toISOString()
     };
 
-    if (!cooperation.title || !cooperation.url) {
-      sendJson(res, 400, { error: "Titel und URL sind erforderlich." });
+    if (!cooperation.name) {
+      sendJson(res, 400, { error: "Name ist erforderlich." });
       return;
     }
 
@@ -2033,17 +2128,14 @@ async function handleApi(req, res, url) {
       return;
     }
 
-    if (body.title !== undefined) {
-      cooperation.title = String(body.title || "").trim();
+    if (body.name !== undefined) {
+      cooperation.name = String(body.name || "").trim();
     }
-    if (body.description !== undefined) {
-      cooperation.description = String(body.description || "").trim();
+    if (body.discord_link !== undefined) {
+      cooperation.discord_link = String(body.discord_link || "").trim();
     }
-    if (body.image_path !== undefined) {
-      cooperation.image_path = String(body.image_path || "").trim();
-    }
-    if (body.url !== undefined) {
-      cooperation.url = String(body.url || "").trim();
+    if (body.logo_url !== undefined) {
+      cooperation.logo_url = String(body.logo_url || "").trim();
     }
 
     const savedStore = writeStore(nextStore);
@@ -2224,8 +2316,8 @@ async function initializePortalStore() {
   const db = getPortalStorePool();
 
   if (!db) {
+    console.log("Datenbank nicht verfügbar (lokale Entwicklung) - nutze JSON-Fallback");
     const normalized = normalizeStore(readFileStore());
-    fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
     portalStoreCache = normalized;
     return;
   }
@@ -2246,24 +2338,27 @@ async function initializePortalStore() {
 
     if (existing.rows[0]?.data) {
       portalStoreCache = normalizeStore(existing.rows[0].data);
+      console.log("✓ Portal-Daten von Datenbank geladen (Render)");
       return;
     }
 
-    const fallback = normalizeStore(readFileStore());
+    const defaultStore = buildDefaultStore();
     await db.query(
       `
         INSERT INTO portal_state_store (store_key, data, updated_at)
         VALUES ($1, $2::jsonb, NOW())
         ON CONFLICT (store_key) DO NOTHING
       `,
-      [PORTAL_STORE_KEY, JSON.stringify(fallback)]
+      [PORTAL_STORE_KEY, JSON.stringify(defaultStore)]
     );
-    portalStoreCache = fallback;
+    portalStoreCache = normalizeStore(defaultStore);
+    console.log("✓ Standard-Daten in Datenbank initialisiert (Render)");
   } catch (error) {
+    console.error(`Fehler beim Laden der Datenbank: ${error.message}`);
     disablePortalStoreDb(error);
     const normalized = normalizeStore(readFileStore());
-    fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
     portalStoreCache = normalized;
+    console.log("⚠ Fallback auf JSON-Datei");
   }
 
   await initializeSchedulingStoreFromDb();
@@ -2281,7 +2376,7 @@ function persistPortalStore(normalized) {
   const db = getPortalStorePool();
 
   if (!db) {
-    fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
+    console.error("Datenbank nicht verfügbar! Speicherung fehlgeschlagen. Bitte Datenbankverbindung überprüfen.");
     return;
   }
 
@@ -2302,8 +2397,8 @@ function persistPortalStore(normalized) {
       await syncSchedulingDomainToDb(db, normalized);
     })
     .catch((error) => {
+      console.error("Datenspeicherung fehlgeschlagen:", error);
       disablePortalStoreDb(error);
-      fs.writeFileSync(STORE_PATH, JSON.stringify(normalized, null, 2));
     });
 }
 
@@ -2459,7 +2554,12 @@ function normalizeStore(store) {
     announcements: Array.isArray(store.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
     chatMessages: Array.isArray(store.chatMessages) ? normalizeChatMessages(store.chatMessages, users, shifts) : [],
     swapRequests: Array.isArray(store.swapRequests) ? normalizeSwapRequests(store.swapRequests, users, shifts) : [],
-    timeEntries: Array.isArray(store.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : []
+    timeEntries: Array.isArray(store.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : [],
+    community_welcome_page: store.community_welcome_page || {
+      about_us: "",
+      what_we_do: "",
+      cooperations: []
+    }
   };
 }
 

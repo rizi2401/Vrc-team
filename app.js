@@ -42,7 +42,7 @@ const AVAILABILITY_DAYS = [
 const CHAT_TRIM_OPTIONS = [20, 30, 40, 50];
 const SONARA_ART_PATH = "/sonara-crest.png";
 const CREATOR_MIN_FOLLOWERS = 200;
-const API_TIMEOUT_MS = 12000;
+const API_TIMEOUT_MS = 30000;
 const LIVEKIT_CLIENT_URLS = [
   "https://cdn.jsdelivr.net/npm/livekit-client@2.18.7/dist/livekit-client.umd.js",
   "https://unpkg.com/livekit-client@2.18.7/dist/livekit-client.umd.js"
@@ -525,9 +525,13 @@ async function api(path, options = {}) {
     typeof AbortController !== "undefined" && !options.signal
       ? new AbortController()
       : null;
+  let timedOut = false;
   const timeoutId =
     controller && typeof window !== "undefined" && typeof window.setTimeout === "function"
-      ? window.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+      ? window.setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, API_TIMEOUT_MS)
       : 0;
 
   let response;
@@ -543,9 +547,10 @@ async function api(path, options = {}) {
     });
   } catch (error) {
     if (timeoutId) window.clearTimeout(timeoutId);
-    if (error?.name === "AbortError") {
+    if (error?.name === "AbortError" && timedOut) {
       const timeoutError = new Error("Der Server antwortet gerade nicht. Bitte lade die Seite gleich noch einmal neu.");
       timeoutError.status = 0;
+      timeoutError.isTimeout = true;
       throw timeoutError;
     }
     throw error;
@@ -1560,72 +1565,7 @@ function renderMemberDashboard(activeTab) {
 }
 
 function renderWelcomeHeroPanel() {
-  return `
-    <section class="panel span-12 welcome-hero">
-      <div class="hero-content">
-        <div class="hero-text">
-          <p class="eyebrow">Willkommen</p>
-          <h1>SONARA Community</h1>
-          <p class="hero-description">
-            SONARA ist eine vibrierende deutschsprachige Gaming- und Kreativ-Community, die sich in virtuellen Welten trifft,
-            gemeinsam Events erlebt und sich gegenseitig unterstützt. Wir legen Wert auf Respekt,
-            Zusammenhalt und faire Umgangston.
-          </p>
-          <div class="hero-stats">
-            <div class="stat">
-              <span class="stat-number">500+</span>
-              <span class="stat-label">Community-Mitglieder</span>
-            </div>
-            <div class="stat">
-              <span class="stat-number">12</span>
-              <span class="stat-label">Events pro Monat</span>
-            </div>
-            <div class="stat">
-              <span class="stat-number">7</span>
-              <span class="stat-label">Kreative Communities</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="hero-section">
-        <h2>Unsere Werte</h2>
-        <div class="values-grid">
-          <div class="value-card">
-            <h3>Respekt</h3>
-            <p>Wir behandeln einander fair, freundlich und ohne persönliche Angriffe.</p>
-          </div>
-          <div class="value-card">
-            <h3>Zusammenhalt</h3>
-            <p>Als Team unterstützen wir uns gegenseitig und feiern Erfolge gemeinsam.</p>
-          </div>
-          <div class="value-card">
-            <h3>Transparenz</h3>
-            <p>Offene Kommunikation und ehrliches Feedback prägen unsere Kultur.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="hero-section">
-        <h2>Kooperationen</h2>
-        <p class="section-copy">SONARA arbeitet mit ausgewählten Creator-Communities und Streaming-Netzwerken zusammen.</p>
-        <div class="coop-list">
-          <div class="coop-item">
-            <span class="coop-name">VRChat Community Hub</span>
-            <span class="coop-desc">Gemeinsame Events und World-Hosting</span>
-          </div>
-          <div class="coop-item">
-            <span class="coop-name">Creator Network Deutsch</span>
-            <span class="coop-desc">Cross-Promotion und Collab-Möglichkeiten</span>
-          </div>
-          <div class="coop-item">
-            <span class="coop-name">Gaming Creators Alliance</span>
-            <span class="coop-desc">Knowledge-Sharing und Joint Events</span>
-          </div>
-        </div>
-      </div>
-    </section>
-  `;
+  return ``;
 }
 
 function renderDashboardGuidePanel(mode) {
@@ -5195,7 +5135,7 @@ function renderCommunityWelcomeAdminPanel() {
         <div>
           <p class="eyebrow">Kooperationen</p>
           <h2>Partner und Links</h2>
-          <p class="section-copy">Verwalte externe Kooperationen mit Titeln, Beschreibungen und Links.</p>
+          <p class="section-copy">Verwalte Kooperationen mit Name, Discord-Link und Logo.</p>
         </div>
         <span class="pill neutral">${cooperations.length} Kooperationen</span>
       </div>
@@ -5206,17 +5146,16 @@ function renderCommunityWelcomeAdminPanel() {
         <div class="cooperations-table">
           ${cooperations
             .map(
-              (coop, idx) => `
+              (coop) => `
             <div class="cooperation-row">
               <div class="cooperation-info">
+                ${coop.logo_url ? `<img src="${escapeHtml(coop.logo_url)}" alt="${escapeHtml(coop.name)}" class="cooperation-logo">` : ""}
                 <div class="cooperation-header">
-                  <h4>${escapeHtml(coop.title)}</h4>
-                  <a href="${escapeHtml(coop.url)}" target="_blank" rel="noopener noreferrer" class="timeline-meta">${escapeHtml(coop.url)}</a>
+                  <h4>${escapeHtml(coop.name)}</h4>
+                  ${coop.discord_link ? `<a href="${escapeHtml(coop.discord_link)}" target="_blank" rel="noopener noreferrer" class="timeline-meta">Discord</a>` : ""}
                 </div>
-                ${coop.description ? `<p class="timeline-meta">${escapeHtml(coop.description)}</p>` : ""}
               </div>
               <div class="cooperation-actions">
-                <button type="button" class="small ghost" data-action="edit-cooperation" data-id="${escapeHtml(coop.id)}">Bearbeiten</button>
                 <button type="button" class="small ghost danger" data-action="delete-cooperation" data-id="${escapeHtml(coop.id)}">Loeschen</button>
               </div>
             </div>
@@ -5237,21 +5176,17 @@ function renderCommunityWelcomeAdminPanel() {
           ? `
         <form class="stack-form" data-form="cooperation-create" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line);">
           <div class="form-grid">
-            <div class="field">
-              <label for="coopTitle">Titel</label>
-              <input id="coopTitle" name="title" type="text" value="${escapeHtml(cooperationDraft.title || "")}" placeholder="z. B. Partner-Community">
-            </div>
-            <div class="field">
-              <label for="coopUrl">URL</label>
-              <input id="coopUrl" name="url" type="url" value="${escapeHtml(cooperationDraft.url || "")}" placeholder="https://example.com">
+            <div class="field span-all">
+              <label for="coopName">Name</label>
+              <input id="coopName" name="name" type="text" value="${escapeHtml(cooperationDraft.name || "")}" placeholder="z. B. Partner-Community" required>
             </div>
             <div class="field span-all">
-              <label for="coopDescription">Beschreibung (optional)</label>
-              <textarea id="coopDescription" name="description" placeholder="Kurzbeschreibung der Kooperation...">${escapeHtml(cooperationDraft.description || "")}</textarea>
+              <label for="coopDiscordLink">Discord-Link (optional)</label>
+              <input id="coopDiscordLink" name="discord_link" type="url" value="${escapeHtml(cooperationDraft.discord_link || "")}" placeholder="https://discord.gg/...">
             </div>
             <div class="field span-all">
-              <label for="coopImagePath">Bild-URL (optional)</label>
-              <input id="coopImagePath" name="image_path" type="url" value="${escapeHtml(cooperationDraft.image_path || "")}" placeholder="https://example.com/image.png">
+              <label for="coopLogoFile">Logo-Bild (optional)</label>
+              <input id="coopLogoFile" name="logoFile" type="file" accept="image/*">
             </div>
           </div>
 
@@ -6031,6 +5966,13 @@ async function handleClick(event) {
       render();
       break;
 
+    case "view-application": {
+      const appId = actionElement.dataset.appId;
+      state.ui.selectedApplicationId = appId || "";
+      render();
+      break;
+    }
+
     case "toggle-panel-collapse": {
       const panelId = actionElement.dataset.panelId || "";
       if (!panelId) return;
@@ -6450,10 +6392,8 @@ async function handleClick(event) {
       state.ui.uiStates = state.ui.uiStates || {};
       state.ui.uiStates["show-cooperation-form"] = true;
       setPersistentFormDraft("cooperation-create", {
-        title: cooperation.title,
-        description: cooperation.description,
-        image_path: cooperation.image_path,
-        url: cooperation.url
+        name: cooperation.name,
+        discord_link: cooperation.discord_link
       });
       render();
       break;
@@ -8625,15 +8565,15 @@ async function handleSubmit(event) {
     case "cooperation-create": {
       const formData = new FormData(form);
       const coopId = form.dataset.coopId;
+      const logoUrl = await readImageFileInput(form.querySelector('input[name="logoFile"]'));
       await performAction(
         () =>
           api(coopId ? `/api/community/cooperation/${encodeURIComponent(coopId)}` : "/api/community/cooperation", {
             method: coopId ? "PUT" : "POST",
             body: JSON.stringify({
-              title: formData.get("title"),
-              description: formData.get("description"),
-              image_path: formData.get("image_path"),
-              url: formData.get("url")
+              name: formData.get("name"),
+              discord_link: formData.get("discord_link"),
+              logo_url: logoUrl || ""
             })
           }),
         coopId ? "Kooperation wurde aktualisiert." : "Kooperation wurde hinzugefuegt."
@@ -9200,6 +9140,57 @@ async function handleSubmit(event) {
           }),
         "Verfügbarkeit wurde aktualisiert."
       );
+      break;
+    }
+
+    case "application-submit": {
+      const formData = new FormData(form);
+      const type = String(formData.get("type") || "").trim();
+      const message = String(formData.get("message") || "").trim();
+      if (!type || !message) {
+        setFlash("Bitte fülle alle Felder aus.", "danger");
+        break;
+      }
+      await performAction(
+        () => api("/api/applications", { method: "POST", body: JSON.stringify({ type, message }) }),
+        "Deine Bewerbung wurde eingereicht."
+      );
+      form.reset();
+      render();
+      break;
+    }
+
+    case "application-chat": {
+      const formData = new FormData(form);
+      const applicationId = form.dataset.applicationId;
+      const message = String(formData.get("message") || "").trim();
+      if (!message) {
+        setFlash("Nachricht kann nicht leer sein.", "danger");
+        break;
+      }
+      await performAction(
+        () => api(`/api/applications/${encodeURIComponent(applicationId)}/chat`, { method: "POST", body: JSON.stringify({ message }) }),
+        "Nachricht gesendet."
+      );
+      form.reset();
+      render();
+      break;
+    }
+
+    case "application-review": {
+      const formData = new FormData(form);
+      const applicationId = form.dataset.applicationId;
+      const status = String(formData.get("status") || "").trim();
+      const adminNote = String(formData.get("adminNote") || "").trim();
+      if (!["pending", "approved", "rejected"].includes(status)) {
+        setFlash("Ungültiger Status.", "danger");
+        break;
+      }
+      await performAction(
+        () => api(`/api/applications/${encodeURIComponent(applicationId)}`, { method: "PATCH", body: JSON.stringify({ status, adminNote }) }),
+        "Bewerbung wurde aktualisiert."
+      );
+      render();
       break;
     }
 
@@ -10217,13 +10208,8 @@ function renderCommunityOverviewPanel() {
 function renderCommunityWelcomePanel() {
   const store = state.data;
   const welcomeData = store?.community_welcome_page || {};
-  const community = getCommunityData();
-  const events = community.events || [];
   const cooperations = welcomeData.cooperations || [];
-  const featuredEventIds = welcomeData.featured_events || [];
-  const featuredEvents = featuredEventIds
-    .map((eventId) => events.find((e) => e.id === eventId))
-    .filter(Boolean);
+  const hasContent = welcomeData.about_us || welcomeData.what_we_do || cooperations.length > 0;
 
   return `
     <section class="panel span-12">
@@ -10231,7 +10217,6 @@ function renderCommunityWelcomePanel() {
         <div>
           <p class="eyebrow">Willkommen</p>
           <h2>SONARA Community</h2>
-          <p class="section-copy">Hier ist dein Zuhause für Events, Creator und Zusammenarbeit.</p>
         </div>
       </div>
 
@@ -10258,12 +10243,22 @@ function renderCommunityWelcomePanel() {
       }
 
       ${
-        featuredEvents.length
+        cooperations.length
           ? `
         <div class="welcome-section">
-          <h3>Kommende Events</h3>
-          <div class="welcome-events-grid">
-            ${featuredEvents.map((event) => renderEventCard(event)).join("")}
+          <h3>Unsere Kooperationen</h3>
+          <div class="cooperation-grid">
+            ${cooperations
+              .map(
+                (coop) => `
+              <div class="cooperation-card">
+                ${coop.logo_url ? `<img src="${escapeHtml(coop.logo_url)}" alt="${escapeHtml(coop.name)}" class="cooperation-card-logo">` : ""}
+                <h4>${escapeHtml(coop.name)}</h4>
+                ${coop.discord_link ? `<a href="${escapeHtml(coop.discord_link)}" target="_blank" rel="noopener noreferrer" class="cooperation-link">Zum Discord</a>` : ""}
+              </div>
+            `
+              )
+              .join("")}
           </div>
         </div>
       `
@@ -10271,28 +10266,8 @@ function renderCommunityWelcomePanel() {
       }
 
       ${
-        cooperations.length
-          ? `
-        <div class="welcome-section">
-          <h3>Kooperationen</h3>
-          <div class="cooperation-grid">
-            ${cooperations
-              .map((coop) => {
-                const imageSrc = coop.image_path || "/sonara-crest.png";
-                return `
-              <a href="${escapeHtml(coop.url)}" target="_blank" rel="noopener noreferrer" class="cooperation-card">
-                ${coop.image_path ? `<img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(coop.title)}" class="cooperation-image">` : ""}
-                <div class="cooperation-content">
-                  <h4>${escapeHtml(coop.title)}</h4>
-                  ${coop.description ? `<p>${escapeHtml(coop.description)}</p>` : ""}
-                </div>
-              </a>
-            `;
-              })
-              .join("")}
-          </div>
-        </div>
-      `
+        !hasContent
+          ? `<p class="timeline-meta">Der Willkommen-Bereich wird in den Einstellungen verwaltet. Gehe zum "Einstellungen" Tab, um Texte und Kooperationen hinzuzufügen.</p>`
           : ""
       }
     </section>
@@ -14512,7 +14487,7 @@ function getDashboardTabSections() {
 
   const memberSections = [
     { id: "community", title: "Community", tabs: communityTabs },
-    { id: "account", title: "Mein Bereich", tabs: [{ id: "availability", label: "Verfügbarkeit" }, { id: "feedback", label: "Tickets" }, { id: "profile", label: "Profil" }] }
+    { id: "account", title: "Mein Bereich", tabs: [{ id: "apply", label: "Bewerbung" }, { id: "availability", label: "Verfügbarkeit" }, { id: "feedback", label: "Tickets" }, { id: "profile", label: "Profil" }] }
   ];
 
   if (canManagePortal()) {
@@ -14597,6 +14572,223 @@ function getDashboardTabSections() {
   }
 
   return memberSections;
+}
+
+function renderApplicationsListPanel() {
+  const store = state.data;
+  const selectedId = state.ui.selectedApplicationId;
+
+  if (selectedId) {
+    return renderApplicationDetailPanel(selectedId);
+  }
+
+  const allApplications = store.applications || [];
+  const pendingApps = allApplications.filter(app => app.status === 'pending');
+  const reviewedApps = allApplications.filter(app => ['approved', 'rejected'].includes(app.status));
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Bewerbungssystem</p>
+          <h2>Alle Bewerbungen</h2>
+          <p class="section-copy">Verwalte Bewerbungen für Creator, Moderator, Kooperation und Event-Host.</p>
+        </div>
+      </div>
+
+      ${pendingApps.length ? `
+        <div class="applications-section">
+          <h3>Offene Bewerbungen (${pendingApps.length})</h3>
+          <div class="applications-grid">
+            ${pendingApps.map(app => renderApplicationCard(app)).join('')}
+          </div>
+        </div>
+      ` : renderEmptyState('Keine offenen Bewerbungen', 'Zurzeit liegen keine neuen Bewerbungen vor.')}
+
+      ${reviewedApps.length ? `
+        <div class="applications-section">
+          <h3>Bearbeitete Bewerbungen</h3>
+          <div class="applications-grid">
+            ${reviewedApps.map(app => renderApplicationCard(app)).join('')}
+          </div>
+        </div>
+      ` : ''}
+    </section>
+  `;
+}
+
+function renderSubmittedApplicationsPanel() {
+  const store = state.data;
+  const user = state.session;
+  const userApplications = (store.applications || []).filter(app => app.userId === user.id);
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Meine Bewerbungen</p>
+          <h2>Bewerbungsstatus</h2>
+        </div>
+      </div>
+
+      ${userApplications.length ? `
+        <div class="user-applications-list">
+          ${userApplications.map(app => renderUserApplicationCard(app)).join('')}
+        </div>
+      ` : `
+        <div class="empty-state">
+          <p>Du hast noch keine Bewerbung eingereicht.</p>
+          <a href="#" class="button primary small">Bewerbung starten</a>
+        </div>
+      `}
+    </section>
+  `;
+}
+
+function renderApplicationCard(app) {
+  const store = state.data;
+  const user = store.users.find(u => u.id === app.userId);
+  const statusClass = app.status === 'pending' ? 'status-pending' : app.status === 'approved' ? 'status-approved' : 'status-rejected';
+  const statusLabel = { 'pending': 'Offen', 'approved': 'Genehmigt', 'rejected': 'Abgelehnt', 'none': 'Entwurf' }[app.status] || 'Unbekannt';
+
+  return `
+    <div class="application-card ${statusClass}" data-application-id="${escapeHtml(app.id)}">
+      <div class="app-header">
+        <div>
+          <h4>${escapeHtml(user?.displayName || 'Unbekannter User')}</h4>
+          <p class="app-type">${escapeHtml(app.type)}</p>
+        </div>
+        <span class="status-badge ${statusClass}">${escapeHtml(statusLabel)}</span>
+      </div>
+      <p class="app-date">Eingereicht: ${new Date(app.createdAt).toLocaleDateString('de-DE')}</p>
+      <p class="app-message">${escapeHtml(app.message?.substring(0, 100) || '')}</p>
+      <button type="button" class="button secondary small" data-action="view-application" data-app-id="${escapeHtml(app.id)}">
+        Details & Chat
+      </button>
+    </div>
+  `;
+}
+
+function renderUserApplicationCard(app) {
+  const statusLabel = { 'pending': 'Offen', 'approved': 'Genehmigt', 'rejected': 'Abgelehnt', 'none': 'Entwurf' }[app.status] || 'Unbekannt';
+  const statusClass = app.status === 'pending' ? 'status-pending' : app.status === 'approved' ? 'status-approved' : 'status-rejected';
+
+  return `
+    <div class="user-application-card">
+      <div class="app-info">
+        <h4>${escapeHtml(app.type)}</h4>
+        <p class="app-message">${escapeHtml(app.message?.substring(0, 150) || 'Keine Beschreibung')}</p>
+        <p class="app-meta">Eingereicht: ${new Date(app.createdAt).toLocaleDateString('de-DE')} | Status: <span class="status-badge ${statusClass}">${escapeHtml(statusLabel)}</span></p>
+        ${app.adminNote ? `<p class="admin-note"><strong>Admin-Notiz:</strong> ${escapeHtml(app.adminNote)}</p>` : ''}
+      </div>
+      <button type="button" class="button secondary small" data-action="view-application" data-app-id="${escapeHtml(app.id)}">
+        Chat ansehen
+      </button>
+    </div>
+  `;
+}
+
+function renderApplicationDetailPanel(applicationId) {
+  const store = state.data;
+  const app = (store.applications || []).find(a => a.id === applicationId);
+
+  if (!app) {
+    return renderEmptyState('Bewerbung nicht gefunden', 'Diese Bewerbung existiert nicht mehr.');
+  }
+
+  const user = store.users.find(u => u.id === app.userId);
+  const chats = (store.applicationChats || []).filter(c => c.applicationId === applicationId);
+  const statusLabel = { 'pending': 'Offen', 'approved': 'Genehmigt', 'rejected': 'Abgelehnt' }[app.status] || 'Unbekannt';
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <button type="button" data-action="view-application" data-app-id="" class="button ghost small">← Zurück</button>
+          <p class="eyebrow">${escapeHtml(app.type)}</p>
+          <h2>${escapeHtml(user?.displayName || 'Unbekannter User')}</h2>
+          <p class="section-copy">Eingereicht: ${new Date(app.createdAt).toLocaleDateString('de-DE')}</p>
+        </div>
+      </div>
+
+      <div class="application-detail">
+        <div class="app-message-box">
+          <h3>Bewerbung</h3>
+          <p>${escapeHtml(app.message)}</p>
+        </div>
+
+        <div class="chat-section">
+          <h3>Kommunikation</h3>
+          <div class="chat-messages">
+            ${chats.length ? chats.map(msg => {
+              const msgUser = store.users.find(u => u.id === msg.userId);
+              return `
+                <div class="chat-message" data-user-id="${escapeHtml(msg.userId)}">
+                  <span class="msg-user">${escapeHtml(msgUser?.displayName || 'Unbekannt')}</span>
+                  <p class="msg-text">${escapeHtml(msg.message)}</p>
+                  <small class="msg-time">${new Date(msg.createdAt).toLocaleDateString('de-DE')} ${new Date(msg.createdAt).toLocaleTimeString('de-DE', {hour: '2-digit', minute:'2-digit'})}</small>
+                </div>
+              `;
+            }).join('') : '<p class="empty-message">Noch keine Nachrichten</p>'}
+          </div>
+
+          <form class="stack-form" data-form="application-chat" data-application-id="${escapeHtml(app.id)}" style="margin-top: 1rem;">
+            <textarea name="message" placeholder="Nachricht..." rows="3" required></textarea>
+            <button type="submit" class="button primary small">Nachricht senden</button>
+          </form>
+        </div>
+
+        ${canManagePortal() ? `
+          <div class="admin-section">
+            <h3>Admin-Bearbeitung</h3>
+            <form class="stack-form" data-form="application-review" data-application-id="${escapeHtml(app.id)}">
+              <select name="status" required>
+                <option value="pending" ${app.status === 'pending' ? 'selected' : ''}>Offen</option>
+                <option value="approved" ${app.status === 'approved' ? 'selected' : ''}>Genehmigt</option>
+                <option value="rejected" ${app.status === 'rejected' ? 'selected' : ''}>Abgelehnt</option>
+              </select>
+              <textarea name="adminNote" placeholder="Admin-Notiz (optional)" rows="2">${escapeHtml(app.adminNote || '')}</textarea>
+              <button type="submit" class="button primary small">Speichern</button>
+            </form>
+          </div>
+        ` : ''}
+      </div>
+    </section>
+  `;
+}
+
+function renderApplicationSubmitPanel() {
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Bewerbung</p>
+          <h2>Werde Teil des Teams</h2>
+          <p class="section-copy">Bewirb dich als Content Creator, Moderator, Partner oder Event-Host.</p>
+        </div>
+      </div>
+
+      <form class="stack-form" data-form="application-submit">
+        <div class="form-group">
+          <label for="appType">Bewerbungstyp *</label>
+          <select id="appType" name="type" required>
+            <option value="">-- Bitte wählen --</option>
+            <option value="Content Creator">Content Creator (mit Followers/Community)</option>
+            <option value="Moderator">Moderator (hilft bei der Moderation)</option>
+            <option value="Kooperation">Kooperation/Partnership (Community oder Team)</option>
+            <option value="Event-Host">Event-Host (möchte Events hosten)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="appMessage">Bewerbungstext *</label>
+          <textarea id="appMessage" name="message" placeholder="Erzähle uns warum du perfekt passt, was du mitbringst und was deine Ziele sind..." rows="6" required></textarea>
+        </div>
+
+        <button type="submit" class="button primary">Bewerbung einreichen</button>
+      </form>
+    </section>
+  `;
 }
 
 function renderCreatorApplicationsPanel() {
@@ -14874,6 +15066,8 @@ function renderMemberForumSpotlightPanel() {
 
 function renderManagerDashboard(activeTab) {
   switch (activeTab) {
+    case "welcome":
+      return renderPortalPanel("welcome.main", renderCommunityWelcomePanel());
     case "feed":
       return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
@@ -14914,6 +15108,11 @@ function renderManagerDashboard(activeTab) {
       ]);
     case "capacity":
       return renderPortalPanel("capacity.main", renderCapacityPanel());
+    case "applications":
+      return renderPortalPanelList("applications", [
+        { id: "applications.list", render: renderApplicationsListPanel },
+        { id: "applications.submitted", render: renderSubmittedApplicationsPanel }
+      ]);
     case "activity":
       return renderPortalPanel("activity.main", renderPortalActivityPanel());
     case "team":
@@ -14954,6 +15153,8 @@ function renderManagerDashboard(activeTab) {
 
 function renderModeratorDashboard(activeTab) {
   switch (activeTab) {
+    case "welcome":
+      return renderPortalPanel("welcome.main", renderCommunityWelcomePanel());
     case "feed":
       return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
@@ -15024,6 +15225,8 @@ function renderModeratorDashboard(activeTab) {
 
 function renderMemberDashboard(activeTab) {
   switch (activeTab) {
+    case "welcome":
+      return renderPortalPanel("welcome.main", renderCommunityWelcomePanel());
     case "feed":
       return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
@@ -15055,6 +15258,8 @@ function renderMemberDashboard(activeTab) {
       return renderPortalPanel("feedback.member", renderFeedbackMemberPanel());
     case "availability":
       return renderPortalPanel("availability.workspace", renderAvailabilityWorkspace());
+    case "apply":
+      return renderPortalPanel("apply.main", renderApplicationSubmitPanel());
     case "chat":
       return renderPortalPanel("chat.workspace", renderChatWorkspace("member"));
     case "profile":
@@ -15072,12 +15277,12 @@ function renderMemberDashboard(activeTab) {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "applications", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents"]
+    ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "applications", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents", "apply"]
     : canCoordinateStaff()
-      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile"]
+      ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile", "apply"]
       : canAccessStaffArea()
-        ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile"]
-        : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile"];
+        ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile", "apply"]
+        : ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile", "apply"];
 
   const allowedTabs = canManageLayout() ? [...allowed, "layout"] : allowed;
   return allowedTabs.includes(tab) ? tab : "overview";
