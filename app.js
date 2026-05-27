@@ -14458,7 +14458,7 @@ function getDashboardTabSections() {
 
   const memberSections = [
     { id: "community", title: "Community", tabs: communityTabs },
-    { id: "account", title: "Mein Bereich", tabs: [{ id: "availability", label: "Verfügbarkeit" }, { id: "feedback", label: "Tickets" }, { id: "profile", label: "Profil" }] }
+    { id: "account", title: "Mein Bereich", tabs: [{ id: "apply", label: "Bewerbung" }, { id: "availability", label: "Verfügbarkeit" }, { id: "feedback", label: "Tickets" }, { id: "profile", label: "Profil" }] }
   ];
 
   if (canManagePortal()) {
@@ -14724,6 +14724,40 @@ function renderApplicationDetailPanel(applicationId) {
           </div>
         ` : ''}
       </div>
+    </section>
+  `;
+}
+
+function renderApplicationSubmitPanel() {
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Bewerbung</p>
+          <h2>Werde Teil des Teams</h2>
+          <p class="section-copy">Bewirb dich als Content Creator, Moderator, Partner oder Event-Host.</p>
+        </div>
+      </div>
+
+      <form class="stack-form" data-form="application-submit">
+        <div class="form-group">
+          <label for="appType">Bewerbungstyp *</label>
+          <select id="appType" name="type" required>
+            <option value="">-- Bitte wählen --</option>
+            <option value="Content Creator">Content Creator (mit Followers/Community)</option>
+            <option value="Moderator">Moderator (hilft bei der Moderation)</option>
+            <option value="Kooperation">Kooperation/Partnership (Community oder Team)</option>
+            <option value="Event-Host">Event-Host (möchte Events hosten)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="appMessage">Bewerbungstext *</label>
+          <textarea id="appMessage" name="message" placeholder="Erzähle uns warum du perfekt passt, was du mitbringst und was deine Ziele sind..." rows="6" required></textarea>
+        </div>
+
+        <button type="submit" class="button primary">Bewerbung einreichen</button>
+      </form>
     </section>
   `;
 }
@@ -15195,6 +15229,8 @@ function renderMemberDashboard(activeTab) {
       return renderPortalPanel("feedback.member", renderFeedbackMemberPanel());
     case "availability":
       return renderPortalPanel("availability.workspace", renderAvailabilityWorkspace());
+    case "apply":
+      return renderPortalPanel("apply.main", renderApplicationSubmitPanel());
     case "chat":
       return renderPortalPanel("chat.workspace", renderChatWorkspace("member"));
     case "profile":
@@ -15212,12 +15248,12 @@ function renderMemberDashboard(activeTab) {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "applications", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents"]
+    ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "applications", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents", "apply"]
     : canCoordinateStaff()
-      ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile"]
+      ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile", "apply"]
       : canAccessStaffArea()
-        ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile"]
-        : ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile"];
+        ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile", "apply"]
+        : ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile", "apply"];
 
   const allowedTabs = canManageLayout() ? [...allowed, "layout"] : allowed;
   return allowedTabs.includes(tab) ? tab : "overview";
