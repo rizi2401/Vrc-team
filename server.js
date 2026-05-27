@@ -2101,6 +2101,19 @@ async function handleApi(req, res, url) {
       nextStore.community_welcome_page.rules = String(body.rules || "").trim();
     }
 
+    // Sync to siteContent so landing page sees the changes
+    if (!nextStore.siteContent) {
+      nextStore.siteContent = buildDefaultSiteContent();
+    }
+    if (body.about_us !== undefined) {
+      nextStore.siteContent.draft.aboutUsBody = String(body.about_us || "").trim();
+      nextStore.siteContent.published.aboutUsBody = String(body.about_us || "").trim();
+    }
+    if (body.rules !== undefined) {
+      // Store rules in the welcome page, not in siteContent.rules
+      nextStore.community_welcome_page.rules = String(body.rules || "").trim();
+    }
+
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "community-welcome-updated" });
     broadcastWsChange("welcome-updated", {
@@ -2139,6 +2152,14 @@ async function handleApi(req, res, url) {
     }
 
     nextStore.community_welcome_page.cooperations.push(cooperation);
+
+    // Sync to siteContent so landing page sees the cooperations
+    if (!nextStore.siteContent) {
+      nextStore.siteContent = buildDefaultSiteContent();
+    }
+    nextStore.siteContent.draft.cooperationsList = structuredClone(nextStore.community_welcome_page.cooperations);
+    nextStore.siteContent.published.cooperationsList = structuredClone(nextStore.community_welcome_page.cooperations);
+
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "cooperation-created" });
     broadcastWsChange("cooperation-added", cooperation);
@@ -2174,6 +2195,13 @@ async function handleApi(req, res, url) {
       cooperation.logo_url = String(body.logo_url || "").trim();
     }
 
+    // Sync to siteContent
+    if (!nextStore.siteContent) {
+      nextStore.siteContent = buildDefaultSiteContent();
+    }
+    nextStore.siteContent.draft.cooperationsList = structuredClone(nextStore.community_welcome_page.cooperations);
+    nextStore.siteContent.published.cooperationsList = structuredClone(nextStore.community_welcome_page.cooperations);
+
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "cooperation-updated" });
     broadcastWsChange("cooperation-updated", cooperation);
@@ -2199,6 +2227,14 @@ async function handleApi(req, res, url) {
 
     const deletedCooperation = nextStore.community_welcome_page.cooperations[index];
     nextStore.community_welcome_page.cooperations.splice(index, 1);
+
+    // Sync to siteContent
+    if (!nextStore.siteContent) {
+      nextStore.siteContent = buildDefaultSiteContent();
+    }
+    nextStore.siteContent.draft.cooperationsList = structuredClone(nextStore.community_welcome_page.cooperations);
+    nextStore.siteContent.published.cooperationsList = structuredClone(nextStore.community_welcome_page.cooperations);
+
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "cooperation-deleted" });
     broadcastWsChange("cooperation-deleted", { id: deletedCooperation.id });
