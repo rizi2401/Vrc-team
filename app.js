@@ -42,7 +42,7 @@ const AVAILABILITY_DAYS = [
 const CHAT_TRIM_OPTIONS = [20, 30, 40, 50];
 const SONARA_ART_PATH = "/sonara-crest.png";
 const CREATOR_MIN_FOLLOWERS = 200;
-const API_TIMEOUT_MS = 12000;
+const API_TIMEOUT_MS = 30000;
 const LIVEKIT_CLIENT_URLS = [
   "https://cdn.jsdelivr.net/npm/livekit-client@2.18.7/dist/livekit-client.umd.js",
   "https://unpkg.com/livekit-client@2.18.7/dist/livekit-client.umd.js"
@@ -525,9 +525,13 @@ async function api(path, options = {}) {
     typeof AbortController !== "undefined" && !options.signal
       ? new AbortController()
       : null;
+  let timedOut = false;
   const timeoutId =
     controller && typeof window !== "undefined" && typeof window.setTimeout === "function"
-      ? window.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+      ? window.setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, API_TIMEOUT_MS)
       : 0;
 
   let response;
@@ -543,9 +547,10 @@ async function api(path, options = {}) {
     });
   } catch (error) {
     if (timeoutId) window.clearTimeout(timeoutId);
-    if (error?.name === "AbortError") {
+    if (error?.name === "AbortError" && timedOut) {
       const timeoutError = new Error("Der Server antwortet gerade nicht. Bitte lade die Seite gleich noch einmal neu.");
       timeoutError.status = 0;
+      timeoutError.isTimeout = true;
       throw timeoutError;
     }
     throw error;
