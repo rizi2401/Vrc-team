@@ -4,9 +4,9 @@
     {
       "id": "79d4d417-c38b-4479-afdf-5f3093523d65",
       "username": "admin",
-      "displayName": "Admin",
+      "displayName": "System Admin",
       "role": "admin",
-      "vrchatName": "Admin",
+      "vrchatName": "System Admin",
       "discordName": "admin",
       "discordUserId": "",
       "discordLinkedAt": "",
@@ -20,7 +20,7 @@
       "creatorBlurb": "",
       "creatorLinks": [],
       "creatorVisible": false,
-      "creatorSlug": "admin",
+      "creatorSlug": "system-admin",
       "creatorApplicationStatus": "none",
       "creatorFollowerCount": 0,
       "creatorPrimaryPlatform": "",
@@ -99,13 +99,13 @@
       ],
       "availabilityUpdatedAt": "",
       "lastLoginAt": "",
-      "lastSeenAt": "2026-05-27T08:57:29.516Z",
+      "lastSeenAt": "2026-05-25T22:04:12.650Z",
       "isBlocked": false,
       "blockReason": "",
       "blockedAt": "",
       "blockedBy": "",
-      "passwordHash": "7c6a8dbf9d2ee1ecff7a989eb56bf0b4:9ff59e9c8c0d86cc2d6f3dc5f8b3e1b7a2e0f1e9d8c7b6a5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b"
-    }
+      "passwordHash": "ee0e53f6ceb47dcef6f9fe5cb345261d:4eac92098e4ac33a67ec191e90c62f9b657c3cf112caa4d95c37e8cd5248f98c786af4cd9b756930f7653bcdacf17195310c23e798a5585d776d1119a2ce9594"
+    },  
   ],
   "settings": {
     "shiftTypes": [
