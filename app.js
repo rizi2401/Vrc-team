@@ -14351,6 +14351,7 @@ function renderFeedPanel() {
 
 function getDashboardTabSections() {
   const communityTabs = [
+    { id: "welcome", label: "Willkommen" },
     { id: "feed", label: "Feed" },
     { id: "community", label: "Community" },
     { id: "calendar", label: "Kalender" },
