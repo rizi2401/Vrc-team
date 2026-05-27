@@ -158,6 +158,168 @@ const state = {
   }
 };
 
+let ws = null;
+let wsReconnectAttempts = 0;
+const WS_RECONNECT_MAX_ATTEMPTS = 10;
+const WS_RECONNECT_DELAY_MS = 2000;
+let wsLocks = new Map();
+let wsPingInterval = null;
+
+function connectWebSocket() {
+  if (ws && ws.readyState === WebSocket.OPEN) return;
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}`;
+
+  try {
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log("WebSocket connected");
+      wsReconnectAttempts = 0;
+      if (state.session) {
+        ws.send(JSON.stringify({ type: "auth", userId: state.session.id }));
+      }
+      if (wsPingInterval) clearInterval(wsPingInterval);
+      wsPingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "ping" }));
+        }
+      }, 30000);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        handleWsMessage(message);
+      } catch (err) {
+        console.error("WebSocket message parse error:", err);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket disconnected");
+      if (wsPingInterval) clearInterval(wsPingInterval);
+      scheduleWsReconnect();
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+  } catch (err) {
+    console.error("WebSocket connection error:", err);
+    scheduleWsReconnect();
+  }
+}
+
+function scheduleWsReconnect() {
+  if (wsReconnectAttempts < WS_RECONNECT_MAX_ATTEMPTS) {
+    wsReconnectAttempts++;
+    setTimeout(connectWebSocket, WS_RECONNECT_DELAY_MS);
+  }
+}
+
+function handleWsMessage(message) {
+  const { type, data, timestamp } = message;
+
+  switch (type) {
+    case "auth-ack":
+      console.log("WebSocket auth acknowledged");
+      break;
+
+    case "welcome-updated":
+      if (state.data && state.data.community_welcome_page) {
+        state.data.community_welcome_page.about_us = data.about_us;
+        state.data.community_welcome_page.rules = data.rules;
+      }
+      if (state.publicData && state.publicData.community_welcome_page) {
+        state.publicData.community_welcome_page.about_us = data.about_us;
+        state.publicData.community_welcome_page.rules = data.rules;
+      }
+      render();
+      break;
+
+    case "cooperation-added":
+      if (state.data?.community_welcome_page?.cooperations) {
+        state.data.community_welcome_page.cooperations.push(data);
+      }
+      if (state.publicData?.community_welcome_page?.cooperations) {
+        state.publicData.community_welcome_page.cooperations.push(data);
+      }
+      render();
+      break;
+
+    case "cooperation-updated":
+      updateCooperationInState(data);
+      render();
+      break;
+
+    case "cooperation-deleted":
+      if (state.data?.community_welcome_page?.cooperations) {
+        state.data.community_welcome_page.cooperations =
+          state.data.community_welcome_page.cooperations.filter(c => c.id !== data.id);
+      }
+      if (state.publicData?.community_welcome_page?.cooperations) {
+        state.publicData.community_welcome_page.cooperations =
+          state.publicData.community_welcome_page.cooperations.filter(c => c.id !== data.id);
+      }
+      render();
+      break;
+
+    case "lock-acquired":
+      wsLocks.set(data.resource, data.lockedBy);
+      render();
+      break;
+
+    case "lock-released":
+      wsLocks.delete(data.resource);
+      render();
+      break;
+
+    case "pong":
+      break;
+  }
+}
+
+function updateCooperationInState(updatedCooperation) {
+  if (state.data?.community_welcome_page?.cooperations) {
+    const idx = state.data.community_welcome_page.cooperations.findIndex(c => c.id === updatedCooperation.id);
+    if (idx >= 0) {
+      state.data.community_welcome_page.cooperations[idx] = updatedCooperation;
+    }
+  }
+  if (state.publicData?.community_welcome_page?.cooperations) {
+    const idx = state.publicData.community_welcome_page.cooperations.findIndex(c => c.id === updatedCooperation.id);
+    if (idx >= 0) {
+      state.publicData.community_welcome_page.cooperations[idx] = updatedCooperation;
+    }
+  }
+}
+
+function sendWsMessage(message) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(message));
+  }
+}
+
+function acquireWsLock(resource) {
+  return new Promise((resolve) => {
+    const handler = (message) => {
+      if (message.resource === resource) {
+        ws.removeEventListener("message", handler);
+        resolve(message.success);
+      }
+    };
+    ws.addEventListener("message", handler);
+    sendWsMessage({ type: "lock-acquire", resource });
+    setTimeout(() => resolve(false), 5000);
+  });
+}
+
+function releaseWsLock(resource) {
+  sendWsMessage({ type: "lock-release", resource });
+}
+
 root.addEventListener("submit", handleSubmitProxy);
 root.addEventListener("click", handleClick);
 root.addEventListener("input", handleInput);
@@ -517,6 +679,7 @@ async function boot() {
   if (!state.session) {
     await refreshPublicData();
   }
+  connectWebSocket();
   render();
 }
 
@@ -911,6 +1074,9 @@ function applyPayload(payload) {
     state.vrchatLoading = false;
     state.discordStatus = null;
     state.discordLoading = false;
+  }
+  if (state.session && ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "auth", userId: state.session.id }));
   }
 }
 
@@ -5098,6 +5264,7 @@ function renderCommunityWelcomeAdminPanel() {
   const events = community.events || [];
   const cooperations = welcomeData.cooperations || [];
   const cooperationDraft = getPersistentFormDraft("cooperation-create") || {};
+  const isLocked = wsLocks.has("welcome-content");
 
   return `
     <section class="panel span-12">
@@ -5109,20 +5276,22 @@ function renderCommunityWelcomeAdminPanel() {
         </div>
       </div>
 
-      <form class="stack-form" data-form="community-welcome-content">
+      ${isLocked ? '<div style="padding: 0.75rem 1rem; background: var(--flash-warning-bg); color: var(--flash-warning-text); border-radius: 4px; margin-bottom: 1rem; font-size: 0.875rem;">Ein anderer Admin bearbeitet gerade diesen Bereich...</div>' : ''}
+
+      <form class="stack-form" data-form="community-welcome-content" ${isLocked ? 'style="opacity: 0.5; pointer-events: none;"' : ''}>
         <div class="form-grid">
           <div class="field span-all">
             <label for="aboutUs">Wer sind wir</label>
-            <textarea id="aboutUs" name="about_us" placeholder="Schreibe hier auf, wer die SONARA Community ist...">${escapeHtml(welcomeData.about_us || "")}</textarea>
+            <textarea id="aboutUs" name="about_us" placeholder="Schreibe hier auf, wer die SONARA Community ist..." ${isLocked ? 'disabled' : ''}>${escapeHtml(welcomeData.about_us || "")}</textarea>
           </div>
           <div class="field span-all">
             <label for="rules">Regeln</label>
-            <textarea id="rules" name="rules" placeholder="Beschreibe hier die Regeln der Community...">${escapeHtml(welcomeData.rules || "")}</textarea>
+            <textarea id="rules" name="rules" placeholder="Beschreibe hier die Regeln der Community..." ${isLocked ? 'disabled' : ''}>${escapeHtml(welcomeData.rules || "")}</textarea>
           </div>
         </div>
 
         <div class="card-actions">
-          <button type="submit">Willkommen-Texte speichern</button>
+          <button type="submit" ${isLocked ? 'disabled' : ''}>Willkommen-Texte speichern</button>
         </div>
       </form>
     </section>
@@ -5136,6 +5305,8 @@ function renderCommunityWelcomeAdminPanel() {
         </div>
         <span class="pill neutral">${cooperations.length} Kooperationen</span>
       </div>
+
+      ${isLocked ? '<div style="padding: 0.75rem 1rem; background: var(--flash-warning-bg); color: var(--flash-warning-text); border-radius: 4px; margin-bottom: 1rem; font-size: 0.875rem;">Ein anderer Admin bearbeitet gerade diesen Bereich...</div>' : ''}
 
       ${
         cooperations.length
@@ -5153,8 +5324,8 @@ function renderCommunityWelcomeAdminPanel() {
                 </div>
               </div>
               <div class="cooperation-actions">
-                <button type="button" class="small ghost" data-action="edit-cooperation" data-id="${escapeHtml(coop.id)}">Bearbeiten</button>
-                <button type="button" class="small ghost danger" data-action="delete-cooperation" data-id="${escapeHtml(coop.id)}">Loeschen</button>
+                <button type="button" class="small ghost" data-action="edit-cooperation" data-id="${escapeHtml(coop.id)}" ${isLocked ? 'disabled' : ''}>Bearbeiten</button>
+                <button type="button" class="small ghost danger" data-action="delete-cooperation" data-id="${escapeHtml(coop.id)}" ${isLocked ? 'disabled' : ''}>Loeschen</button>
               </div>
             </div>
           `
@@ -5166,7 +5337,7 @@ function renderCommunityWelcomeAdminPanel() {
       }
 
       <div class="card-actions">
-        <button type="button" data-action="show-cooperation-form">Neue Kooperation hinzufuegen</button>
+        <button type="button" data-action="show-cooperation-form" ${isLocked ? 'disabled' : ''}>Neue Kooperation hinzufuegen</button>
       </div>
 
       ${

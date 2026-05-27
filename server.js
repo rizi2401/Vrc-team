@@ -3,6 +3,7 @@ const https = require("node:https");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const WebSocket = require("ws");
 const { sendDiscordMessage, sendDiscordDirectMessage } = require("./discord_notify");
 const {
   ensureSchedulingSchema,
@@ -107,6 +108,9 @@ const sessionStore = new Map();
 const messageCooldownStore = new Map();
 const streamClients = new Set();
 const discordOAuthStates = new Map();
+const wsClients = new Map();
+const resourceLocks = new Map();
+const LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 let discordSendChain = Promise.resolve();
 let discordLastDispatchAt = 0;
 const DISCORD_OAUTH_STATE_TTL_MS = normalizePositiveInteger(process.env.DISCORD_OAUTH_STATE_TTL_MS, 10 * 60 * 1000);
@@ -212,6 +216,33 @@ const server = http.createServer(async (req, res) => {
   } catch (error) {
     sendJson(res, error.statusCode || 500, { error: error.message || "Serverfehler." });
   }
+});
+
+const wss = new WebSocket.Server({ server });
+
+wss.on("connection", (ws) => {
+  const clientId = crypto.randomUUID();
+  wsClients.set(clientId, { ws, userId: null, locks: new Set() });
+
+  ws.on("message", (data) => {
+    handleWsMessage(clientId, data).catch(err => {
+      console.error(`WebSocket message error [${clientId}]:`, err.message);
+    });
+  });
+
+  ws.on("close", () => {
+    const client = wsClients.get(clientId);
+    if (client) {
+      client.locks.forEach(resource => {
+        resourceLocks.delete(resource);
+      });
+    }
+    wsClients.delete(clientId);
+  });
+
+  ws.on("error", (err) => {
+    console.error(`WebSocket error [${clientId}]:`, err.message);
+  });
 });
 
 server.listen(PORT, HOST, () => {
@@ -2072,6 +2103,10 @@ async function handleApi(req, res, url) {
 
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "community-welcome-updated" });
+    broadcastWsChange("welcome-updated", {
+      about_us: nextStore.community_welcome_page.about_us,
+      rules: nextStore.community_welcome_page.rules
+    });
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -2106,6 +2141,7 @@ async function handleApi(req, res, url) {
     nextStore.community_welcome_page.cooperations.push(cooperation);
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "cooperation-created" });
+    broadcastWsChange("cooperation-added", cooperation);
     sendPortalData(res, 201, auth.user, savedStore);
     return;
   }
@@ -2140,6 +2176,7 @@ async function handleApi(req, res, url) {
 
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "cooperation-updated" });
+    broadcastWsChange("cooperation-updated", cooperation);
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -2160,9 +2197,11 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    const deletedCooperation = nextStore.community_welcome_page.cooperations[index];
     nextStore.community_welcome_page.cooperations.splice(index, 1);
     const savedStore = writeStore(nextStore);
     broadcastEvent("portal", { type: "cooperation-deleted" });
+    broadcastWsChange("cooperation-deleted", { id: deletedCooperation.id });
     sendPortalData(res, 200, auth.user, savedStore);
     return;
   }
@@ -7465,6 +7504,90 @@ function broadcastEvent(eventName, payload) {
       streamClients.delete(client);
     }
   }
+}
+
+function broadcastWsChange(type, data, excludeClientId = null) {
+  const message = JSON.stringify({ type, data, timestamp: Date.now() });
+  for (const [clientId, client] of wsClients) {
+    if (clientId !== excludeClientId && client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(message);
+    }
+  }
+}
+
+async function handleWsMessage(clientId, data) {
+  try {
+    const message = JSON.parse(data.toString());
+    const client = wsClients.get(clientId);
+    if (!client) return;
+
+    switch (message.type) {
+      case "auth":
+        client.userId = message.userId;
+        client.ws.send(JSON.stringify({ type: "auth-ack", success: true }));
+        break;
+
+      case "lock-acquire":
+        const lockResult = acquireLock(clientId, message.resource);
+        client.ws.send(JSON.stringify(lockResult));
+        if (lockResult.success) {
+          broadcastWsChange("lock-acquired", { resource: message.resource, lockedBy: clientId }, clientId);
+        }
+        break;
+
+      case "lock-release":
+        const releaseResult = releaseLock(clientId, message.resource);
+        client.ws.send(JSON.stringify(releaseResult));
+        if (releaseResult.success !== false) {
+          broadcastWsChange("lock-released", { resource: message.resource });
+        }
+        break;
+
+      case "ping":
+        client.ws.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+        break;
+    }
+  } catch (err) {
+    console.error("WebSocket message parse error:", err.message);
+  }
+}
+
+function acquireLock(clientId, resource) {
+  if (resourceLocks.has(resource)) {
+    const lock = resourceLocks.get(resource);
+    return { success: false, error: "Already locked", lockedBy: lock.clientId };
+  }
+
+  const timeoutId = setTimeout(() => {
+    releaseLock(clientId, resource);
+  }, LOCK_TIMEOUT_MS);
+
+  resourceLocks.set(resource, { clientId, timeoutId, acquiredAt: Date.now() });
+  const client = wsClients.get(clientId);
+  if (client) {
+    client.locks.add(resource);
+  }
+
+  return { success: true, resource, timestamp: Date.now() };
+}
+
+function releaseLock(clientId, resource) {
+  const lock = resourceLocks.get(resource);
+  if (!lock) {
+    return { success: false, error: "Lock not found" };
+  }
+  if (lock.clientId !== clientId) {
+    return { success: false, error: "Not your lock" };
+  }
+
+  clearTimeout(lock.timeoutId);
+  resourceLocks.delete(resource);
+  const client = wsClients.get(clientId);
+  if (client) {
+    client.locks.delete(resource);
+  }
+
+  return { success: true, resource };
 }
 
 async function readJson(req) {
