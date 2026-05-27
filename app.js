@@ -5966,6 +5966,13 @@ async function handleClick(event) {
       render();
       break;
 
+    case "view-application": {
+      const appId = actionElement.dataset.appId;
+      state.ui.selectedApplicationId = appId || "";
+      render();
+      break;
+    }
+
     case "toggle-panel-collapse": {
       const panelId = actionElement.dataset.panelId || "";
       if (!panelId) return;
@@ -9135,6 +9142,57 @@ async function handleSubmit(event) {
           }),
         "Verfügbarkeit wurde aktualisiert."
       );
+      break;
+    }
+
+    case "application-submit": {
+      const formData = new FormData(form);
+      const type = String(formData.get("type") || "").trim();
+      const message = String(formData.get("message") || "").trim();
+      if (!type || !message) {
+        setFlash("Bitte fülle alle Felder aus.", "danger");
+        break;
+      }
+      await performAction(
+        () => api("/api/applications", { method: "POST", body: JSON.stringify({ type, message }) }),
+        "Deine Bewerbung wurde eingereicht."
+      );
+      form.reset();
+      render();
+      break;
+    }
+
+    case "application-chat": {
+      const formData = new FormData(form);
+      const applicationId = form.dataset.applicationId;
+      const message = String(formData.get("message") || "").trim();
+      if (!message) {
+        setFlash("Nachricht kann nicht leer sein.", "danger");
+        break;
+      }
+      await performAction(
+        () => api(`/api/applications/${encodeURIComponent(applicationId)}/chat`, { method: "POST", body: JSON.stringify({ message }) }),
+        "Nachricht gesendet."
+      );
+      form.reset();
+      render();
+      break;
+    }
+
+    case "application-review": {
+      const formData = new FormData(form);
+      const applicationId = form.dataset.applicationId;
+      const status = String(formData.get("status") || "").trim();
+      const adminNote = String(formData.get("adminNote") || "").trim();
+      if (!["pending", "approved", "rejected"].includes(status)) {
+        setFlash("Ungültiger Status.", "danger");
+        break;
+      }
+      await performAction(
+        () => api(`/api/applications/${encodeURIComponent(applicationId)}`, { method: "PATCH", body: JSON.stringify({ status, adminNote }) }),
+        "Bewerbung wurde aktualisiert."
+      );
+      render();
       break;
     }
 
@@ -14489,8 +14547,13 @@ function getDashboardTabSections() {
 
 function renderApplicationsListPanel() {
   const store = state.data;
-  const allApplications = store.applications || [];
+  const selectedId = state.ui.selectedApplicationId;
 
+  if (selectedId) {
+    return renderApplicationDetailPanel(selectedId);
+  }
+
+  const allApplications = store.applications || [];
   const pendingApps = allApplications.filter(app => app.status === 'pending');
   const reviewedApps = allApplications.filter(app => ['approved', 'rejected'].includes(app.status));
 
@@ -14593,6 +14656,75 @@ function renderUserApplicationCard(app) {
         Chat ansehen
       </button>
     </div>
+  `;
+}
+
+function renderApplicationDetailPanel(applicationId) {
+  const store = state.data;
+  const app = (store.applications || []).find(a => a.id === applicationId);
+
+  if (!app) {
+    return renderEmptyState('Bewerbung nicht gefunden', 'Diese Bewerbung existiert nicht mehr.');
+  }
+
+  const user = store.users.find(u => u.id === app.userId);
+  const chats = (store.applicationChats || []).filter(c => c.applicationId === applicationId);
+  const statusLabel = { 'pending': 'Offen', 'approved': 'Genehmigt', 'rejected': 'Abgelehnt' }[app.status] || 'Unbekannt';
+
+  return `
+    <section class="panel span-12">
+      <div class="section-head">
+        <div>
+          <button type="button" data-action="view-application" data-app-id="" class="button ghost small">← Zurück</button>
+          <p class="eyebrow">${escapeHtml(app.type)}</p>
+          <h2>${escapeHtml(user?.displayName || 'Unbekannter User')}</h2>
+          <p class="section-copy">Eingereicht: ${new Date(app.createdAt).toLocaleDateString('de-DE')}</p>
+        </div>
+      </div>
+
+      <div class="application-detail">
+        <div class="app-message-box">
+          <h3>Bewerbung</h3>
+          <p>${escapeHtml(app.message)}</p>
+        </div>
+
+        <div class="chat-section">
+          <h3>Kommunikation</h3>
+          <div class="chat-messages">
+            ${chats.length ? chats.map(msg => {
+              const msgUser = store.users.find(u => u.id === msg.userId);
+              return `
+                <div class="chat-message" data-user-id="${escapeHtml(msg.userId)}">
+                  <span class="msg-user">${escapeHtml(msgUser?.displayName || 'Unbekannt')}</span>
+                  <p class="msg-text">${escapeHtml(msg.message)}</p>
+                  <small class="msg-time">${new Date(msg.createdAt).toLocaleDateString('de-DE')} ${new Date(msg.createdAt).toLocaleTimeString('de-DE', {hour: '2-digit', minute:'2-digit'})}</small>
+                </div>
+              `;
+            }).join('') : '<p class="empty-message">Noch keine Nachrichten</p>'}
+          </div>
+
+          <form class="stack-form" data-form="application-chat" data-application-id="${escapeHtml(app.id)}" style="margin-top: 1rem;">
+            <textarea name="message" placeholder="Nachricht..." rows="3" required></textarea>
+            <button type="submit" class="button primary small">Nachricht senden</button>
+          </form>
+        </div>
+
+        ${canManagePortal() ? `
+          <div class="admin-section">
+            <h3>Admin-Bearbeitung</h3>
+            <form class="stack-form" data-form="application-review" data-application-id="${escapeHtml(app.id)}">
+              <select name="status" required>
+                <option value="pending" ${app.status === 'pending' ? 'selected' : ''}>Offen</option>
+                <option value="approved" ${app.status === 'approved' ? 'selected' : ''}>Genehmigt</option>
+                <option value="rejected" ${app.status === 'rejected' ? 'selected' : ''}>Abgelehnt</option>
+              </select>
+              <textarea name="adminNote" placeholder="Admin-Notiz (optional)" rows="2">${escapeHtml(app.adminNote || '')}</textarea>
+              <button type="submit" class="button primary small">Speichern</button>
+            </form>
+          </div>
+        ` : ''}
+      </div>
+    </section>
   `;
 }
 
