@@ -5180,8 +5180,8 @@ function renderCommunityWelcomeAdminPanel() {
               <input id="coopDiscordLink" name="discord_link" type="url" value="${escapeHtml(cooperationDraft.discord_link || "")}" placeholder="https://discord.gg/...">
             </div>
             <div class="field span-all">
-              <label for="coopLogoUrl">Logo-URL (optional)</label>
-              <input id="coopLogoUrl" name="logo_url" type="url" value="${escapeHtml(cooperationDraft.logo_url || "")}" placeholder="https://example.com/logo.png">
+              <label for="coopLogoFile">Logo-Bild (optional)</label>
+              <input id="coopLogoFile" name="logoFile" type="file" accept="image/*">
             </div>
           </div>
 
@@ -6388,8 +6388,7 @@ async function handleClick(event) {
       state.ui.uiStates["show-cooperation-form"] = true;
       setPersistentFormDraft("cooperation-create", {
         name: cooperation.name,
-        discord_link: cooperation.discord_link,
-        logo_url: cooperation.logo_url
+        discord_link: cooperation.discord_link
       });
       render();
       break;
@@ -8561,6 +8560,7 @@ async function handleSubmit(event) {
     case "cooperation-create": {
       const formData = new FormData(form);
       const coopId = form.dataset.coopId;
+      const logoUrl = await readImageFileInput(form.querySelector('input[name="logoFile"]'));
       await performAction(
         () =>
           api(coopId ? `/api/community/cooperation/${encodeURIComponent(coopId)}` : "/api/community/cooperation", {
@@ -8568,7 +8568,7 @@ async function handleSubmit(event) {
             body: JSON.stringify({
               name: formData.get("name"),
               discord_link: formData.get("discord_link"),
-              logo_url: formData.get("logo_url")
+              logo_url: logoUrl || ""
             })
           }),
         coopId ? "Kooperation wurde aktualisiert." : "Kooperation wurde hinzugefuegt."
