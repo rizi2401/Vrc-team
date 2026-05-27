@@ -14762,6 +14762,8 @@ function renderMemberForumSpotlightPanel() {
 
 function renderManagerDashboard(activeTab) {
   switch (activeTab) {
+    case "welcome":
+      return renderPortalPanel("welcome.main", renderCommunityWelcomePanel());
     case "feed":
       return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
@@ -14842,6 +14844,8 @@ function renderManagerDashboard(activeTab) {
 
 function renderModeratorDashboard(activeTab) {
   switch (activeTab) {
+    case "welcome":
+      return renderPortalPanel("welcome.main", renderCommunityWelcomePanel());
     case "feed":
       return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
@@ -14912,6 +14916,8 @@ function renderModeratorDashboard(activeTab) {
 
 function renderMemberDashboard(activeTab) {
   switch (activeTab) {
+    case "welcome":
+      return renderPortalPanel("welcome.main", renderCommunityWelcomePanel());
     case "feed":
       return renderPortalPanel("feed.main", renderFeedPanel());
     case "community":
@@ -14960,12 +14966,12 @@ function renderMemberDashboard(activeTab) {
 
 function normalizeActiveTab(tab) {
   const allowed = canManagePortal()
-    ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "applications", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents"]
+    ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "applications", "capacity", "activity", "team", "chat", "time", "profile", "settings", "site-admin", "roles", "collections", "documents"]
     : canCoordinateStaff()
-      ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile"]
+      ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile"]
       : canAccessStaffArea()
-        ? ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile"]
-        : ["overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile"];
+        ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile"]
+        : ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile"];
 
   const allowedTabs = canManageLayout() ? [...allowed, "layout"] : allowed;
   return allowedTabs.includes(tab) ? tab : "overview";
