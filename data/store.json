@@ -376,15 +376,7 @@
     "lastStatusCode": 0
   },
   "vrchatAnalytics": {},
-  "directMessages": [
-    {
-      "id": "41643b23-a0d8-4563-a721-dc3f4c1bd704",
-      "senderId": "cd066885-109a-408f-92ca-94f6e651b855",
-      "recipientId": "79d4d417-c38b-4479-afdf-5f3093523d65",
-      "content": "f",
-      "createdAt": "2026-05-26T08:41:44.997Z"
-    }
-  ],
+  "directMessages": [],
   "discordReminderLog": [],
   "forumThreads": [],
   "warnings": [],
