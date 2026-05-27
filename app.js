@@ -3909,6 +3909,40 @@ function renderFeedbackAdminPanel() {
         </div>
       </div>
 
+      <form class="stack-form" data-form="request">
+        <div class="form-grid">
+          <div class="field">
+            <label for="adminRequestType">Typ</label>
+            <select id="adminRequestType" name="type" required>
+              <option value="Feedback">Feedback</option>
+              <option value="Wunsch">Wunsch</option>
+              <option value="Notiz">Notiz</option>
+              <option value="Verfügbarkeit">Verfügbarkeit</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="adminRequestDate">Bezug auf Datum</label>
+            <input id="adminRequestDate" name="date" type="date">
+          </div>
+          <div class="field">
+            <label for="adminRequestRating">Bewertung</label>
+            <select id="adminRequestRating" name="rating">
+              <option value="0">Keine Bewertung</option>
+              <option value="5">5 - Sehr gut</option>
+              <option value="4">4 - Gut</option>
+              <option value="3">3 - Mittel</option>
+              <option value="2">2 - Eher schwierig</option>
+              <option value="1">1 - Kritisch</option>
+            </select>
+          </div>
+          <div class="field span-all">
+            <label for="adminRequestContent">Nachricht</label>
+            <textarea id="adminRequestContent" name="content" placeholder="Schichtwunsch, Ausfall, Wunschwelt oder andere Info" required></textarea>
+          </div>
+        </div>
+        <button type="submit">Feedback senden</button>
+      </form>
+
       <div class="tab-controls">
         <button type="button" class="tab-btn ${activeTab === "active" ? "active" : ""}" data-action="set-feedback-admin-tab" data-tab-id="active">
           Aktive Tickets ${activeRequests.length > 0 ? `(${activeRequests.length})` : ""}
