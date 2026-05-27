@@ -2551,7 +2551,12 @@ function normalizeStore(store) {
     announcements: Array.isArray(store.announcements) ? normalizeAnnouncements(store.announcements, users) : [],
     chatMessages: Array.isArray(store.chatMessages) ? normalizeChatMessages(store.chatMessages, users, shifts) : [],
     swapRequests: Array.isArray(store.swapRequests) ? normalizeSwapRequests(store.swapRequests, users, shifts) : [],
-    timeEntries: Array.isArray(store.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : []
+    timeEntries: Array.isArray(store.timeEntries) ? normalizeTimeEntries(store.timeEntries, users, shifts) : [],
+    community_welcome_page: store.community_welcome_page || {
+      about_us: "",
+      what_we_do: "",
+      cooperations: []
+    }
   };
 }
 
