@@ -10204,6 +10204,7 @@ function renderCommunityWelcomePanel() {
   const store = state.data;
   const welcomeData = store?.community_welcome_page || {};
   const cooperations = welcomeData.cooperations || [];
+  const hasContent = welcomeData.about_us || welcomeData.what_we_do || cooperations.length > 0;
 
   return `
     <section class="panel span-12">
@@ -10256,6 +10257,12 @@ function renderCommunityWelcomePanel() {
           </div>
         </div>
       `
+          : ""
+      }
+
+      ${
+        !hasContent
+          ? `<p class="timeline-meta">Der Willkommen-Bereich wird in den Einstellungen verwaltet. Gehe zum "Einstellungen" Tab, um Texte und Kooperationen hinzuzufügen.</p>`
           : ""
       }
     </section>
