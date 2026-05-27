@@ -5156,6 +5156,7 @@ function renderCommunityWelcomeAdminPanel() {
                 </div>
               </div>
               <div class="cooperation-actions">
+                <button type="button" class="small ghost" data-action="edit-cooperation" data-id="${escapeHtml(coop.id)}">Bearbeiten</button>
                 <button type="button" class="small ghost danger" data-action="delete-cooperation" data-id="${escapeHtml(coop.id)}">Loeschen</button>
               </div>
             </div>
@@ -14487,7 +14488,7 @@ function getDashboardTabSections() {
 
   const memberSections = [
     { id: "community", title: "Community", tabs: communityTabs },
-    { id: "account", title: "Mein Bereich", tabs: [{ id: "apply", label: "Bewerbung" }, { id: "availability", label: "Verfügbarkeit" }, { id: "feedback", label: "Tickets" }, { id: "profile", label: "Profil" }] }
+    { id: "account", title: "Mein Bereich", tabs: [{ id: "apply", label: "Bewerbung" }, { id: "applications", label: "Bewerbungen" }, { id: "availability", label: "Verfügbarkeit" }, { id: "feedback", label: "Tickets" }, { id: "profile", label: "Profil" }] }
   ];
 
   if (canManagePortal()) {
@@ -14575,6 +14576,10 @@ function getDashboardTabSections() {
 }
 
 function renderApplicationsListPanel() {
+  if (!canManagePortal()) {
+    return '';
+  }
+
   const store = state.data;
   const selectedId = state.ui.selectedApplicationId;
 
@@ -15282,7 +15287,7 @@ function normalizeActiveTab(tab) {
       ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "planning", "capacity", "activity", "team", "chat", "time", "profile", "apply"]
       : canAccessStaffArea()
         ? ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "schedule", "availability", "feedback", "chat", "time", "profile", "apply"]
-        : ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile", "apply"];
+        : ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile", "applications", "apply"];
 
   const allowedTabs = canManageLayout() ? [...allowed, "layout"] : allowed;
   return allowedTabs.includes(tab) ? tab : "overview";
