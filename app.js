@@ -5156,6 +5156,7 @@ function renderCommunityWelcomeAdminPanel() {
                 </div>
               </div>
               <div class="cooperation-actions">
+                <button type="button" class="small ghost" data-action="edit-cooperation" data-id="${escapeHtml(coop.id)}">Bearbeiten</button>
                 <button type="button" class="small ghost danger" data-action="delete-cooperation" data-id="${escapeHtml(coop.id)}">Loeschen</button>
               </div>
             </div>
