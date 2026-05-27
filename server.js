@@ -2092,15 +2092,14 @@ async function handleApi(req, res, url) {
 
     const cooperation = {
       id: crypto.randomUUID(),
-      title: String(body.title || "").trim(),
-      description: String(body.description || "").trim(),
-      image_path: String(body.image_path || "").trim(),
-      url: String(body.url || "").trim(),
-      createdAt: new Date().toISOString()
+      name: String(body.name || "").trim(),
+      discord_link: String(body.discord_link || "").trim(),
+      logo_url: String(body.logo_url || "").trim(),
+      created_at: new Date().toISOString()
     };
 
-    if (!cooperation.title || !cooperation.url) {
-      sendJson(res, 400, { error: "Titel und URL sind erforderlich." });
+    if (!cooperation.name) {
+      sendJson(res, 400, { error: "Name ist erforderlich." });
       return;
     }
 
@@ -2129,17 +2128,14 @@ async function handleApi(req, res, url) {
       return;
     }
 
-    if (body.title !== undefined) {
-      cooperation.title = String(body.title || "").trim();
+    if (body.name !== undefined) {
+      cooperation.name = String(body.name || "").trim();
     }
-    if (body.description !== undefined) {
-      cooperation.description = String(body.description || "").trim();
+    if (body.discord_link !== undefined) {
+      cooperation.discord_link = String(body.discord_link || "").trim();
     }
-    if (body.image_path !== undefined) {
-      cooperation.image_path = String(body.image_path || "").trim();
-    }
-    if (body.url !== undefined) {
-      cooperation.url = String(body.url || "").trim();
+    if (body.logo_url !== undefined) {
+      cooperation.logo_url = String(body.logo_url || "").trim();
     }
 
     const savedStore = writeStore(nextStore);

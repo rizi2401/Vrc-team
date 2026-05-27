@@ -5130,7 +5130,7 @@ function renderCommunityWelcomeAdminPanel() {
         <div>
           <p class="eyebrow">Kooperationen</p>
           <h2>Partner und Links</h2>
-          <p class="section-copy">Verwalte externe Kooperationen mit Titeln, Beschreibungen und Links.</p>
+          <p class="section-copy">Verwalte Kooperationen mit Name, Discord-Link und Logo.</p>
         </div>
         <span class="pill neutral">${cooperations.length} Kooperationen</span>
       </div>
@@ -5141,17 +5141,16 @@ function renderCommunityWelcomeAdminPanel() {
         <div class="cooperations-table">
           ${cooperations
             .map(
-              (coop, idx) => `
+              (coop) => `
             <div class="cooperation-row">
               <div class="cooperation-info">
+                ${coop.logo_url ? `<img src="${escapeHtml(coop.logo_url)}" alt="${escapeHtml(coop.name)}" class="cooperation-logo">` : ""}
                 <div class="cooperation-header">
-                  <h4>${escapeHtml(coop.title)}</h4>
-                  <a href="${escapeHtml(coop.url)}" target="_blank" rel="noopener noreferrer" class="timeline-meta">${escapeHtml(coop.url)}</a>
+                  <h4>${escapeHtml(coop.name)}</h4>
+                  ${coop.discord_link ? `<a href="${escapeHtml(coop.discord_link)}" target="_blank" rel="noopener noreferrer" class="timeline-meta">Discord</a>` : ""}
                 </div>
-                ${coop.description ? `<p class="timeline-meta">${escapeHtml(coop.description)}</p>` : ""}
               </div>
               <div class="cooperation-actions">
-                <button type="button" class="small ghost" data-action="edit-cooperation" data-id="${escapeHtml(coop.id)}">Bearbeiten</button>
                 <button type="button" class="small ghost danger" data-action="delete-cooperation" data-id="${escapeHtml(coop.id)}">Loeschen</button>
               </div>
             </div>
@@ -5172,21 +5171,17 @@ function renderCommunityWelcomeAdminPanel() {
           ? `
         <form class="stack-form" data-form="cooperation-create" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line);">
           <div class="form-grid">
-            <div class="field">
-              <label for="coopTitle">Titel</label>
-              <input id="coopTitle" name="title" type="text" value="${escapeHtml(cooperationDraft.title || "")}" placeholder="z. B. Partner-Community">
-            </div>
-            <div class="field">
-              <label for="coopUrl">URL</label>
-              <input id="coopUrl" name="url" type="url" value="${escapeHtml(cooperationDraft.url || "")}" placeholder="https://example.com">
+            <div class="field span-all">
+              <label for="coopName">Name</label>
+              <input id="coopName" name="name" type="text" value="${escapeHtml(cooperationDraft.name || "")}" placeholder="z. B. Partner-Community" required>
             </div>
             <div class="field span-all">
-              <label for="coopDescription">Beschreibung (optional)</label>
-              <textarea id="coopDescription" name="description" placeholder="Kurzbeschreibung der Kooperation...">${escapeHtml(cooperationDraft.description || "")}</textarea>
+              <label for="coopDiscordLink">Discord-Link (optional)</label>
+              <input id="coopDiscordLink" name="discord_link" type="url" value="${escapeHtml(cooperationDraft.discord_link || "")}" placeholder="https://discord.gg/...">
             </div>
             <div class="field span-all">
-              <label for="coopImagePath">Bild-URL (optional)</label>
-              <input id="coopImagePath" name="image_path" type="url" value="${escapeHtml(cooperationDraft.image_path || "")}" placeholder="https://example.com/image.png">
+              <label for="coopLogoUrl">Logo-URL (optional)</label>
+              <input id="coopLogoUrl" name="logo_url" type="url" value="${escapeHtml(cooperationDraft.logo_url || "")}" placeholder="https://example.com/logo.png">
             </div>
           </div>
 
@@ -6392,10 +6387,9 @@ async function handleClick(event) {
       state.ui.uiStates = state.ui.uiStates || {};
       state.ui.uiStates["show-cooperation-form"] = true;
       setPersistentFormDraft("cooperation-create", {
-        title: cooperation.title,
-        description: cooperation.description,
-        image_path: cooperation.image_path,
-        url: cooperation.url
+        name: cooperation.name,
+        discord_link: cooperation.discord_link,
+        logo_url: cooperation.logo_url
       });
       render();
       break;
@@ -8572,10 +8566,9 @@ async function handleSubmit(event) {
           api(coopId ? `/api/community/cooperation/${encodeURIComponent(coopId)}` : "/api/community/cooperation", {
             method: coopId ? "PUT" : "POST",
             body: JSON.stringify({
-              title: formData.get("title"),
-              description: formData.get("description"),
-              image_path: formData.get("image_path"),
-              url: formData.get("url")
+              name: formData.get("name"),
+              discord_link: formData.get("discord_link"),
+              logo_url: formData.get("logo_url")
             })
           }),
         coopId ? "Kooperation wurde aktualisiert." : "Kooperation wurde hinzugefuegt."
@@ -10210,6 +10203,7 @@ function renderCommunityOverviewPanel() {
 function renderCommunityWelcomePanel() {
   const store = state.data;
   const welcomeData = store?.community_welcome_page || {};
+  const cooperations = welcomeData.cooperations || [];
 
   return `
     <section class="panel span-12">
@@ -10237,6 +10231,29 @@ function renderCommunityWelcomePanel() {
         <div class="welcome-section">
           <h3>Was wir machen</h3>
           <p>${escapeHtml(welcomeData.what_we_do)}</p>
+        </div>
+      `
+          : ""
+      }
+
+      ${
+        cooperations.length
+          ? `
+        <div class="welcome-section">
+          <h3>Unsere Kooperationen</h3>
+          <div class="cooperation-grid">
+            ${cooperations
+              .map(
+                (coop) => `
+              <div class="cooperation-card">
+                ${coop.logo_url ? `<img src="${escapeHtml(coop.logo_url)}" alt="${escapeHtml(coop.name)}" class="cooperation-card-logo">` : ""}
+                <h4>${escapeHtml(coop.name)}</h4>
+                ${coop.discord_link ? `<a href="${escapeHtml(coop.discord_link)}" target="_blank" rel="noopener noreferrer" class="cooperation-link">Zum Discord</a>` : ""}
+              </div>
+            `
+              )
+              .join("")}
+          </div>
         </div>
       `
           : ""
