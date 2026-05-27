@@ -5115,12 +5115,8 @@ function renderCommunityWelcomeAdminPanel() {
       <form class="stack-form" data-form="community-welcome-content">
         <div class="form-grid">
           <div class="field span-all">
-            <label for="aboutUs">Wer wir sind</label>
+            <label for="aboutUs">Über uns</label>
             <textarea id="aboutUs" name="about_us" placeholder="Schreibe hier auf, wer die SONARA Community ist...">${escapeHtml(welcomeData.about_us || "")}</textarea>
-          </div>
-          <div class="field span-all">
-            <label for="whatWeDo">Was wir machen</label>
-            <textarea id="whatWeDo" name="what_we_do" placeholder="Beschreibe hier die Aktivitaeten und Ziele...">${escapeHtml(welcomeData.what_we_do || "")}</textarea>
           </div>
         </div>
 
@@ -10210,7 +10206,7 @@ function renderCommunityWelcomePanel() {
   const store = state.data;
   const welcomeData = store?.community_welcome_page || {};
   const cooperations = welcomeData.cooperations || [];
-  const hasContent = welcomeData.about_us || welcomeData.what_we_do || cooperations.length > 0;
+  const hasContent = welcomeData.about_us || cooperations.length > 0;
 
   return `
     <section class="panel span-12">
@@ -10225,19 +10221,8 @@ function renderCommunityWelcomePanel() {
         welcomeData.about_us
           ? `
         <div class="welcome-section">
-          <h3>Wer wir sind</h3>
+          <h3>Über uns</h3>
           <p>${escapeHtml(welcomeData.about_us)}</p>
-        </div>
-      `
-          : ""
-      }
-
-      ${
-        welcomeData.what_we_do
-          ? `
-        <div class="welcome-section">
-          <h3>Was wir machen</h3>
-          <p>${escapeHtml(welcomeData.what_we_do)}</p>
         </div>
       `
           : ""
@@ -15290,7 +15275,7 @@ function normalizeActiveTab(tab) {
         : ["welcome", "overview", "feed", "community", "calendar", "events", "news", "creators", "live", "forum", "voice", "availability", "feedback", "chat", "profile", "applications", "apply"];
 
   const allowedTabs = canManageLayout() ? [...allowed, "layout"] : allowed;
-  return allowedTabs.includes(tab) ? tab : "overview";
+  return allowedTabs.includes(tab) ? tab : "welcome";
 }
 
 function renderEventsPanel() {

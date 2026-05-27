@@ -3312,6 +3312,7 @@ function buildPublicPortalData(store) {
 
   return {
     community: buildCommunityPayload(store),
+    community_welcome_page: store.community_welcome_page || { about_us: "", cooperations: [] },
     feedPosts: publicFeedPosts,
     forumThreads: publicForumThreads,
     systemNotice: decorateSystemNotice(store.systemNotice, store),
@@ -9951,6 +9952,7 @@ function buildPublicPortalData(store) {
 
   return {
     community: buildCommunityPayload(store),
+    community_welcome_page: store.community_welcome_page || { about_us: "", cooperations: [] },
     feedPosts: publicFeedPosts,
     forumThreads: publicForumThreads,
     systemNotice: decorateSystemNotice(store.systemNotice, store),
